@@ -23,7 +23,7 @@
 | `s{` | `KW_STRUCT` | `typedef struct Name Name; struct Name { ... };` | **s**truct + `{`（结构体声明/定义），支持重复的 `s{ Forward;` 前置声明、前置声明后再定义，以及 `a!N` 对齐修饰；每个标签只生成一次 typedef，且只允许一个定义 |
 | `u{` | `KW_UNION` | `typedef union Name Name; union Name { ... };` | **u**nion + `{`（联合体声明/定义），支持重复的 `u{ Forward;` 前置声明、前置声明后再定义、`a!N` 对齐修饰及 `.` / `->` 访问；每个标签只生成一次 typedef，且只允许一个定义 |
 | `e{` | `KW_ENUM` | `typedef enum Name { ... } Name;` | **e**num + `{`（枚举定义），枚举项支持 `ITEM m, CONST_EXPR` 显式常量赋值；枚举类型按 C99 整数类型规则参与算术和隐式转换 |
-| `a!N` | `KW_ALIGN` | `SIGIL_ALIGNED_TAG(kind, Name, N)` | **a**lign + `!` + 2 的幂 $N$：GCC/Clang 使用 `__attribute__((aligned(N)))` 扩展；其他 C99 编译器默认忽略该属性，实际对齐能力取决于平台实现 |
+| `a!N` | `KW_ALIGN` | `SIGIL_ALIGNED_TAG(kind, Name, N)` | **a**lign + `!` + 2 的幂 $N$：GCC/Clang/MSVC 使用编译器对齐扩展；C11 使用首字段上的 `_Alignas(N)` 提升整个结构体/联合体对齐。生成代码会用静态断言核验实际类型对齐至少为 $N$。纯 C99 没有通用过对齐机制；不支持对齐原语的后端会在使用 `a!N` 时编译报错，不再静默退化。所请求的扩展对齐值仍须由目标实现支持 |
 
 ## 2. 基础标量类型与前缀修饰符 (`BASIC_TYPES` & Qualifiers)
 
