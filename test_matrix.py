@@ -662,12 +662,111 @@ int main(void) {
     assert_raises("8. v3.2 attr", "Reject wrong argument kind for a string attribute",
                   SemanticError, "a@(section(1)) o! u4 x m, 0;")
 
+    # Layer 9: v3.2 字面量与聚合初始化
+    def test_bool_literals():
+        sigil = """
+        i4 main(v.) {
+            o! b. ok m, true;
+            o! b. no m, false;
+            i? (ok &. !.no) { r; 0; }
+            r; 1;
+        }
+        """
+        with open("lit_bool.c", "w") as f:
+            f.write(compile_source(sigil, "lit_bool.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "lit_bool.c", "-o", "lit_bool_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./lit_bool_bin"], check=False).returncode
+        assert rc == 0, rc
+
+    assert_ok("9. v3.2 init", "true / false literals emit stdbool tokens and drive a branch", test_bool_literals)
+
+    def test_null_literal():
+        sigil = """
+        i4 main(v.) {
+            o! p* u4 p m, NULL;
+            o! f^(v.) -> u4 cb m, NULL;
+            i? (p =? NULL) { i? (cb =? NULL) { r; 0; } }
+            r; 1;
+        }
+        """
+        with open("lit_null.c", "w") as f:
+            f.write(compile_source(sigil, "lit_null.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "lit_null.c", "-o", "lit_null_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./lit_null_bin"], check=False).returncode
+        assert rc == 0, rc
+
+    assert_ok("9. v3.2 init", "NULL initializes object pointers and function pointers, compares equal", test_null_literal)
+
+    def test_struct_aggregate_init():
+        sigil = """
+        s{ Vec2 { f8 x; f8 y; };
+        i4 main(v.) {
+            o! Vec2 p m, { 3.0, 4.0 };
+            r; (i4)(p.x + p.y);
+        }
+        """
+        with open("init_struct.c", "w") as f:
+            f.write(compile_source(sigil, "init_struct.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "init_struct.c", "-o", "init_struct_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./init_struct_bin"], check=False).returncode
+        assert rc == 7, rc
+
+    assert_ok("9. v3.2 init", "Struct aggregate initializer { 3.0, 4.0 } becomes a C99 brace initializer", test_struct_aggregate_init)
+
+    def test_nested_aggregate_and_zero_fill():
+        sigil = """
+        s{ Vec2 { u4 x; u4 y; };
+        s{ Line { Vec2 a; Vec2 b; };
+        o! u4[3] table m, { 10, 20, 12 };
+        i4 main(v.) {
+            o! Line ln m, { { 1, 2 }, { 3, 4 } };
+            o! u4[2] partial m, { 5 };
+            r; (i4)(table[0] + table[1] + table[2] + ln.a.x + ln.b.y + partial[0] + partial[1]);
+        }
+        """
+        with open("init_nested.c", "w") as f:
+            f.write(compile_source(sigil, "init_nested.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "init_nested.c", "-o", "init_nested_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./init_nested_bin"], check=False).returncode
+        assert rc == 52, rc
+
+    assert_ok("9. v3.2 init", "Nested struct/array initializers plus C99 zero-fill for short lists", test_nested_aggregate_and_zero_fill)
+
+    assert_raises("9. v3.2 init", "Reject too many struct initializers",
+                  SemanticError, "s{ P { u4 a; u4 b; }; i4 main(v.) { o! P p m, { 1, 2, 3 }; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject too many array initializers",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { 1, 2, 3 }; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject aggregate initializer on a scalar",
+                  SemanticError, "i4 main(v.) { o! u4 x m, { 1 }; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject more than one union initializer",
+                  SemanticError, "u{ U { u4 a; f4 b; }; i4 main(v.) { o! U u m, { 1, 2 }; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject NULL assigned to a non-pointer",
+                  SemanticError, "i4 main(v.) { o! u4 x m, NULL; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject empty initializer list",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { }; r; 0; }")
+    assert_raises("9. v3.2 init", "Reject incompatible initializer element type",
+                  SemanticError, 's{ P { u4 a; }; i4 main(v.) { o! P p m, { "str" }; r; 0; }')
+    assert_raises("9. v3.2 init", "Reject non-constant element in a global aggregate initializer",
+                  SemanticError, "o! i4 g m, 1; o! u4[2] t m, { 1, g }; i4 main(v.) { r; 0; }")
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 8-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 9-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

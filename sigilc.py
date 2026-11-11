@@ -369,7 +369,11 @@ class Lexer:
                 while self.pos < self.n and (self._peek().isalnum() or self._peek() == '_'):
                     ident_buf.append(self._advance())
                 word = ''.join(ident_buf)
-                if word in BASIC_TYPES:
+                if word in ('true', 'false'):
+                    tokens.append(Token('BOOL_LIT', word, s_line, s_col, s_byte))
+                elif word == 'NULL':
+                    tokens.append(Token('NULL_LIT', word, s_line, s_col, s_byte))
+                elif word in BASIC_TYPES:
                     tokens.append(Token('TYPE_INT', word, s_line, s_col, s_byte))
                 else:
                     tokens.append(Token('IDENT', word, s_line, s_col, s_byte))
@@ -723,9 +727,16 @@ class SizeofExpr(ExprNode):
     target_type: Optional[TypeNode]
     operand: Optional[ExprNode]
 
+@dataclass
+class AggregateInit(ExprNode):
+    """`{ e1, e2, ... }` 位置式聚合初始化；只允许出现在声明初始化位置。"""
+    elements: List[ExprNode]
+
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
         return e.code
+    if isinstance(e, AggregateInit):
+        return "{ " + ", ".join(emit_expr(x) for x in e.elements) + " }"
     if isinstance(e, IdentExpr):
         return e.name
     if isinstance(e, CastExpr):
@@ -1057,7 +1068,15 @@ class Parser:
         return None
 
     def _infer_expr_type(self, expr: ExprNode) -> TypeNode:
+        if isinstance(expr, AggregateInit):
+            raise SemanticError(
+                f"{self.filename}:{expr.line}:{expr.col}: Aggregate initializer '{{ ... }}' is only allowed as a declaration initializer")
         if isinstance(expr, LiteralExpr):
+            if expr.lit_kind == 'BOOL':
+                return BaseType(line=expr.line, col=expr.col, c_name='bool')
+            if expr.lit_kind == 'NULL':
+                return PointerType(line=expr.line, col=expr.col,
+                                   pointee=BaseType(line=expr.line, col=expr.col, c_name='void'))
             if expr.lit_kind == 'STRING':
                 return PointerType(line=expr.line, col=expr.col, pointee=BaseType(line=expr.line, col=expr.col, c_name='char', is_const=True))
             if expr.lit_kind == 'CHAR':
@@ -1300,6 +1319,8 @@ class Parser:
         return t
 
     def _is_null_ptr_const(self, expr: ExprNode, expr_t: TypeNode) -> bool:
+        if isinstance(expr, LiteralExpr) and expr.lit_kind == 'NULL':
+            return True
         if not self._is_int_type(expr_t):
             return False
         try:
@@ -1462,8 +1483,10 @@ class Parser:
             return True
         if self._is_static_arithmetic_const_expr(expr):
             return True
-        if isinstance(expr, LiteralExpr) and expr.lit_kind in ('FLOAT_NUM', 'STRING', 'CHAR'):
+        if isinstance(expr, LiteralExpr) and expr.lit_kind in ('FLOAT_NUM', 'STRING', 'CHAR', 'BOOL', 'NULL'):
             return True
+        if isinstance(expr, AggregateInit):
+            return all(self._is_static_const_init(e) for e in expr.elements)
         if isinstance(expr, CastExpr):
             return self._is_static_const_init(expr.operand)
         if isinstance(expr, UnaryExpr) and expr.op in ('-', '+'):
@@ -1777,16 +1800,81 @@ class Parser:
         init_expr = None
         if self._cur().kind == 'OP_ASSIGN':
             op_tok = self._eat('OP_ASSIGN')
-            init_expr = self.parse_pure_expr()
-            actual_t = self._infer_expr_type(init_expr)
-            if not self._check_assign_compatible(decl_type, init_expr, actual_t):
-                raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{name_tok.value}'")
+            if self._cur().kind == 'LBRACE':
+                init_expr = self.parse_brace_init()
+                self._check_brace_init(decl_type, init_expr, name_tok)
+            else:
+                init_expr = self.parse_pure_expr()
+                actual_t = self._infer_expr_type(init_expr)
+                if not self._check_assign_compatible(decl_type, init_expr, actual_t):
+                    raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{name_tok.value}'")
             if global_scope and not self._is_static_const_init(init_expr):
                 raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Global initializer for '{name_tok.value}' is not a compile-time constant")
         if consume_semi:
             self._eat('SEMI')
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
                            name=name_tok.value, init_expr=init_expr, is_static=is_static, attrs=attrs)
+
+    def parse_brace_init(self) -> AggregateInit:
+        """解析 `{ e1, e2, ... }`，允许嵌套与 C99 尾随逗号。"""
+        lb = self._eat('LBRACE')
+        if self._cur().kind == 'RBRACE':
+            raise SemanticError(f"{self.filename}:{lb.line}:{lb.col}: Empty initializer list '{{ }}' is forbidden in ISO C99")
+        elements: List[ExprNode] = []
+        while True:
+            if self._cur().kind == 'LBRACE':
+                elements.append(self.parse_brace_init())
+            else:
+                elements.append(self.parse_pure_expr())
+            if self._cur().kind == 'COMMA':
+                self._eat('COMMA')
+                if self._cur().kind == 'RBRACE':
+                    break
+            else:
+                break
+        self._eat('RBRACE')
+        return AggregateInit(line=lb.line, col=lb.col, elements=elements)
+
+    def _check_brace_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
+        if isinstance(target, ArrayType):
+            if len(init.elements) > target.size_val:
+                raise SemanticError(
+                    f"{self.filename}:{init.line}:{init.col}: Too many initializers for '{name_tok.value}': "
+                    f"{len(init.elements)} given, array holds {target.size_val}")
+            for elem in init.elements:
+                self._check_init_element(target.element_type, elem, name_tok)
+            return
+        if isinstance(target, BaseType) and self.user_types.get(target.c_name) in ('struct', 'union'):
+            kind = self.user_types[target.c_name]
+            if target.c_name not in self.struct_fields:
+                raise SemanticError(
+                    f"{self.filename}:{init.line}:{init.col}: '{name_tok.value}' has incomplete type and cannot be initialized")
+            fields = list(self.struct_fields[target.c_name].items())
+            if kind == 'union':
+                if len(init.elements) != 1:
+                    raise SemanticError(
+                        f"{self.filename}:{init.line}:{init.col}: Union '{target.c_name}' initializer takes exactly 1 element, "
+                        f"got {len(init.elements)}")
+            elif len(init.elements) > len(fields):
+                raise SemanticError(
+                    f"{self.filename}:{init.line}:{init.col}: Too many initializers for '{name_tok.value}': "
+                    f"{len(init.elements)} given, {kind} has {len(fields)} fields")
+            for (fname, ftype), elem in zip(fields, init.elements):
+                self._check_init_element(ftype, elem, name_tok)
+            return
+        raise SemanticError(
+            f"{self.filename}:{init.line}:{init.col}: Aggregate initializer requires an array, struct or union type, "
+            f"but '{name_tok.value}' has type '{format_c_declarator(target)}'")
+
+    def _check_init_element(self, target: TypeNode, elem: ExprNode, name_tok: Token):
+        if isinstance(elem, AggregateInit):
+            self._check_brace_init(target, elem, name_tok)
+            return
+        et = self._infer_expr_type(elem)
+        if not self._check_assign_compatible(target, elem, et):
+            raise SemanticError(
+                f"{self.filename}:{elem.line}:{elem.col}: Incompatible initializer element for '{name_tok.value}': "
+                f"expected '{format_c_declarator(target)}', got '{format_c_declarator(et)}'")
 
     def parse_top_decl_or_func(self, object_marker: Optional[Token] = None, is_static: bool = False,
                                attrs: Optional[List[Attribute]] = None) -> StmtNode:
@@ -2265,6 +2353,10 @@ class Parser:
         if tok.kind in ('INT_NUM', 'FLOAT_NUM', 'STRING', 'CHAR'):
             self._eat()
             return LiteralExpr(line=tok.line, col=tok.col, code=tok.value, lit_kind=tok.kind)
+        if tok.kind in ('BOOL_LIT', 'NULL_LIT'):
+            self._eat()
+            return LiteralExpr(line=tok.line, col=tok.col, code=tok.value,
+                               lit_kind='BOOL' if tok.kind == 'BOOL_LIT' else 'NULL')
         if tok.kind == 'IDENT':
             self._eat('IDENT')
             self._lookup_symbol(tok.value, tok)
