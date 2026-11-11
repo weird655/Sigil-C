@@ -856,6 +856,10 @@ class Parser:
             if not (isinstance(idx_t, BaseType) and (idx_t.c_name in INT_C_TYPES or self.user_types.get(idx_t.c_name) == 'enum')):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Array subscript is not an integer")
             if isinstance(base_t, PointerType):
+                if not self._is_complete_object_type(base_t.pointee):
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: Cannot subscript pointer to incomplete or void type"
+                    )
                 return base_t.pointee
             if isinstance(base_t, ArrayType):
                 return base_t.element_type
@@ -1043,6 +1047,8 @@ class Parser:
 
     def _check_assign_compatible(self, expected: TypeNode, rhs_expr: ExprNode, actual: TypeNode) -> bool:
         if types_compatible_for_assign(expected, actual):
+            return True
+        if self._is_numeric_type(expected) and self._is_numeric_type(actual):
             return True
         if isinstance(strip_top_const(expected), (PointerType, FunctionPointerType)) and self._is_null_ptr_const(rhs_expr, actual):
             return True
@@ -1490,7 +1496,7 @@ class Parser:
             step_stmt = None if self._cur().kind == 'RPAREN' else self.parse_assign_or_expr_no_semi()
             self._eat('RPAREN')
             self.loop_depth += 1
-            body = self.parse_block(create_new_scope=False)
+            body = self.parse_block()
             self.loop_depth -= 1
             self.scopes.pop()
             return ForStmt(line=tok.line, col=tok.col, init_stmt=init_stmt, cond_expr=cond_expr, step_stmt=step_stmt, body=body)
