@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sigil-C v0.5.2 Compiler
+Sigil-C v1.0.0 Compiler
 Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer -> C99 Codegen
 """
 
@@ -30,8 +30,8 @@ SIGIL_KEYWORDS = {
 }
 
 SIGIL_OPERATORS = {
-    'm,': 'OP_ASSIGN',      'a+': 'OP_ADD_ASSIGN',  's-': 'OP_SUB_ASSIGN',
-    'm*': 'OP_MUL_ASSIGN',  'd/': 'OP_DIV_ASSIGN',  '=?': 'OP_EQ',
+    'm,': 'OP_ASSIGN',      'm+': 'OP_ADD_ASSIGN',  'm-': 'OP_SUB_ASSIGN',
+    'm*': 'OP_MUL_ASSIGN',  'm/': 'OP_DIV_ASSIGN',  '=?': 'OP_EQ',
     '!?': 'OP_NE',          '&.': 'OP_LAND',        '|.': 'OP_LOR',
     '!.': 'OP_LNOT',        '|^': 'OP_BOR',         '&^': 'OP_BAND',
     '^^': 'OP_BXOR',        '~^': 'OP_BNOT',        '->': 'ARROW',
@@ -43,7 +43,7 @@ BASIC_TYPES = {
     'i1': 'int8_t',   'i2': 'int16_t',   'i4': 'int32_t',   'i8': 'int64_t',
     'u1': 'uint8_t',  'u2': 'uint16_t',  'u4': 'uint32_t',  'u8': 'uint64_t',
     'ui1': 'uint8_t', 'ui2': 'uint16_t', 'ui4': 'uint32_t', 'ui8': 'uint64_t',
-    'f4': 'float',    'f8': 'double',    'x4': 'int32_t',   'c1': 'char',
+    'f4': 'float',    'f8': 'double',    'fl': 'long double', 'x4': 'int32_t', 'c1': 'char',
     'int': 'int',     'char': 'char',    'float': 'float',  'double': 'double',
     'size_t': 'size_t', 'ptrdiff_t': 'ptrdiff_t',
     'intptr_t': 'intptr_t', 'uintptr_t': 'uintptr_t',
@@ -57,8 +57,13 @@ INT_C_TYPES = {
     'char', 'bool', 'int', 'size_t', 'ptrdiff_t', 'intptr_t', 'uintptr_t'
 }
 
-NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double'}
+NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double', 'long double'}
 VALID_SIMPLE_ESCAPES = set('abfnrtv\\\'"?0')
+VALID_INTEGER_SUFFIXES = {
+    '', 'u', 'U', 'l', 'L', 'll', 'LL',
+    'ul', 'uL', 'Ul', 'UL', 'lu', 'lU', 'Lu', 'LU',
+    'ull', 'uLL', 'Ull', 'ULL', 'llu', 'llU', 'LLu', 'LLU',
+}
 
 class LexerError(Exception):
     pass
@@ -117,12 +122,34 @@ class Lexer:
         is_float = False
         if self._peek() == '0' and self._peek(1) in ('x', 'X'):
             buf.append(self._advance(2))
-            if not (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
-                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid hex literal")
+            hex_digits = 0
             while self.pos < self.n and (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
                 buf.append(self._advance())
-            while self.pos < self.n and self._peek() in 'uUlL':
+                hex_digits += 1
+            has_hex_dot = self._peek() == '.'
+            if has_hex_dot:
                 buf.append(self._advance())
+                while self.pos < self.n and (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
+                    buf.append(self._advance())
+                    hex_digits += 1
+            if not hex_digits:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid hex literal")
+            if self._peek() in ('p', 'P'):
+                is_float = True
+                buf.append(self._advance())
+                if self._peek() in ('+', '-'):
+                    buf.append(self._advance())
+                if not self._peek().isdigit():
+                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed exponent in hexadecimal float literal")
+                while self.pos < self.n and self._peek().isdigit():
+                    buf.append(self._advance())
+                if self._peek() in 'fFlL':
+                    buf.append(self._advance())
+            elif has_hex_dot:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Hexadecimal floating literal requires a 'p' exponent")
+            else:
+                while self.pos < self.n and self._peek() in 'uUlL':
+                    buf.append(self._advance())
         elif self._peek() == '0' and self._peek(1) in ('b', 'B'):
             self._advance(2)
             bin_digits = []
@@ -141,11 +168,13 @@ class Lexer:
                 buf.append(self._advance())
             if self._peek() == '.':
                 is_float = True
+                digits_before_dot = len(buf)
                 buf.append(self._advance())
-                if not self._peek().isdigit():
-                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed float literal after '.'")
+                digits_after_dot_start = self.pos
                 while self.pos < self.n and self._peek().isdigit():
                     buf.append(self._advance())
+                if digits_before_dot == 0 and self.pos == digits_after_dot_start:
+                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed float literal after '.'")
             if self._peek() in ('e', 'E'):
                 is_float = True
                 buf.append(self._advance())
@@ -165,6 +194,12 @@ class Lexer:
                     raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid digit in octal constant '{digits_str}'")
                 while self.pos < self.n and self._peek() in 'uUlL':
                     buf.append(self._advance())
+
+        literal = ''.join(buf)
+        if not is_float:
+            suffix = literal[len(literal.rstrip('uUlL')):]
+            if suffix not in VALID_INTEGER_SUFFIXES:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid C99 integer suffix '{suffix}'")
 
         if self._peek() == '.' or self._peek().isalpha() or self._peek() == '_':
             raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid trailing character '{self._peek()}' in number literal")
@@ -295,7 +330,7 @@ class Lexer:
                     tokens.append(Token('IDENT', word, s_line, s_col, s_byte))
                 continue
 
-            if ch.isdigit():
+            if ch.isdigit() or (ch == '.' and nxt.isdigit()):
                 tokens.append(self._scan_number(s_line, s_col, s_byte))
                 continue
 
@@ -802,7 +837,13 @@ class Parser:
             if expr.lit_kind == 'CHAR':
                 return BaseType(line=expr.line, col=expr.col, c_name='char')
             if expr.lit_kind == 'FLOAT_NUM':
-                return BaseType(line=expr.line, col=expr.col, c_name='float' if expr.code.endswith(('f', 'F')) else 'double')
+                if expr.code.endswith(('f', 'F')):
+                    float_type = 'float'
+                elif expr.code.endswith(('l', 'L')):
+                    float_type = 'long double'
+                else:
+                    float_type = 'double'
+                return BaseType(line=expr.line, col=expr.col, c_name=float_type)
             # INT_NUM (包括 0xFE 十六进制整数，严格推导为整型，修复 'E' 误判为浮点的问题)
             return BaseType(line=expr.line, col=expr.col, c_name='uint32_t' if expr.code.lower().endswith('u') else 'int32_t')
 
@@ -816,8 +857,8 @@ class Parser:
                 return dst_t
             if not self._is_scalar_type(dst_t) or not self._is_scalar_type(src_t):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cast requires scalar types (unless casting to 'v.')")
-            dst_is_float = isinstance(dst_t, BaseType) and dst_t.c_name in ('float', 'double')
-            src_is_float = isinstance(src_t, BaseType) and src_t.c_name in ('float', 'double')
+            dst_is_float = isinstance(dst_t, BaseType) and dst_t.c_name in ('float', 'double', 'long double')
+            src_is_float = isinstance(src_t, BaseType) and src_t.c_name in ('float', 'double', 'long double')
             if (dst_is_float and isinstance(src_t, (PointerType, FunctionPointerType))) or (src_is_float and isinstance(dst_t, (PointerType, FunctionPointerType))):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot cast between floating-point and pointer type")
             return dst_t
@@ -856,6 +897,10 @@ class Parser:
             if not (isinstance(idx_t, BaseType) and (idx_t.c_name in INT_C_TYPES or self.user_types.get(idx_t.c_name) == 'enum')):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Array subscript is not an integer")
             if isinstance(base_t, PointerType):
+                if not self._is_complete_object_type(base_t.pointee):
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: Cannot subscript pointer to incomplete or void type"
+                    )
                 return base_t.pointee
             if isinstance(base_t, ArrayType):
                 return base_t.element_type
@@ -971,10 +1016,10 @@ class Parser:
 
     def _check_compound_assign_types(self, op_kind: str, lhs_t: TypeNode, rhs_t: TypeNode, op_tok: Token):
         """
-        区分单纯赋值 (m,) 与算术复合赋值 (a+ / s- / m* / d/) 的类型规则:
+        区分单纯赋值 (m,) 与算术复合赋值 (m+ / m- / m* / m/) 的类型规则:
         - m, (=): 遵循 types_compatible_for_assign(lhs_t, rhs_t)
-        - m* (*=), d/ (/=): 左右两侧必须均为算术数值类型 (严禁指针参与 *= 或 /=)
-        - a+ (+=), s- (-=): 允许 (数值 += 数值) 或 (非void指针 += 整型偏移)，严禁 (指针 += 指针)!
+        - m* (*=), m/ (/=): 左右两侧必须均为算术数值类型 (严禁指针参与 *= 或 /=)
+        - m+ (+=), m- (-=): 允许 (数值 += 数值) 或 (非void指针 += 整型偏移)，严禁 (指针 += 指针)!
         """
         if op_kind == 'OP_ASSIGN':
             if not types_compatible_for_assign(lhs_t, rhs_t):
@@ -1029,6 +1074,8 @@ class Parser:
     def _usual_arith_type(self, expr: ExprNode, a: TypeNode, b: TypeNode) -> BaseType:
         assert isinstance(a, BaseType) and isinstance(b, BaseType)
         names = {a.c_name, b.c_name}
+        if 'long double' in names:
+            return BaseType(line=expr.line, col=expr.col, c_name='long double')
         if 'double' in names:
             return BaseType(line=expr.line, col=expr.col, c_name='double')
         if 'float' in names:
@@ -1043,6 +1090,8 @@ class Parser:
 
     def _check_assign_compatible(self, expected: TypeNode, rhs_expr: ExprNode, actual: TypeNode) -> bool:
         if types_compatible_for_assign(expected, actual):
+            return True
+        if self._is_numeric_type(expected) and self._is_numeric_type(actual):
             return True
         if isinstance(strip_top_const(expected), (PointerType, FunctionPointerType)) and self._is_null_ptr_const(rhs_expr, actual):
             return True
@@ -1087,20 +1136,95 @@ class Parser:
         if '<assert.h>' in txt:
             reg_fn('assert', [t_int], t_void)
 
-    def _guarantees_return(self, stmt: StmtNode) -> bool:
+    def _sequence_flow(self, stmts: List[StmtNode]) -> Set[str]:
+        outcomes = {"fallthrough"}
+        for stmt in stmts:
+            if "fallthrough" not in outcomes:
+                break
+            outcomes = (outcomes - {"fallthrough"}) | self._statement_flow(stmt)
+        return outcomes
+
+    def _statement_flow(self, stmt: StmtNode) -> Set[str]:
+        """Possible exits from a statement: return, break, continue, or fallthrough."""
         if isinstance(stmt, ReturnStmt):
-            return True
+            return {"return"}
+        if isinstance(stmt, JumpStmt):
+            return {stmt.keyword}
         if isinstance(stmt, BlockStmt):
-            return any(self._guarantees_return(s) for s in stmt.stmts)
+            return self._sequence_flow(stmt.stmts)
         if isinstance(stmt, IfStmt):
-            return stmt.else_branch is not None and self._guarantees_return(stmt.then_block) and self._guarantees_return(stmt.else_branch)
+            outcomes = self._statement_flow(stmt.then_block)
+            if stmt.else_branch is None:
+                outcomes.add("fallthrough")
+            else:
+                outcomes |= self._statement_flow(stmt.else_branch)
+            return outcomes
         if isinstance(stmt, SwitchStmt):
-            has_def = any(c.value is None for c in stmt.cases)
-            return has_def and all(any(self._guarantees_return(s) for s in c.stmts) for c in stmt.cases)
+            outcomes: Set[str] = set()
+            has_default = any(case.value is None for case in stmt.cases)
+            for start in range(len(stmt.cases)):
+                case_outcomes = {"fallthrough"}
+                for case in stmt.cases[start:]:
+                    if "fallthrough" not in case_outcomes:
+                        break
+                    case_outcomes = (case_outcomes - {"fallthrough"}) | self._sequence_flow(case.stmts)
+                if "break" in case_outcomes:
+                    case_outcomes = (case_outcomes - {"break"}) | {"fallthrough"}
+                outcomes |= case_outcomes
+            if not has_default:
+                outcomes.add("fallthrough")
+            return outcomes
+        if isinstance(stmt, (WhileStmt, ForStmt)):
+            body_outcomes = self._statement_flow(stmt.body)
+            cond = stmt.cond if isinstance(stmt, WhileStmt) else stmt.cond_expr
+            always_true = cond is None
+            if cond is not None:
+                try:
+                    cond_value = self._eval_const_int_expr(cond)
+                except SemanticError:
+                    cond_value = None
+                always_true = cond_value is not None and cond_value != 0
+            outcomes: Set[str] = set()
+            if "return" in body_outcomes:
+                outcomes.add("return")
+            if not always_true or "break" in body_outcomes:
+                outcomes.add("fallthrough")
+            return outcomes
+        return {"fallthrough"}
+
+    def _can_fall_through(self, stmt: StmtNode) -> bool:
+        return "fallthrough" in self._statement_flow(stmt)
+
+    def _is_static_arithmetic_const_expr(self, expr: ExprNode) -> bool:
+        if self._eval_const_int_expr(expr) is not None:
+            return True
+        if isinstance(expr, LiteralExpr):
+            return expr.lit_kind in ('INT_NUM', 'FLOAT_NUM', 'CHAR')
+        if isinstance(expr, IdentExpr):
+            return expr.name in self.enum_constants
+        if isinstance(expr, CastExpr):
+            return self._is_numeric_type(expr.target_type) and self._is_static_arithmetic_const_expr(expr.operand)
+        if isinstance(expr, UnaryExpr) and expr.op in ('+', '-', '!', '~'):
+            return self._is_static_arithmetic_const_expr(expr.operand) and self._is_numeric_type(self._infer_expr_type(expr))
+        if isinstance(expr, BinaryExpr):
+            return (
+                self._is_static_arithmetic_const_expr(expr.left)
+                and self._is_static_arithmetic_const_expr(expr.right)
+                and self._is_numeric_type(self._infer_expr_type(expr))
+            )
+        if isinstance(expr, TernaryExpr):
+            return (
+                self._is_static_arithmetic_const_expr(expr.cond)
+                and self._is_static_arithmetic_const_expr(expr.then_expr)
+                and self._is_static_arithmetic_const_expr(expr.else_expr)
+                and self._is_numeric_type(self._infer_expr_type(expr))
+            )
         return False
 
     def _is_static_const_init(self, expr: ExprNode) -> bool:
         if self._eval_const_int_expr(expr) is not None:
+            return True
+        if self._is_static_arithmetic_const_expr(expr):
             return True
         if isinstance(expr, LiteralExpr) and expr.lit_kind in ('FLOAT_NUM', 'STRING', 'CHAR'):
             return True
@@ -1135,6 +1259,8 @@ class Parser:
         if then_num and else_num:
             assert isinstance(t_then, BaseType) and isinstance(t_else, BaseType)
             names = {t_then.c_name, t_else.c_name}
+            if 'long double' in names:
+                return BaseType(line=expr.line, col=expr.col, c_name='long double')
             if 'double' in names:
                 return BaseType(line=expr.line, col=expr.col, c_name='double')
             if 'float' in names:
@@ -1361,12 +1487,17 @@ class Parser:
                 while True:
                     raw_pt = self.parse_type()
                     pt = decay_parameter_type(raw_pt)
-                    p_tok = self._eat('IDENT')
-                    self._validate_non_void_var(pt, p_tok)
-                    if p_tok.value in seen_params:
-                        raise SemanticError(f"{self.filename}:{p_tok.line}:{p_tok.col}: Duplicate parameter '{p_tok.value}'")
-                    seen_params.add(p_tok.value)
-                    params.append((pt, p_tok.value))
+                    pname = ''
+                    if self._cur().kind == 'IDENT':
+                        p_tok = self._eat('IDENT')
+                        self._validate_non_void_var(pt, p_tok)
+                        if p_tok.value in seen_params:
+                            raise SemanticError(f"{self.filename}:{p_tok.line}:{p_tok.col}: Duplicate parameter '{p_tok.value}'")
+                        seen_params.add(p_tok.value)
+                        pname = p_tok.value
+                    else:
+                        self._validate_non_void_var(pt, name_tok)
+                    params.append((pt, pname))
                     if self._cur().kind == 'COMMA':
                         self._eat('COMMA')
                     else:
@@ -1390,6 +1521,8 @@ class Parser:
                 self._eat('SEMI')
                 return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None)
 
+            if any(not pname for _, pname in params):
+                raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function definition parameters must have names")
             if name_tok.value in self.func_defined:
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Redefinition of function '{name_tok.value}'")
             self.func_defined.add(name_tok.value)
@@ -1400,7 +1533,7 @@ class Parser:
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
             self.current_func_ret = prev_ret
-            if not is_void_type(decl_type) and name_tok.value != 'main' and not self._guarantees_return(body):
+            if not is_void_type(decl_type) and name_tok.value != 'main' and self._can_fall_through(body):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
             return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body)
 
@@ -1490,7 +1623,7 @@ class Parser:
             step_stmt = None if self._cur().kind == 'RPAREN' else self.parse_assign_or_expr_no_semi()
             self._eat('RPAREN')
             self.loop_depth += 1
-            body = self.parse_block(create_new_scope=False)
+            body = self.parse_block()
             self.loop_depth -= 1
             self.scopes.pop()
             return ForStmt(line=tok.line, col=tok.col, init_stmt=init_stmt, cond_expr=cond_expr, step_stmt=step_stmt, body=body)
@@ -1819,7 +1952,7 @@ class Parser:
 # 4. C99 Code Generator
 # ============================================================================
 
-C99_HEADER = """/* Generated by Sigil-C v0.5.2 AST Compiler. DO NOT EDIT. */
+C99_HEADER = """/* Generated by Sigil-C v1.0.0 AST Compiler. DO NOT EDIT. */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
