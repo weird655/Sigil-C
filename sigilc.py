@@ -1503,6 +1503,9 @@ class Parser:
         if not m:
             return
         name, body = m.group(1), m.group(2)
+        body = body.split('/*')[0].split('//')[0].strip()
+        if not body:
+            return
         if name in self.scopes[0]:
             return
         ln, cl = ptok.line, ptok.col

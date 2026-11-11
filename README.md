@@ -298,120 +298,117 @@ int32_t main(void) {
 }
 ```
 
-## 用 Sigil-C 写一条贪吃蛇
+## 用 Sigil-C 写一台最小虚拟机
 
-完整源码在 [`examples/snake.sigil`](examples/snake.sigil)，可转译、编译、运行：
+`examples/vm.sigil` 是一台 190 行的堆栈虚拟机（有效代码 153 行）：**C99 + 定宽整数，不调用任何平台 API**。字节码是纯数据、按 `(op, arg)` 解码，同一份程序在任何平台上跑出同样结果。
 
 ```bash
-python3 sigilc.py examples/snake.sigil -o snake.c
-gcc -std=c99 -Wall -Wextra -Werror -pedantic snake.c -o snake
-./snake
+python3 sigilc.py examples/vm.sigil -o vm.c
+gcc -std=c99 -Wall -Wextra -Werror -pedantic vm.c -o vm
+./vm
 ```
 
-跑出来是两帧 ASCII（`@` 蛇头、`o` 身体、`*` 食物）：
+输出——同一台 VM 连续跑两段字节码，第二段是 7 × 6：
 
 ```text
-................          ................
-................          ................
-................          ................
-................          ................
-................          ................
-...oo@....*.....   →      ................
-................          ..........*......
-................          .....oo@........
-................          ................
-................          ................
+--- code (18 inst) ---
+000  PUSH   0        006  LOAD   0        012  SUB    0
+001  STORE  0        007  LOAD   1        013  STORE  1
+002  PUSH   10       008  ADD    0        014  JMP    4
+003  STORE  1        009  STORE  0        015  LOAD   0
+004  LOAD   1        010  LOAD   1        016  EMIT   0
+005  JZ     15       011  PUSH   1        017  HALT   0
+55
+--- halted: 119 ticks, stack peak 2 ---
+--- code (5 inst) ---
+000  PUSH   7
+001  PUSH   6
+002  MUL    0
+003  EMIT   0
+004  HALT   0
+42
+--- halted: 5 ticks, stack peak 2 ---
 ```
 
-### 状态就是一个结构体
+把源码顶部的 `#define TRACE 0` 改成 `1`，就会逐条打印 `pc` 与 `sp` 的迁移。
+
+### 指令集与状态
 
 ```sigil
-e{ Dir { D_UP m, 0, D_RIGHT m, 1, D_DOWN m, 2, D_LEFT m, 3 };
-
-s{ Snake {
-    i4[CAP] x;          /* 数组维度写在类型前缀里，不是 i4 x[CAP] */
-    i4[CAP] y;
-    u4 len;
-    u4 head;
-    Dir dir;
+e{ Op {
+    OP_PUSH m, 0, OP_ADD m, 1, OP_SUB m, 2, OP_MUL m, 3,
+    OP_JZ m, 4, OP_JMP m, 5, OP_LOAD m, 6, OP_STORE m, 7,
+    OP_EMIT m, 8, OP_HALT m, 9,
 };
 
-s{ Game {
-    Snake snake;
-    Vec2 food;
+s{ VM {
+    Inst[CODE_CAP] code;
+    u4 code_len;
+    i4[STACK_CAP] stack;
+    u4 sp;
+    u4 sp_peak;
+    i4[REG_COUNT] regs;
+    u4 pc;
     u4 ticks;
-    u4 alive;
+    u4 halted;
 };
 ```
 
-### 走一步：环形缓冲区，不搬数组
+### 分派表：C 里最难写的声明，在这里是直线
 
 ```sigil
-v. step(p* Game g) {
-    o! i4 nx m, g->snake.x[g->snake.head] + dir_dx(g->snake.dir);
-    o! i4 ny m, g->snake.y[g->snake.head] + dir_dy(g->snake.dir);
-    i? (nx < 0 |. nx >= W |. ny < 0 |. ny >= H) {
-        g->alive m, 0;
-    } e: {
-        o! u4 next m, (g->snake.head + 1) % CAP;
-        g->snake.x[next] m, nx;
-        g->snake.y[next] m, ny;
-        g->snake.head m, next;
-        i? (nx =? g->food.x &. ny =? g->food.y) {
-            g->snake.len m+ 1;
-            g->food.x m, (i4)((g->ticks * 7 + 3) % (W - 2)) + 1;
-            g->food.y m, (i4)((g->ticks * 5 + 2) % (H - 2)) + 1;
-        }
-        g->ticks m+ 1;
-    }
+o! (f^(p* VM) -> v.)[10] DISPATCH m, {
+    op_push, op_add, op_sub, op_mul, op_jz,
+    op_jmp, op_load, op_store, op_emit, op_halt,
+};
+```
+
+对应的 C 是 `void (*DISPATCH[10])(VM *vm)` 再加一个初始化列表。**这个例子就是冲着这类声明来的**：前缀类型记法把"10 个、参数是 `VM*`、返回 `void` 的函数指针"从左到右铺开，不用在括号和星号之间来回跳。
+
+### 一条指令就是一个函数
+
+```sigil
+v. op_add(p* VM vm) {
+    o! i4 b m, pop(vm);
+    o! i4 a m, pop(vm);
+    push(vm, a + b);
+    vm->pc m+ 1;
 }
 ```
 
-蛇身用 `head + len` 描述，第 i 节在 `(head - i + CAP) % CAP`：
+`push` / `pop` 自带边界检查：栈溢出或取空栈直接 `fault()` 停机，不会越界读写。
+
+### 汇编器：字节码是数据
 
 ```sigil
-u4 body_cell(p* Snake s, i4 x, i4 y) {
-    o! u4 i m, 0;
-    w~ (i < s->len) {
-        o! u4 k m, (s->head + CAP - i) % CAP;
-        i? (s->x[k] =? x &. s->y[k] =? y) { r; i; }
-        i m+ 1;
-    }
-    r; CAP;                 /* 不在蛇身上 */
+v. load_mul(p* VM vm) {
+    encode(vm, OP_PUSH, 7);
+    encode(vm, OP_PUSH, 6);
+    encode(vm, OP_MUL, 0);
+    encode(vm, OP_EMIT, 0);
+    encode(vm, OP_HALT, 0);
 }
 ```
 
-移动一帧只改一个整数，没有数组搬移、没有指针算术。
+`reset()` 之后可以重新灌入任意程序；同一台 VM，程序只是数据。
+
+### 为什么这是「最小复杂模型」
+
+* **复杂度是真的**：18 条指令、寄存器堆、表达式栈、分支目标、函数指针分派——不是语法糖堆出来的玩具。
+* **体积是真的小**：190 行，去掉空行与注释 153 行。
+* **跨平台是真的**：只用 `<stdio.h>` 与定宽整数；`t! (z? i4 =? 4, ...)` 把位宽假设钉死在编译期，不满足就编译失败。
+* **安全网是真的**：栈溢出、寄存器越界走 `fault()` 停机；数组常量下标在转译期就查。
 
 ### 读法对照
 
-| Sigil-C | C99 | 说明 |
-| :--- | :--- | :--- |
-| `o! Game g;` | `Game g;` | `o!` 标出对象声明 |
-| `p* Snake s` | `Snake *s` | 指针写在类型前缀 |
-| `s->x[i] m, 9;` | `s->x[i] = 9;` | `m,` 是赋值印记 |
-| `g->ticks m+ 1;` | `g->ticks += 1;` | 复合赋值同一词根 |
-| `a& g` | `&g` | 取地址 |
-| `i? (c) { ... } e: { ... }` | `if (c) { ... } else { ... }` | 分支与否则 |
-| `s?` / `k:` / `d:` | `switch` / `case` / `default` | 多路派发 |
-| `r; x;` | `return x;` | 收尾分号属于印记 |
-| `i4[CAP] x;` | `int32_t x[CAP];` | 数组维度在类型前缀 |
-
-### 越界防护直接生效
-
-`next` 是运行期值，转译器不知道；但**常量下标**越界会被当场拒绝：
-
-```
-error: Index 5 is out of bounds for an array of 3 element(s)
-```
-
-想连运行期下标也保住，编译时加 `--bounds-check`：越界经 `sigil_bounds_check()` 直接 `abort()`；不加时 `SIGIL_IDX` 展开为 `(i)`，零开销。指针下标与指针算术没有长度信息，不在保护范围。
-
-### 为什么这个例子算「优雅」
-
-* **没有手写指针算术**：蛇身是 `head + len` 加环形取模，移动只改一个整数。
-* **每个函数只做一件事**：`step` 只推进一帧，`cell` 只回答"这一格画什么"。
-* **没有裸 `=`、没有 `goto`、没有魔法数**：方向用枚举，尺寸用 `#define`，状态修改全部由 `m,` / `m+` 显式标出。
+| Sigil-C | C99 |
+| :--- | :--- |
+| `e{ Op { OP_PUSH m, 0, ... };` | `typedef enum { OP_PUSH = 0, ... } Op;` |
+| `i4[STACK_CAP] stack;` | `int32_t stack[STACK_CAP];` |
+| `(f^(p* VM) -> v.)[10] DISPATCH` | `void (*DISPATCH[10])(VM *)` |
+| `vm->sp m+ 1;` | `vm->sp += 1;` |
+| `i? (c =? 0) { } e: { }` | `if (c == 0) { } else { }` |
+| `r; v;` | `return v;` |
 
 ## 核心文件说明
 
@@ -419,4 +416,4 @@ error: Index 5 is out of bounds for an array of 3 element(s)
 * **`SYNTAX.md`**：印记符号速查表、前缀类型绑定规则、运算符静态语义与语言子集边界。
 * **`CHANGELOG.md`**：版本演进记录、31→136 项测试覆盖增量明细与平流内核验证参数说明。
 * **`sigilc.py` / `test_matrix.py`**：转译器源码与 136 项自动化验证脚本。
-* **`examples/snake.sigil`**：贪吃蛇示例——枚举、结构体、数组、环形缓冲区与越界防护的综合演示。
+* **`examples/vm.sigil`**：最小可移植虚拟机——枚举指令集、函数指针分派表、表达式栈、字节码汇编器与越界防护的综合演示。
