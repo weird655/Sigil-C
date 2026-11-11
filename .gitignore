@@ -1,0 +1,17 @@
+# test_matrix.py 生成的中间产物
+golden.c
+test_runner.c
+test_runner
+test_runner.exe
+minimal.c
+minimal_bin
+minimal_bin.exe
+
+# 编译产物
+*.o
+*.obj
+*.exe
+
+# Python
+__pycache__/
+*.pyc
