@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  matrix:
+    name: test-matrix (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ]
+        python: [ '3.10', '3.12' ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Toolchain
+        run: |
+          gcc --version | head -1
+          python3 --version
+
+      - name: Transpile check (no compiler)
+        run: python3 sigilc.py --version && python3 sigilc.py examples/vm.sigil -o /tmp/vm.c && head -3 /tmp/vm.c
+
+      - name: 159-case matrix
+        run: python3 test_matrix.py
+
+      - name: Compile the VM example with strict flags
+        run: |
+          python3 sigilc.py examples/vm.sigil -o /tmp/vm.c
+          gcc -std=c99 -Wall -Wextra -Werror -pedantic /tmp/vm.c -o /tmp/vm
+          /tmp/vm | tail -3

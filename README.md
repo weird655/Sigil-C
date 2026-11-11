@@ -427,3 +427,15 @@ v. load_mul(p* VM vm) {
 * **`CHANGELOG.md`**：版本演进记录、31→159 项测试覆盖增量明细与平流内核验证参数说明。
 * **`sigilc.py` / `test_matrix.py`**：转译器源码与 159 项自动化验证脚本。
 * **`examples/vm.sigil`**：最小可移植虚拟机——枚举指令集、函数指针分派表、表达式栈、字节码汇编器与越界防护的综合演示。
+
+## 许可证
+
+本仓库的代码与文档以 **Creative Commons Attribution 4.0 International（CC BY 4.0）** 发布，全文见 [`LICENSE`](LICENSE)。
+
+你可以自由复制、修改、再分发（含商业用途），只需保留署名与许可证链接，并注明是否修改。
+
+> 说明：CC BY 4.0 是为创作作品设计的许可证，不含专利授权条款。若你更需要软件惯例的条款，可叠加 MIT 做双许可，只改一行。
+
+## 持续集成（Linux）
+
+`.github/workflows/ci.yml` 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 各跑一遍 159 项矩阵，并用 `-std=c99 -Wall -Wextra -Werror -pedantic` 编译并运行 `examples/vm.sigil`。也就是说"159 项全绿"不只在这台 Windows 上成立，任何人都能在 Linux 上点开验证。
