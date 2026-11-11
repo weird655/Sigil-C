@@ -59,6 +59,11 @@ INT_C_TYPES = {
 
 NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double'}
 VALID_SIMPLE_ESCAPES = set('abfnrtv\\\'"?0')
+VALID_INTEGER_SUFFIXES = {
+    '', 'u', 'U', 'l', 'L', 'll', 'LL',
+    'ul', 'uL', 'Ul', 'UL', 'lu', 'lU', 'Lu', 'LU',
+    'ull', 'uLL', 'Ull', 'ULL', 'llu', 'llU', 'LLu', 'LLU',
+}
 
 class LexerError(Exception):
     pass
@@ -165,6 +170,12 @@ class Lexer:
                     raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid digit in octal constant '{digits_str}'")
                 while self.pos < self.n and self._peek() in 'uUlL':
                     buf.append(self._advance())
+
+        literal = ''.join(buf)
+        if not is_float:
+            suffix = literal[len(literal.rstrip('uUlL')):]
+            if suffix not in VALID_INTEGER_SUFFIXES:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid C99 integer suffix '{suffix}'")
 
         if self._peek() == '.' or self._peek().isalpha() or self._peek() == '_':
             raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid trailing character '{self._peek()}' in number literal")
