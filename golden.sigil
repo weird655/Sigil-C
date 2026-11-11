@@ -1,0 +1,98 @@
+#include <stdio.h>
+#include <assert.h>
+
+/* 跨行注释包含伪印记 i? r; s- w~ */
+p* c$ c1 G_TAG m, "Sigil-C v0.5.2 Verified";
+
+e{ OpMode {
+    MODE_IDLE m, 0,
+    MODE_ADVECT m, (8 % 3) - 1,
+    MODE_HEX_TEST m, 0xFE
+};
+
+u{ PayloadUnion {
+    i4 raw_i4;
+    u4 raw_u4;
+};
+
+s{ ScentGridContext a!64 {
+    p* c$ u4 buffer_read;
+    p* u4 buffer_write;
+    p* c$ u1 wind_dir;
+    i4[4][8] matrix2d;
+    u2 width;
+    u2 height;
+};
+
+i4 invoke_with_hook(u4 entity_id, f^(u4 id, i4 delta) -> i4 cb);
+
+i4 invoke_with_hook(u4 entity_id, f^(u4 id, i4 delta) -> i4 cb) {
+    r; cb(entity_id, 0xFE);
+}
+
+i4 sample_callback(u4 id, i4 delta) {
+    r; ((i4)id * 100) + delta;
+}
+
+/*
+ * 严格全网格质量守恒平流扩散核函数:
+ * 1. 拒绝读写缓冲区别名重叠 (src =? dst 返回 -1);
+ * 2. 乘法前显式扩宽为 (u4)w * (u4)h，防止 16 位无符号数提升为有符号 int 后溢出;
+ * 3. 缓冲区采用 u4 (uint32_t) 存储浓度，彻底杜绝多源扇入 (4 * 255) 的 uint8_t 回绕;
+ * 4. 遍历全网格 [0..h-1][0..w-1]，采用无通量反射/钳制边界条件 (Clamped Reflective Boundary)，
+ *    边界格质量 100% 参与守恒计算，绝不丢弃边界输入。
+ */
+i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
+    p* c$ u4 src m, ctx->buffer_read;
+    p* u4 dst m, ctx->buffer_write;
+    u2 w m, ctx->width;
+    u2 h m, ctx->height;
+
+    i? (src =? dst |. w =? 0 |. h =? 0) {
+        r; -1;
+    }
+
+    u4 total m, (u4)w * (u4)h;
+
+    s? (mode) {
+        k: MODE_IDLE: {
+            r; 0;
+        }
+        k: MODE_ADVECT: {
+            f~ (u4 i m, 0; i < total; i a+ 1) {
+                dst[i] m, 0;
+            }
+            f~ (u2 y m, 0; y < h; y a+ 1) {
+                u4 row_off m, (u4)y * (u4)w;
+                f~ (u2 x m, 0; x < w; x a+ 1) {
+                    u4 idx m, row_off + (u4)x;
+                    u4 scent m, src[idx];
+                    i? (scent > 0) {
+                        u1 dir m, ctx->wind_dir[idx];
+                        i4 dx m, (dir =? 1 |. dir =? 2) ? 1 : ((dir =? 4) ? -1 : 0);
+                        i4 dy m, (dir =? 2 |. dir =? 3) ? 1 : ((dir =? 5) ? -1 : 0);
+
+                        i4 raw_nx m, (i4)x + dx;
+                        i4 raw_ny m, (i4)y + dy;
+
+                        u4 nx m, (raw_nx < 0) ? 0u : (((u4)raw_nx >= (u4)w) ? ((u4)w - 1u) : (u4)raw_nx);
+                        u4 ny m, (raw_ny < 0) ? 0u : (((u4)raw_ny >= (u4)h) ? ((u4)h - 1u) : (u4)raw_ny);
+
+                        u4 target_idx m, (ny * (u4)w) + nx;
+
+                        u4 moved m, (scent * 192u) >> 8;
+                        u4 rem   m, scent - moved;
+
+                        dst[target_idx] a+ moved;
+                        dst[idx]        a+ rem;
+                    }
+                }
+            }
+            r; 0;
+        }
+        d: {
+            r; -2;
+        }
+    }
+    r; 0;
+}
