@@ -35,8 +35,9 @@ u4 pointer_guide_demo(v.) {
     source_values[1] m, 23;
     source_values[2] m, 41;
 
-    /* ctx 保存缓冲区地址和网格尺寸；数组在赋值时退化为首元素地址。 */
+    /* SG 是上面定义的类型；这里新声明一个名为 ctx 的局部对象。 */
     SG ctx;
+    /* 保存缓冲区地址和网格尺寸；数组赋值时退化为首元素地址。 */
     ctx.rd m, source_values;
     ctx.wr m, target_values;
     ctx.w m, 3;
