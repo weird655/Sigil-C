@@ -1,0 +1,112 @@
+#include <stdio.h>
+
+/* 棋盘与蛇的容量都是编译期常量：越界下标会被转译器直接拦下 */
+#define W 16
+#define H 10
+#define CAP 64
+
+e{ Dir { D_UP m, 0, D_RIGHT m, 1, D_DOWN m, 2, D_LEFT m, 3 };
+
+s{ Vec2 { i4 x; i4 y; };
+
+s{ Snake {
+    i4[CAP] x;
+    i4[CAP] y;
+    u4 len;
+    u4 head;
+    Dir dir;
+};
+
+s{ Game {
+    Snake snake;
+    Vec2 food;
+    u4 ticks;
+    u4 alive;
+};
+
+i4 dir_dx(Dir d) { s? (d) { k: D_RIGHT: r; 1; k: D_LEFT: r; -1; d: r; 0; } }
+i4 dir_dy(Dir d) { s? (d) { k: D_DOWN: r; 1; k: D_UP: r; -1; d: r; 0; } }
+
+v. snake_init(p* Snake s) {
+    s->len m, 3;
+    s->head m, 2;
+    s->dir m, D_RIGHT;
+    o! u4 i m, 0;
+    w~ (i < 3) { s->x[i] m, (i4)i + 3; s->y[i] m, 5; i m+ 1; }
+}
+
+v. game_init(p* Game g) {
+    snake_init(a& g->snake);
+    g->food.x m, 10;
+    g->food.y m, 5;
+    g->ticks m, 0;
+    g->alive m, 1;
+}
+
+/* 环形缓冲区：第 i 节身体在 (head - i) mod CAP */
+u4 body_cell(p* Snake s, i4 x, i4 y) {
+    o! u4 i m, 0;
+    w~ (i < s->len) {
+        o! u4 k m, (s->head + CAP - i) % CAP;
+        i? (s->x[k] =? x &. s->y[k] =? y) { r; i; }
+        i m+ 1;
+    }
+    r; CAP;
+}
+
+c1 cell(p* Game g, i4 x, i4 y) {
+    i? (x =? g->food.x &. y =? g->food.y) { r; '*'; }
+    o! u4 b m, body_cell(a& g->snake, x, y);
+    i? (b =? 0) { r; '@'; }
+    i? (b < CAP) { r; 'o'; }
+    r; '.';
+}
+
+v. draw(p* Game g) {
+    o! i4 y m, 0;
+    w~ (y < H) {
+        o! i4 x m, 0;
+        w~ (x < W) { putchar(cell(g, x, y)); x m+ 1; }
+        putchar('\n');
+        y m+ 1;
+    }
+}
+
+v. turn(p* Snake s, Dir d) {
+    /* 不允许 180 度掉头 */
+    o! b. back m, (dir_dx(s->dir) + dir_dx(d) =? 0) &. (dir_dy(s->dir) + dir_dy(d) =? 0);
+    i? (!.back) { s->dir m, d; }
+}
+
+v. step(p* Game g) {
+    o! i4 nx m, g->snake.x[g->snake.head] + dir_dx(g->snake.dir);
+    o! i4 ny m, g->snake.y[g->snake.head] + dir_dy(g->snake.dir);
+    i? (nx < 0 |. nx >= W |. ny < 0 |. ny >= H) {
+        g->alive m, 0;
+    } e: {
+        o! u4 next m, (g->snake.head + 1) % CAP;
+        g->snake.x[next] m, nx;
+        g->snake.y[next] m, ny;
+        g->snake.head m, next;
+        i? (nx =? g->food.x &. ny =? g->food.y) {
+            g->snake.len m+ 1;
+            g->food.x m, (i4)((g->ticks * 7 + 3) % (W - 2)) + 1;
+            g->food.y m, (i4)((g->ticks * 5 + 2) % (H - 2)) + 1;
+        }
+        g->ticks m+ 1;
+    }
+}
+
+i4 main(v.) {
+    o! Game g;
+    game_init(a& g);
+    draw(a& g);
+    turn(a& g.snake, D_DOWN);
+    step(a& g);
+    turn(a& g.snake, D_RIGHT);
+    step(a& g);
+    step(a& g);
+    draw(a& g);
+    printf("ticks=%u len=%u alive=%u\n", g.ticks, g.snake.len, g.alive);
+    r; 0;
+}

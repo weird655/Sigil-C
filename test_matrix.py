@@ -39,7 +39,7 @@ def run_test_matrix():
 
     gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
     uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
-    print(f"=== SIGIL-C v3.1.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -344,7 +344,7 @@ i4 main(v.) {
         assert out == "dot = 56"
 
     assert_ok("5 & 6. Codegen + GCC Integration", "Compile & execute README minimal.sigil with gcc -std=c99 -Wall -Wextra -Werror -pedantic", test_readme_minimal_example_gcc)
-    # Layer 7: v3.1.0 additions — z? / s@ / header emission
+    # Layer 7: sizeof / s@ / header emission
     def test_sizeof_forms():
         src = """
         s{ Vec2 { i4 x; i4 y; };
@@ -368,9 +368,9 @@ i4 main(v.) {
         assert "sizeof((*p))" in c
         assert "(sizeof(a) / sizeof(a[0]))" in c
 
-    assert_ok("7. v3.1", "z? takes builtin/pointer/array/user types and expressions, result is size_t", test_sizeof_forms)
-    assert_raises("7. v3.1", "Reject z? applied to void", SemanticError, "u4 f(v.) { r; z? v.; }")
-    assert_raises("7. v3.1", "Reject z? on incomplete struct type", SemanticError, "s{ Fwd; u4 f(v.) { r; z? Fwd; }")
+    assert_ok("7. sizeof", "z? takes builtin/pointer/array/user types and expressions, result is size_t", test_sizeof_forms)
+    assert_raises("7. sizeof", "Reject z? applied to void", SemanticError, "u4 f(v.) { r; z? v.; }")
+    assert_raises("7. sizeof", "Reject z? on incomplete struct type", SemanticError, "s{ Fwd; u4 f(v.) { r; z? Fwd; }")
 
     def test_static_and_header():
         src = """
@@ -394,7 +394,7 @@ i4 main(v.) {
         assert "hidden_helper" not in h and "hidden_counter" not in h
         assert "struct Vec2 {" in h and "MODE_A" in h
 
-    assert_ok("7. v3.1", "s@ emits static and internal symbols are excluded from the header", test_static_and_header)
+    assert_ok("7. sizeof", "s@ emits static and internal symbols are excluded from the header", test_static_and_header)
 
     def test_header_end_to_end():
         sigil = """
@@ -432,7 +432,7 @@ i4 main(v.) {
         out = subprocess.run(["./api_bin"], capture_output=True, text=True, check=True).stdout.strip()
         assert out == "38 8 1", out
 
-    assert_ok("7. v3.1", "Generated .h consumed by an independent .c file: compile, link, run", test_header_end_to_end)
+    assert_ok("7. sizeof", "Generated .h consumed by an independent .c file: compile, link, run", test_header_end_to_end)
 
     def test_differential_vs_c():
         """同一算法用 Sigil-C 与手写 C 各实现一遍，逐位比对结果。
@@ -531,9 +531,9 @@ int main(void) {
         out = subprocess.run(["./diff_bin"], capture_output=True, text=True, check=True).stdout.strip()
         assert out.startswith("diff ok:"), out
 
-    assert_ok("7. v3.1", "Differential: Sigil-C output vs hand-written C, 257 elements, bit-identical", test_differential_vs_c)
+    assert_ok("7. sizeof", "Differential: Sigil-C output vs hand-written C, 257 elements, bit-identical", test_differential_vs_c)
 
-    # Layer 8: v3.2 GNU 属性 a@(...)
+    # Layer 8: GNU attributes a@(...)
     def test_attr_packed_abi():
         sigil = """
         a@(packed) s{ Packet { u1 kind; u4 id; };
@@ -558,7 +558,7 @@ int main(void) {
         out = subprocess.run(["./attr_packed_bin"], capture_output=True, text=True, check=True).stdout.strip()
         assert out == "5", out
 
-    assert_ok("8. v3.2 attr", "a@(packed) changes the ABI: header-aware consumer sees sizeof == 5", test_attr_packed_abi)
+    assert_ok("8. attr", "a@(packed) changes the ABI: header-aware consumer sees sizeof == 5", test_attr_packed_abi)
 
     def test_attr_aligned_type():
         sigil = "a@(aligned(16)) s{ Small { u4 x; };"
@@ -580,7 +580,7 @@ int main(void) {
         out = subprocess.run(["./attr_aligned_bin"], capture_output=True, text=True, check=True).stdout.strip()
         assert out == "16", out
 
-    assert_ok("8. v3.2 attr", "a@(aligned(16)) on a type forces 16-byte granularity (sizeof 4 -> 16)", test_attr_aligned_type)
+    assert_ok("8. attr", "a@(aligned(16)) on a type forces 16-byte granularity (sizeof 4 -> 16)", test_attr_aligned_type)
 
     def test_attr_field_alignment():
         sigil = """
@@ -605,7 +605,7 @@ int main(void) {
         out = subprocess.run(["./attr_field_bin"], capture_output=True, text=True, check=True).stdout.strip()
         assert out == "8", out
 
-    assert_ok("8. v3.2 attr", "Field-level a@(aligned(8)) moves the member to offset 8", test_attr_field_alignment)
+    assert_ok("8. attr", "Field-level a@(aligned(8)) moves the member to offset 8", test_attr_field_alignment)
 
     def test_attr_function_placement():
         sigil = """
@@ -627,7 +627,7 @@ int main(void) {
             check=True
         )
 
-    assert_ok("8. v3.2 attr", "Function/object attributes emit before the declarator and compile clean under -Werror", test_attr_function_placement)
+    assert_ok("8. attr", "Function/object attributes emit before the declarator and compile clean under -Werror", test_attr_function_placement)
 
     def test_attr_header_and_guards():
         sigil = """
@@ -645,24 +645,24 @@ int main(void) {
         # 生成的 C 里不应残留 sigil 写法（只在 #error 文案里提到 a@）
         assert all(not line.lstrip().startswith("a@") for line in h_src.splitlines()), h_src
 
-    assert_ok("8. v3.2 attr", "Public header carries attributes and the SIGIL_HAS_ATTR capability gate", test_attr_header_and_guards)
+    assert_ok("8. attr", "Public header carries attributes and the SIGIL_HAS_ATTR capability gate", test_attr_header_and_guards)
 
-    assert_raises("8. v3.2 attr", "Reject unknown attribute name",
+    assert_raises("8. attr", "Reject unknown attribute name",
                   SemanticError, "a@(no_such_attr) o! u4 x m, 0;")
-    assert_raises("8. v3.2 attr", "Reject a@(packed) on a function",
+    assert_raises("8. attr", "Reject a@(packed) on a function",
                   SemanticError, "a@(packed) i4 f(v.) { r; 0; }")
-    assert_raises("8. v3.2 attr", "Reject non-power-of-2 a@(aligned(3))",
+    assert_raises("8. attr", "Reject non-power-of-2 a@(aligned(3))",
                   SemanticError, "a@(aligned(3)) o! u4 x m, 0;")
-    assert_raises("8. v3.2 attr", "Reject attributes on a forward declaration",
+    assert_raises("8. attr", "Reject attributes on a forward declaration",
                   SemanticError, "a@(packed) s{ Foo;")
-    assert_raises("8. v3.2 attr", "Reject file-scope-only attribute on a block-scope object",
+    assert_raises("8. attr", "Reject file-scope-only attribute on a block-scope object",
                   SemanticError, "i4 f(v.) { a@(section(\".x\")) o! u4 t m, 0; r; 0; }")
-    assert_raises("8. v3.2 attr", "Reject duplicate attributes on one declaration",
+    assert_raises("8. attr", "Reject duplicate attributes on one declaration",
                   SemanticError, "a@(unused, unused) s@ i4 f(v.) { r; 0; }")
-    assert_raises("8. v3.2 attr", "Reject wrong argument kind for a string attribute",
+    assert_raises("8. attr", "Reject wrong argument kind for a string attribute",
                   SemanticError, "a@(section(1)) o! u4 x m, 0;")
 
-    # Layer 9: v3.2 字面量与聚合初始化
+    # Layer 9: literals and aggregate initialization
     def test_bool_literals():
         sigil = """
         i4 main(v.) {
@@ -681,7 +681,7 @@ int main(void) {
         rc = subprocess.run(["./lit_bool_bin"], check=False).returncode
         assert rc == 0, rc
 
-    assert_ok("9. v3.2 init", "true / false literals emit stdbool tokens and drive a branch", test_bool_literals)
+    assert_ok("9. init", "true / false literals emit stdbool tokens and drive a branch", test_bool_literals)
 
     def test_null_literal():
         sigil = """
@@ -701,7 +701,7 @@ int main(void) {
         rc = subprocess.run(["./lit_null_bin"], check=False).returncode
         assert rc == 0, rc
 
-    assert_ok("9. v3.2 init", "NULL initializes object pointers and function pointers, compares equal", test_null_literal)
+    assert_ok("9. init", "NULL initializes object pointers and function pointers, compares equal", test_null_literal)
 
     def test_struct_aggregate_init():
         sigil = """
@@ -720,7 +720,7 @@ int main(void) {
         rc = subprocess.run(["./init_struct_bin"], check=False).returncode
         assert rc == 7, rc
 
-    assert_ok("9. v3.2 init", "Struct aggregate initializer { 3.0, 4.0 } becomes a C99 brace initializer", test_struct_aggregate_init)
+    assert_ok("9. init", "Struct aggregate initializer { 3.0, 4.0 } becomes a C99 brace initializer", test_struct_aggregate_init)
 
     def test_nested_aggregate_and_zero_fill():
         sigil = """
@@ -742,26 +742,26 @@ int main(void) {
         rc = subprocess.run(["./init_nested_bin"], check=False).returncode
         assert rc == 52, rc
 
-    assert_ok("9. v3.2 init", "Nested struct/array initializers plus C99 zero-fill for short lists", test_nested_aggregate_and_zero_fill)
+    assert_ok("9. init", "Nested struct/array initializers plus C99 zero-fill for short lists", test_nested_aggregate_and_zero_fill)
 
-    assert_raises("9. v3.2 init", "Reject too many struct initializers",
+    assert_raises("9. init", "Reject too many struct initializers",
                   SemanticError, "s{ P { u4 a; u4 b; }; i4 main(v.) { o! P p m, { 1, 2, 3 }; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject too many array initializers",
+    assert_raises("9. init", "Reject too many array initializers",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { 1, 2, 3 }; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject aggregate initializer on a scalar",
+    assert_raises("9. init", "Reject aggregate initializer on a scalar",
                   SemanticError, "i4 main(v.) { o! u4 x m, { 1 }; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject more than one union initializer",
+    assert_raises("9. init", "Reject more than one union initializer",
                   SemanticError, "u{ U { u4 a; f4 b; }; i4 main(v.) { o! U u m, { 1, 2 }; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject NULL assigned to a non-pointer",
+    assert_raises("9. init", "Reject NULL assigned to a non-pointer",
                   SemanticError, "i4 main(v.) { o! u4 x m, NULL; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject empty initializer list",
+    assert_raises("9. init", "Reject empty initializer list",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { }; r; 0; }")
-    assert_raises("9. v3.2 init", "Reject incompatible initializer element type",
+    assert_raises("9. init", "Reject incompatible initializer element type",
                   SemanticError, 's{ P { u4 a; }; i4 main(v.) { o! P p m, { "str" }; r; 0; }')
-    assert_raises("9. v3.2 init", "Reject non-constant element in a global aggregate initializer",
+    assert_raises("9. init", "Reject non-constant element in a global aggregate initializer",
                   SemanticError, "o! i4 g m, 1; o! u4[2] t m, { 1, g }; i4 main(v.) { r; 0; }")
 
-    # Layer 10: v3.2 语言补全（inline / 位域 / 变参 / 静态断言 / do-while / goto / 共享前导头）
+    # Layer 10: inline / bit-fields / variadics / static assert / do-while / goto / prelude
     def test_static_inline_header():
         sigil = """
         s@ i@ i4 sat_add(i4 a, i4 b) { r; a + b; }
@@ -778,7 +778,7 @@ int main(void) {
         )
         assert subprocess.run(["./inl_bin"], check=False).returncode == 0
 
-    assert_ok("10. v3.2 full", "s@ i@ emits a static inline definition into the public header", test_static_inline_header)
+    assert_ok("10. control", "s@ i@ emits a static inline definition into the public header", test_static_inline_header)
 
     def test_bitfields():
         sigil = """
@@ -800,13 +800,13 @@ int main(void) {
         rc = subprocess.run(["./bf_bin"], check=False).returncode
         assert rc == 9, rc   # sizeof(Ctrl) == 4, mode == 5
 
-    assert_ok("10. v3.2 full", "w! bit-fields pack into 4 bytes and read back", test_bitfields)
+    assert_ok("10. control", "w! bit-fields pack into 4 bytes and read back", test_bitfields)
 
-    assert_raises("10. v3.2 full", "Reject a bit-field wider than its base type",
+    assert_raises("10. control", "Reject a bit-field wider than its base type",
                   SemanticError, "s{ C { u4 x w! 33; }; i4 main(v.) { r; 0; }")
-    assert_raises("10. v3.2 full", "Reject a bit-field on a non-integer base type",
+    assert_raises("10. control", "Reject a bit-field on a non-integer base type",
                   SemanticError, "s{ C { f4 x w! 3; }; i4 main(v.) { r; 0; }")
-    assert_raises("10. v3.2 full", "Reject taking the address of a bit-field",
+    assert_raises("10. control", "Reject taking the address of a bit-field",
                   SemanticError, "s{ C { u4 b w! 1; }; i4 main(v.) { o! C c; o! p* u4 q m, a& c.b; r; 0; }")
 
     def test_variadic():
@@ -825,9 +825,9 @@ int main(void) {
         )
         assert subprocess.run(["./va_bin"], check=False).returncode == 0
 
-    assert_ok("10. v3.2 full", "... declares and defines variadic functions; extra args are accepted", test_variadic)
+    assert_ok("10. control", "... declares and defines variadic functions; extra args are accepted", test_variadic)
 
-    assert_raises("10. v3.2 full", "Reject '...' before any named parameter",
+    assert_raises("10. control", "Reject '...' before any named parameter",
                   SemanticError, "i4 f(...) { r; 0; } i4 main(v.) { r; 0; }")
 
     def test_static_assert_pass():
@@ -840,7 +840,7 @@ int main(void) {
         )
         assert subprocess.run(["./sa_ok_bin"], check=False).returncode == 0
 
-    assert_ok("10. v3.2 full", "t! emits a compile-time assertion that holds", test_static_assert_pass)
+    assert_ok("10. control", "t! emits a compile-time assertion that holds", test_static_assert_pass)
 
     def test_static_assert_fail():
         sigil = 't! (z? u4 =? 5, "u4 is not 5 bytes"); i4 main(v.) { r; 0; }'
@@ -852,7 +852,7 @@ int main(void) {
         ).returncode
         assert rc != 0, "a false t! must fail to compile"
 
-    assert_ok("10. v3.2 full", "t! with a false condition fails at C compile time", test_static_assert_fail)
+    assert_ok("10. control", "t! with a false condition fails at C compile time", test_static_assert_fail)
 
     def test_do_while():
         sigil = """
@@ -871,7 +871,7 @@ int main(void) {
         rc = subprocess.run(["./dowhile_bin"], check=False).returncode
         assert rc == 3, rc
 
-    assert_ok("10. v3.2 full", "d~ / w~ do-while runs the body before testing", test_do_while)
+    assert_ok("10. control", "d~ / w~ do-while runs the body before testing", test_do_while)
 
     def test_goto_label():
         sigil = """
@@ -892,9 +892,9 @@ int main(void) {
         rc = subprocess.run(["./goto_bin"], check=False).returncode
         assert rc == 3, rc
 
-    assert_ok("10. v3.2 full", "g! / l! emit a goto/backward-label loop", test_goto_label)
+    assert_ok("10. control", "g! / l! emit a goto/backward-label loop", test_goto_label)
 
-    assert_raises("10. v3.2 full", "Reject a g! target with no matching l! label",
+    assert_raises("10. control", "Reject a g! target with no matching l! label",
                   SemanticError, "i4 main(v.) { g! nowhere; r; 0; }")
 
     def test_shared_prelude():
@@ -920,7 +920,7 @@ int main(void) {
         )
         assert subprocess.run(["./pab_bin"], check=False).returncode == 0
 
-    assert_ok("10. v3.2 full", "--emit-prelude / --prelude share one macro header instead of duplicating it", test_shared_prelude)
+    assert_ok("10. control", "--emit-prelude / --prelude share one macro header instead of duplicating it", test_shared_prelude)
 
     def test_switch_fallthrough():
         sigil = """
@@ -946,9 +946,9 @@ int main(void) {
         )
         assert subprocess.run(["./fall_bin"], check=False).returncode == 0
 
-    assert_ok("10. v3.2 full", "Switch falls through unless b!/r;/g! ends the case (C semantics, marked explicitly)", test_switch_fallthrough)
+    assert_ok("10. control", "Switch falls through unless b!/r;/g! ends the case (C semantics, marked explicitly)", test_switch_fallthrough)
 
-    # Layer 11: v3.3 声明补全（restrict / 匿名位域填充 / 指定初始化）
+    # Layer 11: restrict / bit-field padding / designated initializers
     def test_restrict_qualifier():
         sigil = """
         u4 sum(r@ p* u4 src, u4 n) {
@@ -969,9 +969,9 @@ int main(void) {
         )
         assert subprocess.run(["./restr_bin"], check=False).returncode == 0
 
-    assert_ok("11. v3.3 decl", "r@ emits a C99 restrict-qualified pointer", test_restrict_qualifier)
+    assert_ok("11. decl", "r@ emits a C99 restrict-qualified pointer", test_restrict_qualifier)
 
-    assert_raises("11. v3.3 decl", "Reject r@ on a non-pointer type",
+    assert_raises("11. decl", "Reject r@ on a non-pointer type",
                   SemanticError, "i4 main(v.) { o! r@ u4 x m, 1; r; 0; }")
 
     def test_padding_bitfield():
@@ -995,9 +995,9 @@ int main(void) {
         rc = subprocess.run(["./pad_bin"], check=False).returncode
         assert rc == 13, rc   # sizeof(Flags) == 2 due to the zero-width padding, +5 +6
 
-    assert_ok("11. v3.3 decl", "Unnamed zero-width w! padding forces the next field to a new unit", test_padding_bitfield)
+    assert_ok("11. decl", "Unnamed zero-width w! padding forces the next field to a new unit", test_padding_bitfield)
 
-    assert_raises("11. v3.3 decl", "Reject an unnamed bit-field with a non-zero width",
+    assert_raises("11. decl", "Reject an unnamed bit-field with a non-zero width",
                   SemanticError, "s{ P { u4 w! 3; }; i4 main(v.) { r; 0; }")
 
     def test_designated_init():
@@ -1021,18 +1021,18 @@ int main(void) {
         rc = subprocess.run(["./desig_bin"], check=False).returncode
         assert rc == 14, rc   # v: 3+4, ln.a.x + ln.b.y: 1+6
 
-    assert_ok("11. v3.3 decl", "{ .y m, 4.0 } designated initializers, out of order and nested", test_designated_init)
+    assert_ok("11. decl", "{ .y m, 4.0 } designated initializers, out of order and nested", test_designated_init)
 
-    assert_raises("11. v3.3 decl", "Reject a designated initializer for an unknown field",
+    assert_raises("11. decl", "Reject a designated initializer for an unknown field",
                   SemanticError, "s{ P { u4 a; }; i4 main(v.) { o! P p m, { .z m, 1 }; r; 0; }")
-    assert_raises("11. v3.3 decl", "Reject mixing designated and positional initializers",
+    assert_raises("11. decl", "Reject mixing designated and positional initializers",
                   SemanticError, "s{ P { u4 a; u4 b; }; i4 main(v.) { o! P p m, { .a m, 1, 2 }; r; 0; }")
-    assert_raises("11. v3.3 decl", "Reject duplicate designated initializers for one field",
+    assert_raises("11. decl", "Reject duplicate designated initializers for one field",
                   SemanticError, "s{ P { u4 a; }; i4 main(v.) { o! P p m, { .a m, 1, .a m, 2 }; r; 0; }")
-    assert_raises("11. v3.3 decl", "Reject designated initializers on arrays",
+    assert_raises("11. decl", "Reject designated initializers on arrays",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { .a m, 1 }; r; 0; }")
 
-    # Layer 12: v3.4 表达式补全（复合字面量 / 数组指定下标 / va_list / g? 泛型）
+    # Layer 12: compound literals / array designators / va_list / g?
     def test_compound_literal():
         sigil = """
         s{ Vec2 { f8 x; f8 y; };
@@ -1055,9 +1055,9 @@ int main(void) {
         rc = subprocess.run(["./clit_bin"], check=False).returncode
         assert rc == 16, rc   # 4 + 5 + 7
 
-    assert_ok("12. v3.4 expr", "Compound literals work as postfix bases and with designators", test_compound_literal)
+    assert_ok("12. expr", "Compound literals work as postfix bases and with designators", test_compound_literal)
 
-    assert_raises("12. v3.4 expr", "Reject a scalar compound literal with two values",
+    assert_raises("12. expr", "Reject a scalar compound literal with two values",
                   SemanticError, "i4 main(v.) { o! u4 n m, (u4){ 1, 2 }; r; 0; }")
 
     def test_array_designated_index():
@@ -1078,13 +1078,13 @@ int main(void) {
         rc = subprocess.run(["./adesig_bin"], check=False).returncode
         assert rc == 12, rc   # 5 + 7 + 0
 
-    assert_ok("12. v3.4 expr", "[index] m, value array designators with zero-fill", test_array_designated_index)
+    assert_ok("12. expr", "[index] m, value array designators with zero-fill", test_array_designated_index)
 
-    assert_raises("12. v3.4 expr", "Reject an array designator past the array bound",
+    assert_raises("12. expr", "Reject an array designator past the array bound",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { [5] m, 1 }; r; 0; }")
-    assert_raises("12. v3.4 expr", "Reject duplicate array designators",
+    assert_raises("12. expr", "Reject duplicate array designators",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { [0] m, 1, [0] m, 2 }; r; 0; }")
-    assert_raises("12. v3.4 expr", "Reject mixing array designators and positional values",
+    assert_raises("12. expr", "Reject mixing array designators and positional values",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { [0] m, 1, 2 }; r; 0; }")
 
     def test_va_list_reading():
@@ -1112,11 +1112,11 @@ int main(void) {
         )
         assert subprocess.run(["./va2_bin"], check=False).returncode == 0
 
-    assert_ok("12. v3.4 expr", "va_list + va_start/va_arg/va_end read real variadic arguments", test_va_list_reading)
+    assert_ok("12. expr", "va_list + va_start/va_arg/va_end read real variadic arguments", test_va_list_reading)
 
-    assert_raises("12. v3.4 expr", "Reject va_start outside a variadic function",
+    assert_raises("12. expr", "Reject va_start outside a variadic function",
                   SemanticError, "i4 f(v.) { o! va_list ap; va_start(ap, x); r; 0; }")
-    assert_raises("12. v3.4 expr", "Reject va_arg of a void type",
+    assert_raises("12. expr", "Reject va_arg of a void type",
                   SemanticError, "i4 sum_all(u4 c, ...) { o! va_list ap; va_start(ap, c); o! i4 x m, va_arg(ap, v.); r; x; }")
 
     def test_generic_static_resolution():
@@ -1136,14 +1136,14 @@ int main(void) {
         )
         assert subprocess.run(["./gen_bin"], check=False).returncode == 0   # 11 + 2 - 13
 
-    assert_ok("12. v3.4 expr", "g? resolves to one branch at transpile time (C99 output, no _Generic)", test_generic_static_resolution)
+    assert_ok("12. expr", "g? resolves to one branch at transpile time (C99 output, no _Generic)", test_generic_static_resolution)
 
-    assert_raises("12. v3.4 expr", "Reject g? with no matching association and no default",
+    assert_raises("12. expr", "Reject g? with no matching association and no default",
                   SemanticError, "i4 f(f8 x) { r; g? x { i4: 1 }; }")
-    assert_raises("12. v3.4 expr", "Reject duplicate g? associations for one type",
+    assert_raises("12. expr", "Reject duplicate g? associations for one type",
                   SemanticError, "i4 f(i4 x) { r; g? x { i4: 1; i4: 2; }; }")
 
-    # Layer 13: v3.5 填坑与越界防护（宏常量 / offsetof / va_copy / #pragma / bounds）
+    # Layer 13: macro constants / offsetof / va_copy / pragma / bounds
     def test_macros_offsetof():
         sigil = """
         #define TABLE_N 3
@@ -1172,7 +1172,7 @@ int main(void) {
         rc = subprocess.run(["./moff_bin"], check=False).returncode
         assert rc == 64, rc   # 6 * 10 + offsetof(value) == 4
 
-    assert_ok("13. v3.5 safety", "#define literals usable as constants; offsetof() builtin", test_macros_offsetof)
+    assert_ok("13. safety", "#define literals usable as constants; offsetof() builtin", test_macros_offsetof)
 
     def test_va_copy():
         sigil = """
@@ -1200,7 +1200,7 @@ int main(void) {
         )
         assert subprocess.run(["./vacopy_bin"], check=False).returncode == 0
 
-    assert_ok("13. v3.5 safety", "va_copy duplicates a va_list that has already been started", test_va_copy)
+    assert_ok("13. safety", "va_copy duplicates a va_list that has already been started", test_va_copy)
 
     def test_pragma_passthrough():
         sigil = """
@@ -1218,11 +1218,11 @@ int main(void) {
         )
         assert subprocess.run(["./prag_bin"], check=False).returncode == 0
 
-    assert_ok("13. v3.5 safety", "#pragma lines pass through to the generated C", test_pragma_passthrough)
+    assert_ok("13. safety", "#pragma lines pass through to the generated C", test_pragma_passthrough)
 
-    assert_raises("13. v3.5 safety", "Reject a constant array index past the bound at transpile time",
+    assert_raises("13. safety", "Reject a constant array index past the bound at transpile time",
                   SemanticError, "i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[5]; }")
-    assert_raises("13. v3.5 safety", "Reject a negative constant array index at transpile time",
+    assert_raises("13. safety", "Reject a negative constant array index at transpile time",
                   SemanticError, "i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[-1]; }")
 
     def test_runtime_bounds_check():
@@ -1248,7 +1248,7 @@ int main(void) {
         assert ok_rc == 3, ok_rc          # a[2] == 3, no abort
         assert bad_rc != 0, bad_rc        # out-of-range aborts
 
-    assert_ok("13. v3.5 safety", "--bounds-check aborts on a runtime out-of-range subscript", test_runtime_bounds_check)
+    assert_ok("13. safety", "--bounds-check aborts on a runtime out-of-range subscript", test_runtime_bounds_check)
 
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
