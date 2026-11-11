@@ -1,6 +1,8 @@
 #include <stdio.h>
 
-/* 第 4 章：函数指针表——把 if/else 换成分派表 */
+/* 第 4 章：函数指针表
+   (f^(i4, i4) -> i4)[4]   =  int (*OPS[4])(int, int)
+   从左往右：函数指针 → 参数 → 返回 → 数组维度 → 名字 */
 
 e{ Op { ADD m, 0, SUB m, 1, MUL m, 2, DIV m, 3 };
 
@@ -9,10 +11,11 @@ i4 do_sub(i4 a, i4 b) { r; a - b; }
 i4 do_mul(i4 a, i4 b) { r; a * b; }
 
 i4 do_div(i4 a, i4 b) {
-    i? (b =? 0) { r; 0; }
+    i? (b =? 0) { r; 0; }         /* 除零返回 0，不崩 */
     r; a / b;
 }
 
+/* 表在编译期就填好：没有运行时注册 */
 o! (f^(i4, i4) -> i4)[4] OPS m, { do_add, do_sub, do_mul, do_div };
 
 i4 eval(i4 a, Op op, i4 b) { r; OPS[(i4)op](a, b); }

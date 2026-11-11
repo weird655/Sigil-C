@@ -1,6 +1,8 @@
 #include <stdio.h>
 
-/* 第 3 章：指针与边界——一个真的能用的 hexdump */
+/* 第 3 章：指针与边界
+   p* c@ u1  指向只读 u1 的指针        a& x  取地址
+   指针的来源会被追踪：从哪个数组来、走了多远 */
 
 o! u1[24] SAMPLE m, {
     'S', 'i', 'g', 'i', 'l', '-', 'C', ' ',
@@ -10,22 +12,22 @@ o! u1[24] SAMPLE m, {
 
 v. dump(p* c@ u1 buf, u4 n) {
     o! u4 off m, 0;
-    w~ (off < n) {
+    w~ (off < n) {                       /* 每行 16 字节 */
         printf("%04x  ", off);
 
         o! u4 i m, 0;
         w~ (i < 16) {
             i? (off + i < n) { printf("%02x ", buf[off + i]); }
-            e: { printf("   "); }
+            e: { printf("   "); }        /* 不足 16 字节补空格 */
             i m+ 1;
         }
 
         printf(" |");
         i m, 0;
-        w~ (i < 16 &. off + i < n) {
+        w~ (i < 16 &. off + i < n) {     /* &. 逻辑与，短路 */
             o! u1 c m, buf[off + i];
             i? (c >= 0x20 &. c < 0x7f) { printf("%c", (c1)c); }
-            e: { printf("."); }
+            e: { printf("."); }          /* 不可打印字节显示点 */
             i m+ 1;
         }
         printf("|\n");

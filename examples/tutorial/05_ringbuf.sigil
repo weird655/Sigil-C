@@ -1,7 +1,11 @@
 #include <stdio.h>
 
-/* 第 5 章：嵌入式基础——volatile 环形缓冲，模拟中断里写、主循环里读
-   注意：变量别叫 r——`r;` 是返回印记，`o! Ring r;` 会被拆错。 */
+/* 第 5 章：嵌入——volatile 环形缓冲
+
+   v@   每次访问都真的读写内存（中断/寄存器语义）
+   容量 8 的环实际只能放 7 个：head+1 撞上 tail 即满
+
+   命名雷区：变量别叫 r —— `r;` 是返回印记，`o! Ring r;` 会被拆错 */
 
 #define CAP 8
 
@@ -14,14 +18,17 @@ s{ Ring {
 
 b. ring_push(p* Ring rb, u1 v) {
     o! u4 next m, (rb->head + 1) % CAP;
-    i? (next =? rb->tail) { rb->dropped m+ 1; r; false; }
+    i? (next =? rb->tail) {          /* 满：丢帧，不覆盖 */
+        rb->dropped m+ 1;
+        r; false;
+    }
     rb->data[rb->head] m, v;
     rb->head m, next;
     r; true;
 }
 
 b. ring_pop(p* Ring rb, p* u1 out) {
-    i? (rb->tail =? rb->head) { r; false; }
+    i? (rb->tail =? rb->head) { r; false; }   /* 空 */
     p* out m, rb->data[rb->tail];
     rb->tail m, (rb->tail + 1) % CAP;
     r; true;
@@ -38,7 +45,7 @@ i4 main(v.) {
     ring_init(a& rb);
 
     o! u4 i m, 1;
-    w~ (i <= 10) { (v.)ring_push(a& rb, (u1)i); i m+ 1; }
+    w~ (i <= 10) { (v.)ring_push(a& rb, (u1)i); i m+ 1; }   /* 塞 10 个 */
 
     printf("popped: ");
     o! u1 v m, 0;

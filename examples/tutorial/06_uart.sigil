@@ -1,6 +1,11 @@
 #include <stdio.h>
 
-/* 第 6 章：硬件寄存器——packed 布局、位域叠视图、offsetof 断言 */
+/* 第 6 章：硬件——寄存器映射
+
+   a@(packed)  没有隐藏填充
+   w!          位域宽度
+   v@          访问不被优化掉
+   t!          编译期断言：布局不对就编译失败 */
 
 a@(packed) s{ Uart {
     v@ u4 status;
@@ -14,7 +19,7 @@ s{ CtrlBits {
     u4 baud   w! 13;
 };
 
-u{ CtrlReg {
+u{ CtrlReg {                 /* raw 与 bits 共用 4 字节 */
     u4 raw;
     CtrlBits bits;
 };
@@ -35,7 +40,7 @@ v. uart_config(p* Uart u, u4 enable, u4 mode, u4 baud) {
     reg.bits.enable m, enable;
     reg.bits.mode m, mode;
     reg.bits.baud m, baud;
-    u->ctrl m, reg.raw;
+    u->ctrl m, reg.raw;       /* 位域写回原始寄存器 */
 }
 
 i4 main(v.) {

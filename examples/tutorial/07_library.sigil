@@ -1,6 +1,9 @@
 #include <stdio.h>
 
-/* 第 8 章：发布成库——s@ 内部符号不会进头文件 */
+/* 第 8 章：发布成库
+
+   s@   文件内部链接：不进头文件，C 用户看不到
+   其余非 static 函数会出现在 --emit-header 生成的 .h 里 */
 
 s@ u4 clamp_u4(u4 v, u4 lo, u4 hi) {
     i? (v < lo) { r; lo; }
@@ -11,7 +14,10 @@ s@ u4 clamp_u4(u4 v, u4 lo, u4 hi) {
 u4 scale(p* c@ u4 src, u4 n, u4 max) {
     o! u4 out m, 0;
     o! u4 i m, 0;
-    w~ (i < n) { out m+ clamp_u4(src[i], 0, max); i m+ 1; }
+    w~ (i < n) {
+        out m+ clamp_u4(src[i], 0, max);
+        i m+ 1;
+    }
     r; out;
 }
 
