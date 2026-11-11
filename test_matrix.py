@@ -8,11 +8,17 @@ from sigilc import (
 def run_test_matrix():
     passed = 0
     total = 0
+    failures = []
 
     def assert_ok(layer, desc, fn):
         nonlocal passed, total
         total += 1
-        fn()
+        try:
+            fn()
+        except Exception as e:
+            failures.append((layer, desc, f"{type(e).__name__}: {e}"))
+            print(f"  [FAIL] [{layer}] {desc} -> {type(e).__name__}: {e}")
+            return
         passed += 1
         print(f"  [PASS] [{layer}] {desc}")
 
@@ -21,10 +27,15 @@ def run_test_matrix():
         total += 1
         try:
             compile_source(code_str, "neg_test.sigil")
-            raise AssertionError(f"Expected {exc_type.__name__} but compilation succeeded for: {code_str}")
         except exc_type as e:
             passed += 1
             print(f"  [PASS] [{layer}] {desc} -> Caught {exc_type.__name__}: {e}")
+        except Exception as e:
+            failures.append((layer, desc, f"expected {exc_type.__name__}, got {type(e).__name__}: {e}"))
+            print(f"  [FAIL] [{layer}] {desc} -> expected {exc_type.__name__}, got {type(e).__name__}: {e}")
+        else:
+            failures.append((layer, desc, f"expected {exc_type.__name__}, but compilation succeeded"))
+            print(f"  [FAIL] [{layer}] {desc} -> expected {exc_type.__name__}, but compilation succeeded")
 
     gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
     uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
@@ -216,7 +227,7 @@ def run_test_matrix():
     assert_raises("4. Semantic", "Reject unnamed 'v.' (void) parameter mixed with other parameters in function pointer", SemanticError,
                   "v. f(f^(v., i4) -> i4 cb) { r;; }")
     assert_raises("4. Semantic", "Reject ordered relational comparison '<' on void* (p* v.) pointers", SemanticError,
-                  "v. f(p* v. a, p* v. b) { b. c m, a < b; }")
+                  "v. f(p* v. a, p* v. b) { o! b. c m, a < b; }")
     assert_raises("4. Semantic", "Reject compile-time constant left shift of negative integer (-2 << 1)", SemanticError,
                   "v. f(i4 x) { s? (x) { k: (-2 << 1): { b!; } } }")
 
@@ -333,6 +344,11 @@ i4 main(v.) {
         assert out == "dot = 56"
 
     assert_ok("5 & 6. Codegen + GCC Integration", "Compile & execute README minimal.sigil with gcc -std=c99 -Wall -Wextra -Werror -pedantic", test_readme_minimal_example_gcc)
+    if failures:
+        print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
+        for layer, desc, why in failures:
+            print(f"  - [{layer}] {desc}\n      {why}")
+        raise SystemExit(1)
     print(f"=== ALL {passed}/{total} TESTS IN 6-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
