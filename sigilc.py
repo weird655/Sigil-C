@@ -43,7 +43,7 @@ BASIC_TYPES = {
     'i1': 'int8_t',   'i2': 'int16_t',   'i4': 'int32_t',   'i8': 'int64_t',
     'u1': 'uint8_t',  'u2': 'uint16_t',  'u4': 'uint32_t',  'u8': 'uint64_t',
     'ui1': 'uint8_t', 'ui2': 'uint16_t', 'ui4': 'uint32_t', 'ui8': 'uint64_t',
-    'f4': 'float',    'f8': 'double',    'x4': 'int32_t',   'c1': 'char',
+    'f4': 'float',    'f8': 'double',    'fl': 'long double', 'x4': 'int32_t', 'c1': 'char',
     'int': 'int',     'char': 'char',    'float': 'float',  'double': 'double',
     'size_t': 'size_t', 'ptrdiff_t': 'ptrdiff_t',
     'intptr_t': 'intptr_t', 'uintptr_t': 'uintptr_t',
@@ -57,7 +57,7 @@ INT_C_TYPES = {
     'char', 'bool', 'int', 'size_t', 'ptrdiff_t', 'intptr_t', 'uintptr_t'
 }
 
-NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double'}
+NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double', 'long double'}
 VALID_SIMPLE_ESCAPES = set('abfnrtv\\\'"?0')
 VALID_INTEGER_SUFFIXES = {
     '', 'u', 'U', 'l', 'L', 'll', 'LL',
@@ -815,7 +815,13 @@ class Parser:
             if expr.lit_kind == 'CHAR':
                 return BaseType(line=expr.line, col=expr.col, c_name='char')
             if expr.lit_kind == 'FLOAT_NUM':
-                return BaseType(line=expr.line, col=expr.col, c_name='float' if expr.code.endswith(('f', 'F')) else 'double')
+                if expr.code.endswith(('f', 'F')):
+                    float_type = 'float'
+                elif expr.code.endswith(('l', 'L')):
+                    float_type = 'long double'
+                else:
+                    float_type = 'double'
+                return BaseType(line=expr.line, col=expr.col, c_name=float_type)
             # INT_NUM (包括 0xFE 十六进制整数，严格推导为整型，修复 'E' 误判为浮点的问题)
             return BaseType(line=expr.line, col=expr.col, c_name='uint32_t' if expr.code.lower().endswith('u') else 'int32_t')
 
@@ -829,8 +835,8 @@ class Parser:
                 return dst_t
             if not self._is_scalar_type(dst_t) or not self._is_scalar_type(src_t):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cast requires scalar types (unless casting to 'v.')")
-            dst_is_float = isinstance(dst_t, BaseType) and dst_t.c_name in ('float', 'double')
-            src_is_float = isinstance(src_t, BaseType) and src_t.c_name in ('float', 'double')
+            dst_is_float = isinstance(dst_t, BaseType) and dst_t.c_name in ('float', 'double', 'long double')
+            src_is_float = isinstance(src_t, BaseType) and src_t.c_name in ('float', 'double', 'long double')
             if (dst_is_float and isinstance(src_t, (PointerType, FunctionPointerType))) or (src_is_float and isinstance(dst_t, (PointerType, FunctionPointerType))):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot cast between floating-point and pointer type")
             return dst_t
@@ -1046,6 +1052,8 @@ class Parser:
     def _usual_arith_type(self, expr: ExprNode, a: TypeNode, b: TypeNode) -> BaseType:
         assert isinstance(a, BaseType) and isinstance(b, BaseType)
         names = {a.c_name, b.c_name}
+        if 'long double' in names:
+            return BaseType(line=expr.line, col=expr.col, c_name='long double')
         if 'double' in names:
             return BaseType(line=expr.line, col=expr.col, c_name='double')
         if 'float' in names:
@@ -1190,6 +1198,8 @@ class Parser:
         if then_num and else_num:
             assert isinstance(t_then, BaseType) and isinstance(t_else, BaseType)
             names = {t_then.c_name, t_else.c_name}
+            if 'long double' in names:
+                return BaseType(line=expr.line, col=expr.col, c_name='long double')
             if 'double' in names:
                 return BaseType(line=expr.line, col=expr.col, c_name='double')
             if 'float' in names:
