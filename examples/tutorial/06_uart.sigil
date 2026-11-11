@@ -1,0 +1,52 @@
+#include <stdio.h>
+
+/* 第 6 章：硬件寄存器——packed 布局、位域叠视图、offsetof 断言 */
+
+a@(packed) s{ Uart {
+    v@ u4 status;
+    v@ u4 data;
+    v@ u4 ctrl;
+};
+
+s{ CtrlBits {
+    u4 enable w! 1;
+    u4 mode   w! 2;
+    u4 baud   w! 13;
+};
+
+u{ CtrlReg {
+    u4 raw;
+    CtrlBits bits;
+};
+
+t! (offsetof(Uart, data) =? 4, "data register must sit at offset 4");
+t! (offsetof(Uart, ctrl) =? 8, "ctrl register must sit at offset 8");
+t! (z? Uart =? 12, "Uart block must be 12 bytes");
+
+v. uart_init(p* Uart u) {
+    u->status m, 0x2;
+    u->data m, 0;
+    u->ctrl m, 0;
+}
+
+v. uart_config(p* Uart u, u4 enable, u4 mode, u4 baud) {
+    o! CtrlReg reg;
+    reg.raw m, 0;
+    reg.bits.enable m, enable;
+    reg.bits.mode m, mode;
+    reg.bits.baud m, baud;
+    u->ctrl m, reg.raw;
+}
+
+i4 main(v.) {
+    o! Uart u;
+    uart_init(a& u);
+    uart_config(a& u, 1, 3, 1200);
+
+    o! CtrlReg reg;
+    reg.raw m, u.ctrl;
+    printf("ctrl=0x%04x enable=%u mode=%u baud=%u\n",
+           reg.raw, (u4)reg.bits.enable, (u4)reg.bits.mode, (u4)reg.bits.baud);
+    printf("status=0x%x data=%u\n", u.status, u.data);
+    r; 0;
+}

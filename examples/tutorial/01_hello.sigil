@@ -1,0 +1,13 @@
+#include <stdio.h>
+
+/* 第 1 章：最小程序——变量、函数、打印 */
+
+i4 area(i4 w, i4 h) { r; w * h; }
+
+i4 main(v.) {
+    o! i4 w m, 4;
+    o! i4 h m, 6;
+    printf("Sigil-C tutorial\n");
+    printf("area(%d x %d) = %d\n", w, h, area(w, h));
+    r; 0;
+}

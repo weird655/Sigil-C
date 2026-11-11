@@ -1,0 +1,30 @@
+#include <stdio.h>
+
+/* 第 2 章：控制流与数组——埃氏筛 */
+
+#define LIMIT 50
+
+i4 main(v.) {
+    o! b.[LIMIT] sieve;
+    o! i4 i m, 2;
+    w~ (i < LIMIT) { sieve[i] m, true; i m+ 1; }
+
+    i m, 2;
+    w~ (i * i < LIMIT) {
+        i? (sieve[i]) {
+            o! i4 j m, i * i;
+            w~ (j < LIMIT) { sieve[j] m, false; j m+ i; }
+        }
+        i m+ 1;
+    }
+
+    o! i4 count m, 0;
+    printf("primes below %d:\n", LIMIT);
+    i m, 2;
+    w~ (i < LIMIT) {
+        i? (sieve[i]) { printf("%d ", i); count m+ 1; }
+        i m+ 1;
+    }
+    printf("\ncount=%d\n", count);
+    r; 0;
+}

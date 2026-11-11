@@ -177,7 +177,7 @@ python3 sigilc.py golden.sigil -o golden.c
 # 2. 使用 GCC C99 严格模式编译
 gcc -std=c99 -O2 -Wall -Wextra -Werror -pedantic golden.c -c
 
-# 3. 运行 17 层 162 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
+# 3. 运行 18 层 169 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
 python3 test_matrix.py
 ```
 
@@ -423,10 +423,11 @@ v. load_mul(p* VM vm) {
 ## 核心文件说明
 
 * **`README.md`**：项目介绍、安装使用与原生 C 模板最小可运行示例。
+* **`TUTORIAL.md`**：八章教程——软件（变量/控制流/指针/函数指针）、嵌入（volatile 环形缓冲）、硬件（寄存器映射/帧解析）、发布成库、十个坑、让 AI 帮你写。
 * **`MIGRATION.md`**：C → Sigil-C 迁移对照——23 条经典 C 陷阱逐条实测，标清「转译期拦住 / 运行期 / 仍归你自己」。
 * **`SYNTAX.md`**：印记符号速查表、前缀类型绑定规则、运算符静态语义与语言子集边界。
-* **`CHANGELOG.md`**：版本演进记录、31→162 项测试覆盖增量明细与平流内核验证参数说明。
-* **`sigilc.py` / `test_matrix.py`**：转译器源码与 162 项自动化验证脚本。
+* **`CHANGELOG.md`**：版本演进记录、31→169 项测试覆盖增量明细与平流内核验证参数说明。
+* **`sigilc.py` / `test_matrix.py`**：转译器源码与 169 项自动化验证脚本。
 * **`examples/vm.sigil`**：最小可移植虚拟机——枚举指令集、函数指针分派表、表达式栈、字节码汇编器与越界防护。
 * **`examples/regmap.sigil`**：MMIO 寄存器映射——`a@(packed)` 布局、位域叠在原始寄存器上、`offsetof` / `z?` 断言把 ABI 钉死在编译期。
 * **`examples/callbacks.sigil`**：事件回调表——全局函数指针数组 + `s@` 内部链接处理函数。

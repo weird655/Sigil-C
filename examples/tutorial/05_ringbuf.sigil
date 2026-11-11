@@ -1,0 +1,48 @@
+#include <stdio.h>
+
+/* 第 5 章：嵌入式基础——volatile 环形缓冲，模拟中断里写、主循环里读
+   注意：变量别叫 r——`r;` 是返回印记，`o! Ring r;` 会被拆错。 */
+
+#define CAP 8
+
+s{ Ring {
+    v@ u4 head;
+    v@ u4 tail;
+    v@ u4 dropped;
+    v@ u1[CAP] data;
+};
+
+b. ring_push(p* Ring rb, u1 v) {
+    o! u4 next m, (rb->head + 1) % CAP;
+    i? (next =? rb->tail) { rb->dropped m+ 1; r; false; }
+    rb->data[rb->head] m, v;
+    rb->head m, next;
+    r; true;
+}
+
+b. ring_pop(p* Ring rb, p* u1 out) {
+    i? (rb->tail =? rb->head) { r; false; }
+    p* out m, rb->data[rb->tail];
+    rb->tail m, (rb->tail + 1) % CAP;
+    r; true;
+}
+
+v. ring_init(p* Ring rb) {
+    rb->head m, 0;
+    rb->tail m, 0;
+    rb->dropped m, 0;
+}
+
+i4 main(v.) {
+    o! Ring rb;
+    ring_init(a& rb);
+
+    o! u4 i m, 1;
+    w~ (i <= 10) { (v.)ring_push(a& rb, (u1)i); i m+ 1; }
+
+    printf("popped: ");
+    o! u1 v m, 0;
+    w~ (ring_pop(a& rb, a& v)) { printf("%u ", (u4)v); }
+    printf("\ndropped: %u\n", rb.dropped);
+    r; 0;
+}

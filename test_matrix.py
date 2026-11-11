@@ -1505,12 +1505,73 @@ int main(void) {
 
     assert_ok("17. examples", "wire: big-endian frame parse with bitfield header overlay", test_example_wire)
 
+    # Layer 18: tutorial programs build and run
+    TUTORIAL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
+
+    def build_tutorial(name):
+        src = open(os.path.join(TUTORIAL, name + ".sigil"), encoding="utf-8").read()
+        with open(name + ".c", "w") as f:
+            f.write(compile_source(src, name + ".sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", name + ".c", "-o", name + "_bin"],
+            check=True
+        )
+        return subprocess.run(["./" + name + "_bin"], capture_output=True, text=True, check=True).stdout
+
+    def test_tut_hello():
+        out = build_tutorial("01_hello")
+        assert "area(4 x 6) = 24" in out, out
+
+    assert_ok("18. tutorial", "01 hello: variable, function, printf", test_tut_hello)
+
+    def test_tut_primes():
+        out = build_tutorial("02_primes")
+        assert "count=15" in out, out
+        assert "47 " in out, out
+
+    assert_ok("18. tutorial", "02 primes: while loop, bool array, macro constant", test_tut_primes)
+
+    def test_tut_hexdump():
+        out = build_tutorial("03_hexdump")
+        assert "|Sigil-C ......AB|" in out, out
+        assert "| ~..3DUf|" in out, out
+
+    assert_ok("18. tutorial", "03 hexdump: const pointer parameter, 16-byte rows", test_tut_hexdump)
+
+    def test_tut_calc():
+        out = build_tutorial("04_calc")
+        assert "6*7=42" in out, out
+        assert "1/0=0" in out, out
+
+    assert_ok("18. tutorial", "04 calc: enum-indexed function-pointer table", test_tut_calc)
+
+    def test_tut_ringbuf():
+        out = build_tutorial("05_ringbuf")
+        assert "popped: 1 2 3 4 5 6 7" in out, out
+        assert "dropped: 3" in out, out
+
+    assert_ok("18. tutorial", "05 ringbuf: volatile fields, full-ring drop counting", test_tut_ringbuf)
+
+    def test_tut_uart():
+        out = build_tutorial("06_uart")
+        assert "ctrl=0x2587 enable=1 mode=3 baud=1200" in out, out
+
+    assert_ok("18. tutorial", "06 uart: packed block, bitfield overlay, offsetof asserts", test_tut_uart)
+
+    def test_tut_library():
+        src = open(os.path.join(TUTORIAL, "07_library.sigil"), encoding="utf-8").read()
+        h = compile_header(src, "07_library.sigil", "lib.h")
+        assert "uint32_t scale(" in h, h
+        assert "clamp_u4" not in h, h
+
+    assert_ok("18. tutorial", "07 library: --emit-header keeps s@ symbols internal", test_tut_library)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 17-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 18-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

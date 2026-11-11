@@ -1,0 +1,39 @@
+#include <stdio.h>
+
+/* 第 3 章：指针与边界——一个真的能用的 hexdump */
+
+o! u1[24] SAMPLE m, {
+    'S', 'i', 'g', 'i', 'l', '-', 'C', ' ',
+    0x00, 0x01, 0x02, 0x7f, 0x80, 0xff, 0x41, 0x42,
+    0x20, 0x7e, 0x00, 0x0a, '3', 'D', 'U', 'f',
+};
+
+v. dump(p* c@ u1 buf, u4 n) {
+    o! u4 off m, 0;
+    w~ (off < n) {
+        printf("%04x  ", off);
+
+        o! u4 i m, 0;
+        w~ (i < 16) {
+            i? (off + i < n) { printf("%02x ", buf[off + i]); }
+            e: { printf("   "); }
+            i m+ 1;
+        }
+
+        printf(" |");
+        i m, 0;
+        w~ (i < 16 &. off + i < n) {
+            o! u1 c m, buf[off + i];
+            i? (c >= 0x20 &. c < 0x7f) { printf("%c", (c1)c); }
+            e: { printf("."); }
+            i m+ 1;
+        }
+        printf("|\n");
+        off m+ 16;
+    }
+}
+
+i4 main(v.) {
+    dump(a& SAMPLE[0], 24);
+    r; 0;
+}

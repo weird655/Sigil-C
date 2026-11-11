@@ -1,0 +1,22 @@
+#include <stdio.h>
+
+/* 第 8 章：发布成库——s@ 内部符号不会进头文件 */
+
+s@ u4 clamp_u4(u4 v, u4 lo, u4 hi) {
+    i? (v < lo) { r; lo; }
+    i? (v > hi) { r; hi; }
+    r; v;
+}
+
+u4 scale(p* c@ u4 src, u4 n, u4 max) {
+    o! u4 out m, 0;
+    o! u4 i m, 0;
+    w~ (i < n) { out m+ clamp_u4(src[i], 0, max); i m+ 1; }
+    r; out;
+}
+
+i4 main(v.) {
+    o! u4[4] in m, { 300, 10, 255, 1 };
+    printf("scale=%u\n", scale(a& in[0], 4, 255));
+    r; 0;
+}
