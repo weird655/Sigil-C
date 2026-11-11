@@ -434,6 +434,105 @@ i4 main(v.) {
 
     assert_ok("7. v3.1", "Generated .h consumed by an independent .c file: compile, link, run", test_header_end_to_end)
 
+    def test_differential_vs_c():
+        """同一算法用 Sigil-C 与手写 C 各实现一遍，逐位比对结果。
+
+        这是转译器最该有的测试：前六层验的是"转译器自己的行为"，
+        这一层验的是"生成的代码与手写 C 语义等价"。
+        """
+        sigil = """
+        s{ Pair { i4 a; i4 b; };
+
+        i4 kernel_sum(p* c@ u4 src, u4 n) {
+            o! u4 acc m, 0;
+            f~(o! u4 i m, 0; i < n; i m+ 1) {
+                acc m+ src[i];
+            }
+            r; (i4)acc;
+        }
+
+        i4 kernel_mix(p* c@ u4 src, p* u4 dst, u4 n) {
+            f~(o! u4 i m, 0; i < n; i m+ 1) {
+                dst[i] m, (src[i] >> 2) + (src[i] >> 4);
+            }
+            r; 0;
+        }
+
+        i4 pair_dot(p* c@ Pair p, u4 n) {
+            o! i4 acc m, 0;
+            f~(o! u4 i m, 0; i < n; i m+ 1) {
+                acc m+ p[i].a * p[i].b;
+            }
+            r; acc;
+        }
+        """
+        with open("diff.sigil", "w") as f:
+            f.write(sigil)
+        with open("diff.c", "w") as f:
+            f.write(compile_source(sigil, "diff.sigil"))
+
+        ref = r"""
+#include <stdio.h>
+#include <string.h>
+#include "diff.c"
+
+static int32_t ref_sum(const uint32_t *src, uint32_t n) {
+    uint32_t acc = 0;
+    for (uint32_t i = 0; i < n; i++) acc += src[i];
+    return (int32_t)acc;
+}
+
+static int32_t ref_mix(const uint32_t *src, uint32_t *dst, uint32_t n) {
+    for (uint32_t i = 0; i < n; i++) dst[i] = (src[i] >> 2) + (src[i] >> 4);
+    return 0;
+}
+
+static int32_t ref_dot(const Pair *p, uint32_t n) {
+    int32_t acc = 0;
+    for (uint32_t i = 0; i < n; i++) acc += p[i].a * p[i].b;
+    return acc;
+}
+
+int main(void) {
+    enum { N = 257 };
+    uint32_t src[N], got[N], want[N];
+    Pair pairs[N];
+
+    /* 确定性伪随机：LCG，避免平台相关的 rand() */
+    uint32_t s = 12345u;
+    for (int i = 0; i < N; i++) {
+        s = s * 1103515245u + 12345u;
+        src[i] = s;
+        pairs[i].a = (int32_t)(s >> 3);
+        pairs[i].b = (int32_t)(s >> 11);
+    }
+
+    int32_t a1 = kernel_sum(src, N),  b1 = ref_sum(src, N);
+    if (a1 != b1) { printf("sum mismatch: %d vs %d\n", (int)a1, (int)b1); return 1; }
+
+    memset(got, 0, sizeof got); memset(want, 0, sizeof want);
+    kernel_mix(src, got, N);
+    ref_mix(src, want, N);
+    if (memcmp(got, want, sizeof got) != 0) { printf("mix mismatch\n"); return 2; }
+
+    int32_t a3 = pair_dot(pairs, N), b3 = ref_dot(pairs, N);
+    if (a3 != b3) { printf("dot mismatch: %d vs %d\n", (int)a3, (int)b3); return 3; }
+
+    printf("diff ok: sum=%d mix=%u dot=%d\n", (int)a1, (unsigned)got[0], (int)a3);
+    return 0;
+}
+"""
+        with open("diff_ref.c", "w") as f:
+            f.write(ref)
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-O2", "diff_ref.c", "-o", "diff_bin"],
+            check=True
+        )
+        out = subprocess.run(["./diff_bin"], capture_output=True, text=True, check=True).stdout.strip()
+        assert out.startswith("diff ok:"), out
+
+    assert_ok("7. v3.1", "Differential: Sigil-C output vs hand-written C, 257 elements, bit-identical", test_differential_vs_c)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:

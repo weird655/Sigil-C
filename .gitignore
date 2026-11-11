@@ -21,3 +21,11 @@ consumer.c
 # Python
 __pycache__/
 *.pyc
+diff.sigil
+diff.c
+diff_ref.c
+diff_bin
+diff_bin.exe
+ubsan_runner.c
+ubsan_bin
+ubsan_bin.exe
