@@ -1175,14 +1175,25 @@ class Parser:
                 outcomes.add("fallthrough")
             return outcomes
         if isinstance(stmt, (WhileStmt, ForStmt)):
-            outcomes = {"fallthrough"}
-            if "return" in self._statement_flow(stmt.body):
+            body_outcomes = self._statement_flow(stmt.body)
+            cond = stmt.cond if isinstance(stmt, WhileStmt) else stmt.cond_expr
+            always_true = cond is None
+            if cond is not None:
+                try:
+                    cond_value = self._eval_const_int_expr(cond)
+                except SemanticError:
+                    cond_value = None
+                always_true = cond_value is not None and cond_value != 0
+            outcomes: Set[str] = set()
+            if "return" in body_outcomes:
                 outcomes.add("return")
+            if not always_true or "break" in body_outcomes:
+                outcomes.add("fallthrough")
             return outcomes
         return {"fallthrough"}
 
-    def _guarantees_return(self, stmt: StmtNode) -> bool:
-        return self._statement_flow(stmt) == {"return"}
+    def _can_fall_through(self, stmt: StmtNode) -> bool:
+        return "fallthrough" in self._statement_flow(stmt)
 
     def _is_static_arithmetic_const_expr(self, expr: ExprNode) -> bool:
         if self._eval_const_int_expr(expr) is not None:
@@ -1515,7 +1526,7 @@ class Parser:
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
             self.current_func_ret = prev_ret
-            if not is_void_type(decl_type) and name_tok.value != 'main' and not self._guarantees_return(body):
+            if not is_void_type(decl_type) and name_tok.value != 'main' and self._can_fall_through(body):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
             return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body)
 

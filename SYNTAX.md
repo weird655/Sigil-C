@@ -15,7 +15,7 @@
 | `s?` | `KW_SWITCH` | `switch (cond) { ... }` | **s**witch + `?`（多路派发），`cond` 静态类型必须为整型或枚举（拒绝浮点与指针） |
 | `k:` | `KW_CASE` | `case CONST_EXPR:` | **k**ase + `:`（分支标签），标签必须折叠为编译期整数常量（支持十进制、十六进制 `0xFE`、八进制 `077` 及转义字符如 `'\n'`、`'\101'`）且禁止重复 |
 | `d:` | `KW_DEFAULT` | `default:` | **d**efault + `:`（默认分支），同一 `s?` 内最多允许出现一次 `d:` |
-| `r;` | `KW_RETURN` | `return expr;` / `return;` | **r**eturn + `;`（函数返回），静态检查返回值类型与函数签名兼容；非 `void` 函数（除 `main`）要求所有控制流路径都返回，分析顺序执行、`switch` 穿透和 `break` 跳出 |
+| `r;` | `KW_RETURN` | `return expr;` / `return;` | **r**eturn + `;`（函数返回），静态检查返回值类型与函数签名兼容；非 `void` 函数（除 `main`）要求每条能到达函数末尾的路径都已返回，并将可证明为真且没有 `break` 出口的整数常量循环视为不落到函数末尾；分析顺序执行和 `switch` 穿透 |
 | `b!` | `KW_BREAK` | `break;` | **b**reak + `!`（跳出中断），仅允许出现在 `w~`、`f~` 或 `s?` 内部 |
 | `c^` | `KW_CONTINUE` | `continue;` | **c**ontinue + `^`（继续下一轮），仅允许出现在 `w~` 或 `f~` 循环内部（仅在 `s?` 内而无外层循环时报错） |
 | `s{` | `KW_STRUCT` | `typedef struct Name Name; struct Name { ... };` | **s**truct + `{`（结构体声明/定义），支持 `s{ Forward;` 不完整前置声明与 `a!N` 对齐修饰 |
