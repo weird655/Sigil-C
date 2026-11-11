@@ -146,11 +146,13 @@ class Lexer:
                 buf.append(self._advance())
             if self._peek() == '.':
                 is_float = True
+                digits_before_dot = len(buf)
                 buf.append(self._advance())
-                if not self._peek().isdigit():
-                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed float literal after '.'")
+                digits_after_dot_start = self.pos
                 while self.pos < self.n and self._peek().isdigit():
                     buf.append(self._advance())
+                if digits_before_dot == 0 and self.pos == digits_after_dot_start:
+                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed float literal after '.'")
             if self._peek() in ('e', 'E'):
                 is_float = True
                 buf.append(self._advance())
@@ -306,7 +308,7 @@ class Lexer:
                     tokens.append(Token('IDENT', word, s_line, s_col, s_byte))
                 continue
 
-            if ch.isdigit():
+            if ch.isdigit() or (ch == '.' and nxt.isdigit()):
                 tokens.append(self._scan_number(s_line, s_col, s_byte))
                 continue
 
