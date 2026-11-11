@@ -139,13 +139,13 @@ i4 advect(p* SG g) {
 
 ### 硬件寄存器与 `volatile`
 
-`o! p* v@ u4 timer_reg` 声明一个指向 `volatile u4` 的对象，生成 C99 声明为 `volatile uint32_t *timer_reg`。通过 `*timer_reg` 读写时，后端会保留 `volatile` 对象访问语义。`v@` 限定的是指向的寄存器；若要限定指针变量自身，写作 `o! v@ p* u4 timer_reg`。将整数硬件地址转换为指针由目标平台定义，`volatile` 也不提供原子性或内存屏障。
+`o! p* v@ u4 timer_reg` 声明一个指向 `volatile u4` 的对象，生成 C99 声明为 `volatile uint32_t *timer_reg`。通过 `p* timer_reg` 读写时，后端会保留 `volatile` 对象访问语义。`v@` 限定的是指向的寄存器；若要限定指针变量自身，写作 `o! v@ p* u4 timer_reg`。将整数硬件地址转换为指针由目标平台定义，`volatile` 也不提供原子性或内存屏障。
 
 ```sigil
 u4 read_timer(v.) {
     /* 地址和转换方式须按目标平台/ABI 确认 */
     o! p* v@ u4 timer_reg m, (p* v@ u4)0x40000000;
-    o! u4 timer_value m, *timer_reg;
+    o! u4 timer_value m, p* timer_reg;
     r; timer_value;
 }
 ```
