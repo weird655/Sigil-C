@@ -948,12 +948,96 @@ int main(void) {
 
     assert_ok("10. v3.2 full", "Switch falls through unless b!/r;/g! ends the case (C semantics, marked explicitly)", test_switch_fallthrough)
 
+    # Layer 11: v3.3 声明补全（restrict / 匿名位域填充 / 指定初始化）
+    def test_restrict_qualifier():
+        sigil = """
+        u4 sum(r@ p* u4 src, u4 n) {
+            o! u4 acc m, 0;
+            o! u4 i m, 0;
+            w~ (i < n) { acc m+ src[i]; i m+ 1; }
+            r; acc;
+        }
+        i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)sum(a, 3) - 6; }
+        """
+        with open("restr.c", "w") as f:
+            f.write(compile_source(sigil, "restr.sigil"))
+        c_src = open("restr.c").read()
+        assert "uint32_t * restrict src" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "restr.c", "-o", "restr_bin"],
+            check=True
+        )
+        assert subprocess.run(["./restr_bin"], check=False).returncode == 0
+
+    assert_ok("11. v3.3 decl", "r@ emits a C99 restrict-qualified pointer", test_restrict_qualifier)
+
+    assert_raises("11. v3.3 decl", "Reject r@ on a non-pointer type",
+                  SemanticError, "i4 main(v.) { o! r@ u4 x m, 1; r; 0; }")
+
+    def test_padding_bitfield():
+        sigil = """
+        s{ Flags { u1 a w! 3; u1 w! 0; u1 b w! 3; };
+        i4 main(v.) {
+            o! Flags f;
+            f.a m, 5;
+            f.b m, 6;
+            r; (i4)(z? Flags) + (i4)f.a + (i4)f.b;
+        }
+        """
+        with open("pad.c", "w") as f:
+            f.write(compile_source(sigil, "pad.sigil"))
+        c_src = open("pad.c").read()
+        assert "uint8_t : 0;" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "pad.c", "-o", "pad_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./pad_bin"], check=False).returncode
+        assert rc == 13, rc   # sizeof(Flags) == 2 due to the zero-width padding, +5 +6
+
+    assert_ok("11. v3.3 decl", "Unnamed zero-width w! padding forces the next field to a new unit", test_padding_bitfield)
+
+    assert_raises("11. v3.3 decl", "Reject an unnamed bit-field with a non-zero width",
+                  SemanticError, "s{ P { u4 w! 3; }; i4 main(v.) { r; 0; }")
+
+    def test_designated_init():
+        sigil = """
+        s{ Vec2 { f8 x; f8 y; };
+        s{ Line { Vec2 a; Vec2 b; };
+        i4 main(v.) {
+            o! Vec2 v m, { .y m, 4.0, .x m, 3.0 };
+            o! Line ln m, { .b m, { .y m, 6.0, .x m, 5.0 }, .a m, { .x m, 1.0, .y m, 2.0 } };
+            r; (i4)(v.x + v.y) + (i4)(ln.a.x + ln.b.y);
+        }
+        """
+        with open("desig.c", "w") as f:
+            f.write(compile_source(sigil, "desig.sigil"))
+        c_src = open("desig.c").read()
+        assert ".y = 4.0, .x = 3.0" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "desig.c", "-o", "desig_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./desig_bin"], check=False).returncode
+        assert rc == 14, rc   # v: 3+4, ln.a.x + ln.b.y: 1+6
+
+    assert_ok("11. v3.3 decl", "{ .y m, 4.0 } designated initializers, out of order and nested", test_designated_init)
+
+    assert_raises("11. v3.3 decl", "Reject a designated initializer for an unknown field",
+                  SemanticError, "s{ P { u4 a; }; i4 main(v.) { o! P p m, { .z m, 1 }; r; 0; }")
+    assert_raises("11. v3.3 decl", "Reject mixing designated and positional initializers",
+                  SemanticError, "s{ P { u4 a; u4 b; }; i4 main(v.) { o! P p m, { .a m, 1, 2 }; r; 0; }")
+    assert_raises("11. v3.3 decl", "Reject duplicate designated initializers for one field",
+                  SemanticError, "s{ P { u4 a; }; i4 main(v.) { o! P p m, { .a m, 1, .a m, 2 }; r; 0; }")
+    assert_raises("11. v3.3 decl", "Reject designated initializers on arrays",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { .a m, 1 }; r; 0; }")
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 10-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 11-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

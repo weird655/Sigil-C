@@ -32,6 +32,7 @@ SIGIL_KEYWORDS = {
     'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',   'a@': 'KW_ATTR',
     'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',
     'd~': 'KW_DO',       'g!': 'KW_GOTO',     'l!': 'KW_LABEL',
+    'r@': 'KW_RESTRICT',
 }
 
 SIGIL_OPERATORS = {
@@ -438,6 +439,7 @@ class PointerType(TypeNode):
     pointee: TypeNode
     is_const: bool = False
     is_volatile: bool = False
+    is_restrict: bool = False
 
 @dataclass
 class ArrayType(TypeNode):
@@ -474,7 +476,7 @@ def strip_top_qualifiers(t: TypeNode) -> TypeNode:
     if isinstance(t, BaseType):
         return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=False, is_volatile=False)
     if isinstance(t, PointerType):
-        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=False, is_volatile=False)
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=False, is_volatile=False, is_restrict=False)
     if isinstance(t, FunctionPointerType):
         return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=False, is_volatile=False, is_variadic=t.is_variadic)
     if isinstance(t, ArrayType):
@@ -485,7 +487,7 @@ def with_const(t: TypeNode) -> TypeNode:
     if isinstance(t, BaseType):
         return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=True, is_volatile=t.is_volatile)
     if isinstance(t, PointerType):
-        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=True, is_volatile=t.is_volatile)
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=True, is_volatile=t.is_volatile, is_restrict=t.is_restrict)
     if isinstance(t, FunctionPointerType):
         return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=True, is_volatile=t.is_volatile, is_variadic=t.is_variadic)
     if isinstance(t, ArrayType):
@@ -496,7 +498,7 @@ def with_volatile(t: TypeNode) -> TypeNode:
     if isinstance(t, BaseType):
         return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=t.is_const, is_volatile=True)
     if isinstance(t, PointerType):
-        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=t.is_const, is_volatile=True)
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=t.is_const, is_volatile=True, is_restrict=t.is_restrict)
     if isinstance(t, FunctionPointerType):
         return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=t.is_const, is_volatile=True, is_variadic=t.is_variadic)
     if isinstance(t, ArrayType):
@@ -564,7 +566,7 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
             prefix = " ".join(qualifiers) + (" " if qualifiers else "")
             return f"{prefix}{curr.c_name}" + (f" {inner}" if inner else "")
         elif isinstance(curr, PointerType):
-            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
+            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile"), (curr.is_restrict, "restrict")) if enabled)
             ptr_str = f"* {qualifiers} {inner}" if qualifiers and inner else (f"* {qualifiers}" if qualifiers else f"*{inner}")
             if isinstance(curr.pointee, (ArrayType, FunctionPointerType)):
                 inner = f"({ptr_str.strip()})"
@@ -772,11 +774,19 @@ class AggregateInit(ExprNode):
     """`{ e1, e2, ... }` 位置式聚合初始化；只允许出现在声明初始化位置。"""
     elements: List[ExprNode]
 
+@dataclass
+class DesignatedInit(ExprNode):
+    """`{ .field m, value }` 指定式初始化元素（C99 的 `.field = value`）。"""
+    field: str
+    value: 'ExprNode'
+
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
         return e.code
     if isinstance(e, AggregateInit):
         return "{ " + ", ".join(emit_expr(x) for x in e.elements) + " }"
+    if isinstance(e, DesignatedInit):
+        return f".{e.field} = {emit_expr(e.value)}"
     if isinstance(e, IdentExpr):
         return e.name
     if isinstance(e, CastExpr):
@@ -1112,7 +1122,7 @@ class Parser:
         return None
 
     def _infer_expr_type(self, expr: ExprNode) -> TypeNode:
-        if isinstance(expr, AggregateInit):
+        if isinstance(expr, (AggregateInit, DesignatedInit)):
             raise SemanticError(
                 f"{self.filename}:{expr.line}:{expr.col}: Aggregate initializer '{{ ... }}' is only allowed as a declaration initializer")
         if isinstance(expr, LiteralExpr):
@@ -1549,6 +1559,8 @@ class Parser:
             return True
         if isinstance(expr, AggregateInit):
             return all(self._is_static_const_init(e) for e in expr.elements)
+        if isinstance(expr, DesignatedInit):
+            return self._is_static_const_init(expr.value)
         if isinstance(expr, CastExpr):
             return self._is_static_const_init(expr.operand)
         if isinstance(expr, UnaryExpr) and expr.op in ('-', '+'):
@@ -1638,17 +1650,20 @@ class Parser:
         tok = self._cur()
         is_const = False
         is_volatile = False
-        while self._cur().kind in ('KW_CONST', 'KW_VOLATILE'):
+        is_restrict = False
+        while self._cur().kind in ('KW_CONST', 'KW_VOLATILE', 'KW_RESTRICT'):
             qualifier_tok = self._eat()
             if qualifier_tok.kind == 'KW_CONST':
                 is_const = True
-            else:
+            elif qualifier_tok.kind == 'KW_VOLATILE':
                 is_volatile = True
+            else:
+                is_restrict = True
         tok = self._cur()
 
         if tok.kind == 'KW_PTR':
             ptr_tok = self._eat('KW_PTR')
-            base_node: TypeNode = PointerType(line=ptr_tok.line, col=ptr_tok.col, pointee=self.parse_type(), is_const=is_const, is_volatile=is_volatile)
+            base_node: TypeNode = PointerType(line=ptr_tok.line, col=ptr_tok.col, pointee=self.parse_type(), is_const=is_const, is_volatile=is_volatile, is_restrict=is_restrict)
         elif tok.kind == 'KW_FNPTR':
             fn_tok = self._eat('KW_FNPTR')
             self._eat('LPAREN')
@@ -1704,6 +1719,15 @@ class Parser:
                 base_node = with_volatile(base_node)
         else:
             raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Expected type specifier, got '{tok.value}'")
+
+        if is_restrict:
+            if isinstance(base_node, PointerType):
+                base_node = PointerType(line=base_node.line, col=base_node.col, pointee=base_node.pointee,
+                                        is_const=base_node.is_const, is_volatile=base_node.is_volatile,
+                                        is_restrict=True)
+            else:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: 'r@' (restrict) can only qualify a pointer type")
 
         dims: List[Tuple[ExprNode, int]] = []
         while self._cur().kind == 'LBRACK':
@@ -1778,6 +1802,12 @@ class Parser:
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'")
         return top_nodes
 
+    def _check_bitfield_base(self, tok: Token, ft: TypeNode):
+        if not isinstance(ft, BaseType) or ft.c_name not in BITFIELD_WIDTH:
+            raise SemanticError(
+                f"{self.filename}:{tok.line}:{tok.col}: 'w!' bit-field requires an integer base type, "
+                f"got '{format_c_declarator(ft)}'")
+
     def parse_struct_or_union(self, attrs: Optional[List[Attribute]] = None) -> StructDefNode:
         attrs = attrs or []
         kw_tok = self._eat()
@@ -1823,16 +1853,30 @@ class Parser:
             if self._cur().kind == 'KW_ATTR':
                 field_attrs = self.parse_attrs()
             ft = self.parse_type()
-            fname_tok = self._eat('IDENT')
             bit_width = None
+            if self._cur().kind == 'KW_BITFIELD':
+                # 匿名零宽位域：`Type w! 0;` -> `Type : 0;`，强制下一个字段对齐
+                bf_tok = self._eat('KW_BITFIELD')
+                w_tok = self._eat('INT_NUM')
+                width = self._attr_int_value(w_tok, w_tok.value)
+                self._check_bitfield_base(bf_tok, ft)
+                if width != 0:
+                    raise SemanticError(
+                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: An unnamed bit-field must be zero-width padding "
+                        f"('{format_c_declarator(ft)} w! 0;'); give it a name for a real bit-field")
+                if field_attrs:
+                    raise SemanticError(
+                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: Padding bit-field cannot carry 'a@' attributes")
+                self._eat('SEMI')
+                fields.append(VarDeclStmt(line=bf_tok.line, col=bf_tok.col, var_type=ft,
+                                          name='', attrs=[], bit_width=0))
+                continue
+            fname_tok = self._eat('IDENT')
             if self._cur().kind == 'KW_BITFIELD':
                 bf_tok = self._eat('KW_BITFIELD')
                 w_tok = self._eat('INT_NUM')
                 width = self._attr_int_value(w_tok, w_tok.value)
-                if not isinstance(ft, BaseType) or ft.c_name not in BITFIELD_WIDTH:
-                    raise SemanticError(
-                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: 'w!' bit-field requires an integer base type, "
-                        f"got '{format_c_declarator(ft)}'")
+                self._check_bitfield_base(bf_tok, ft)
                 limit = BITFIELD_WIDTH[ft.c_name]
                 if width < 1 or width > limit:
                     raise SemanticError(
@@ -1928,6 +1972,17 @@ class Parser:
         while True:
             if self._cur().kind == 'LBRACE':
                 elements.append(self.parse_brace_init())
+            elif (self._cur().kind == 'DOT' and self.tokens[self.pos + 1].kind == 'IDENT'
+                  and self.tokens[self.pos + 2].kind == 'OP_ASSIGN'):
+                dot_tok = self._eat('DOT')
+                fld_tok = self._eat('IDENT')
+                self._eat('OP_ASSIGN')
+                if self._cur().kind == 'LBRACE':
+                    val = self.parse_brace_init()
+                else:
+                    val = self.parse_pure_expr()
+                elements.append(DesignatedInit(line=dot_tok.line, col=dot_tok.col,
+                                               field=fld_tok.value, value=val))
             else:
                 elements.append(self.parse_pure_expr())
             if self._cur().kind == 'COMMA':
@@ -1941,6 +1996,9 @@ class Parser:
 
     def _check_brace_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
         if isinstance(target, ArrayType):
+            if any(isinstance(e, DesignatedInit) for e in init.elements):
+                raise SemanticError(
+                    f"{self.filename}:{init.line}:{init.col}: Designated initializers are only supported for struct types")
             if len(init.elements) > target.size_val:
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: Too many initializers for '{name_tok.value}': "
@@ -1953,7 +2011,24 @@ class Parser:
             if target.c_name not in self.struct_fields:
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: '{name_tok.value}' has incomplete type and cannot be initialized")
-            fields = list(self.struct_fields[target.c_name].items())
+            fmap = self.struct_fields[target.c_name]
+            if any(isinstance(e, DesignatedInit) for e in init.elements):
+                seen: Set[str] = set()
+                for elem in init.elements:
+                    if not isinstance(elem, DesignatedInit):
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: Cannot mix designated '.field m,' and positional "
+                            f"initializers in one list")
+                    if elem.field not in fmap:
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: '{target.c_name}' has no member named '{elem.field}'")
+                    if elem.field in seen:
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: Duplicate designated initializer for '{elem.field}'")
+                    seen.add(elem.field)
+                    self._check_init_element(fmap[elem.field], elem.value, name_tok)
+                return
+            fields = list(fmap.items())
             if kind == 'union':
                 if len(init.elements) != 1:
                     raise SemanticError(
