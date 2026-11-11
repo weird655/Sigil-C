@@ -1184,8 +1184,36 @@ class Parser:
     def _guarantees_return(self, stmt: StmtNode) -> bool:
         return self._statement_flow(stmt) == {"return"}
 
+    def _is_static_arithmetic_const_expr(self, expr: ExprNode) -> bool:
+        if self._eval_const_int_expr(expr) is not None:
+            return True
+        if isinstance(expr, LiteralExpr):
+            return expr.lit_kind in ('INT_NUM', 'FLOAT_NUM', 'CHAR')
+        if isinstance(expr, IdentExpr):
+            return expr.name in self.enum_constants
+        if isinstance(expr, CastExpr):
+            return self._is_numeric_type(expr.target_type) and self._is_static_arithmetic_const_expr(expr.operand)
+        if isinstance(expr, UnaryExpr) and expr.op in ('+', '-', '!', '~'):
+            return self._is_static_arithmetic_const_expr(expr.operand) and self._is_numeric_type(self._infer_expr_type(expr))
+        if isinstance(expr, BinaryExpr):
+            return (
+                self._is_static_arithmetic_const_expr(expr.left)
+                and self._is_static_arithmetic_const_expr(expr.right)
+                and self._is_numeric_type(self._infer_expr_type(expr))
+            )
+        if isinstance(expr, TernaryExpr):
+            return (
+                self._is_static_arithmetic_const_expr(expr.cond)
+                and self._is_static_arithmetic_const_expr(expr.then_expr)
+                and self._is_static_arithmetic_const_expr(expr.else_expr)
+                and self._is_numeric_type(self._infer_expr_type(expr))
+            )
+        return False
+
     def _is_static_const_init(self, expr: ExprNode) -> bool:
         if self._eval_const_int_expr(expr) is not None:
+            return True
+        if self._is_static_arithmetic_const_expr(expr):
             return True
         if isinstance(expr, LiteralExpr) and expr.lit_kind in ('FLOAT_NUM', 'STRING', 'CHAR'):
             return True
