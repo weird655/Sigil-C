@@ -1032,12 +1032,123 @@ int main(void) {
     assert_raises("11. v3.3 decl", "Reject designated initializers on arrays",
                   SemanticError, "i4 main(v.) { o! u4[2] a m, { .a m, 1 }; r; 0; }")
 
+    # Layer 12: v3.4 表达式补全（复合字面量 / 数组指定下标 / va_list / g? 泛型）
+    def test_compound_literal():
+        sigil = """
+        s{ Vec2 { f8 x; f8 y; };
+        i4 main(v.) {
+            o! f8 fy m, (Vec2){ 3.0, 4.0 }.y;
+            o! f8 fx m, (Vec2){ .x m, 5.0, .y m, 1.0 }.x;
+            o! u4 n m, (u4){ 7 };
+            r; (i4)fy + (i4)fx + (i4)n;
+        }
+        """
+        with open("clit.c", "w") as f:
+            f.write(compile_source(sigil, "clit.sigil"))
+        c_src = open("clit.c").read()
+        assert "((Vec2){ 3.0, 4.0 }).y" in c_src, c_src
+        assert "((uint32_t){ 7 })" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "clit.c", "-o", "clit_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./clit_bin"], check=False).returncode
+        assert rc == 16, rc   # 4 + 5 + 7
+
+    assert_ok("12. v3.4 expr", "Compound literals work as postfix bases and with designators", test_compound_literal)
+
+    assert_raises("12. v3.4 expr", "Reject a scalar compound literal with two values",
+                  SemanticError, "i4 main(v.) { o! u4 n m, (u4){ 1, 2 }; r; 0; }")
+
+    def test_array_designated_index():
+        sigil = """
+        i4 main(v.) {
+            o! u4[4] a m, { [2] m, 7, [0] m, 5 };
+            r; (i4)(a[0] + a[2] + a[3]);
+        }
+        """
+        with open("adesig.c", "w") as f:
+            f.write(compile_source(sigil, "adesig.sigil"))
+        c_src = open("adesig.c").read()
+        assert "{ [2] = 7, [0] = 5 }" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "adesig.c", "-o", "adesig_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./adesig_bin"], check=False).returncode
+        assert rc == 12, rc   # 5 + 7 + 0
+
+    assert_ok("12. v3.4 expr", "[index] m, value array designators with zero-fill", test_array_designated_index)
+
+    assert_raises("12. v3.4 expr", "Reject an array designator past the array bound",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { [5] m, 1 }; r; 0; }")
+    assert_raises("12. v3.4 expr", "Reject duplicate array designators",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { [0] m, 1, [0] m, 2 }; r; 0; }")
+    assert_raises("12. v3.4 expr", "Reject mixing array designators and positional values",
+                  SemanticError, "i4 main(v.) { o! u4[2] a m, { [0] m, 1, 2 }; r; 0; }")
+
+    def test_va_list_reading():
+        sigil = """
+        i4 sum_all(u4 count, ...) {
+            o! va_list ap;
+            va_start(ap, count);
+            o! i4 acc m, 0;
+            o! u4 i m, 0;
+            w~ (i < count) { acc m+ va_arg(ap, i4); i m+ 1; }
+            va_end(ap);
+            r; acc;
+        }
+        i4 main(v.) { r; sum_all(3, 1, 2, 3) - 6; }
+        """
+        with open("va2.c", "w") as f:
+            f.write(compile_source(sigil, "va2.sigil"))
+        c_src = open("va2.c").read()
+        assert "va_start(ap, count);" in c_src, c_src
+        assert "va_arg(ap, int32_t)" in c_src, c_src
+        assert "va_end(ap);" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "va2.c", "-o", "va2_bin"],
+            check=True
+        )
+        assert subprocess.run(["./va2_bin"], check=False).returncode == 0
+
+    assert_ok("12. v3.4 expr", "va_list + va_start/va_arg/va_end read real variadic arguments", test_va_list_reading)
+
+    assert_raises("12. v3.4 expr", "Reject va_start outside a variadic function",
+                  SemanticError, "i4 f(v.) { o! va_list ap; va_start(ap, x); r; 0; }")
+    assert_raises("12. v3.4 expr", "Reject va_arg of a void type",
+                  SemanticError, "i4 sum_all(u4 c, ...) { o! va_list ap; va_start(ap, c); o! i4 x m, va_arg(ap, v.); r; x; }")
+
+    def test_generic_static_resolution():
+        sigil = """
+        i4 pick(i4 n) { r; g? n { i4: n + 10; f8: 20; d: 30 }; }
+        i4 fallback(v.) { r; g? 1.5 { i4: 1; d: 2 }; }
+        i4 main(v.) { r; pick(1) + fallback() - 13; }
+        """
+        with open("gen.c", "w") as f:
+            f.write(compile_source(sigil, "gen.sigil"))
+        c_src = open("gen.c").read()
+        assert "_Generic" not in c_src, c_src          # 转译期已解析掉
+        assert "return (n + 10);" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "gen.c", "-o", "gen_bin"],
+            check=True
+        )
+        assert subprocess.run(["./gen_bin"], check=False).returncode == 0   # 11 + 2 - 13
+
+    assert_ok("12. v3.4 expr", "g? resolves to one branch at transpile time (C99 output, no _Generic)", test_generic_static_resolution)
+
+    assert_raises("12. v3.4 expr", "Reject g? with no matching association and no default",
+                  SemanticError, "i4 f(f8 x) { r; g? x { i4: 1 }; }")
+    assert_raises("12. v3.4 expr", "Reject duplicate g? associations for one type",
+                  SemanticError, "i4 f(i4 x) { r; g? x { i4: 1; i4: 2; }; }")
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 11-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 12-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

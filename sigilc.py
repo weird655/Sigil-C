@@ -32,7 +32,7 @@ SIGIL_KEYWORDS = {
     'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',   'a@': 'KW_ATTR',
     'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',
     'd~': 'KW_DO',       'g!': 'KW_GOTO',     'l!': 'KW_LABEL',
-    'r@': 'KW_RESTRICT',
+    'r@': 'KW_RESTRICT',  'g?': 'KW_GENERIC',
 }
 
 SIGIL_OPERATORS = {
@@ -55,6 +55,7 @@ BASIC_TYPES = {
     'intptr_t': 'intptr_t', 'uintptr_t': 'uintptr_t',
     'int8_t': 'int8_t', 'int16_t': 'int16_t', 'int32_t': 'int32_t', 'int64_t': 'int64_t',
     'uint8_t': 'uint8_t', 'uint16_t': 'uint16_t', 'uint32_t': 'uint32_t', 'uint64_t': 'uint64_t',
+    'va_list': 'va_list',
 }
 
 INT_C_TYPES = {
@@ -740,6 +741,13 @@ class LabelStmt(StmtNode):
     name: str
 
 @dataclass
+class VaStmt(StmtNode):
+    """`va_start(ap, last);` / `va_end(ap);`"""
+    kind: str
+    ap: ExprNode
+    last_name: Optional[str] = None
+
+@dataclass
 class StructDefNode(StmtNode):
     kind: str
     name: str
@@ -780,6 +788,25 @@ class DesignatedInit(ExprNode):
     field: str
     value: 'ExprNode'
 
+@dataclass
+class DesignatedIndex(ExprNode):
+    """`{ [2] m, value }` 数组下标指定初始化元素（C99 的 `[2] = value`）。"""
+    index_expr: ExprNode
+    index_val: int
+    value: 'ExprNode'
+
+@dataclass
+class CompoundLiteral(ExprNode):
+    """`(Type){ ... }` 复合字面量。"""
+    target_type: TypeNode
+    init: 'AggregateInit'
+
+@dataclass
+class VaArgExpr(ExprNode):
+    """`v^ ap, T` 读取下一个可变参，结果类型为 T。"""
+    ap: ExprNode
+    target_type: TypeNode
+
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
         return e.code
@@ -787,6 +814,12 @@ def emit_expr(e: ExprNode) -> str:
         return "{ " + ", ".join(emit_expr(x) for x in e.elements) + " }"
     if isinstance(e, DesignatedInit):
         return f".{e.field} = {emit_expr(e.value)}"
+    if isinstance(e, DesignatedIndex):
+        return f"[{emit_expr(e.index_expr)}] = {emit_expr(e.value)}"
+    if isinstance(e, CompoundLiteral):
+        return f"(({format_c_declarator(e.target_type)}){emit_expr(e.init)})"
+    if isinstance(e, VaArgExpr):
+        return f"va_arg({emit_expr(e.ap)}, {format_c_declarator(e.target_type)})"
     if isinstance(e, IdentExpr):
         return e.name
     if isinstance(e, CastExpr):
@@ -845,6 +878,7 @@ class Parser:
         self.func_labels: Set[str] = set()
         self.func_gotos: List[Tuple[str, Token]] = []
         self.current_func_ret: Optional[TypeNode] = None
+        self.current_func_variadic: bool = False
         self.loop_depth: int = 0
         self.switch_depth: int = 0
 
@@ -1122,9 +1156,13 @@ class Parser:
         return None
 
     def _infer_expr_type(self, expr: ExprNode) -> TypeNode:
-        if isinstance(expr, (AggregateInit, DesignatedInit)):
+        if isinstance(expr, CompoundLiteral):
+            return expr.target_type
+        if isinstance(expr, VaArgExpr):
+            return expr.target_type
+        if isinstance(expr, (AggregateInit, DesignatedInit, DesignatedIndex)):
             raise SemanticError(
-                f"{self.filename}:{expr.line}:{expr.col}: Aggregate initializer '{{ ... }}' is only allowed as a declaration initializer")
+                f"{self.filename}:{expr.line}:{expr.col}: Aggregate initializer '{{ ... }}' is only allowed as a declaration initializer or a compound literal")
         if isinstance(expr, LiteralExpr):
             if expr.lit_kind == 'BOOL':
                 return BaseType(line=expr.line, col=expr.col, c_name='bool')
@@ -1559,8 +1597,10 @@ class Parser:
             return True
         if isinstance(expr, AggregateInit):
             return all(self._is_static_const_init(e) for e in expr.elements)
-        if isinstance(expr, DesignatedInit):
+        if isinstance(expr, (DesignatedInit, DesignatedIndex)):
             return self._is_static_const_init(expr.value)
+        if isinstance(expr, CompoundLiteral):
+            return self._is_static_const_init(expr.init)
         if isinstance(expr, CastExpr):
             return self._is_static_const_init(expr.operand)
         if isinstance(expr, UnaryExpr) and expr.op in ('-', '+'):
@@ -1575,6 +1615,8 @@ class Parser:
         if isinstance(t, BaseType):
             if t.c_name == 'void':
                 return False
+            if t.c_name == 'va_list':
+                return True
             if t.c_name in NUMERIC_C_TYPES or self.user_types.get(t.c_name) == 'enum':
                 return True
             if t.c_name in self.user_types:
@@ -1802,6 +1844,23 @@ class Parser:
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'")
         return top_nodes
 
+    def _check_compound_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
+        is_aggregate = isinstance(target, ArrayType) or (
+            isinstance(target, BaseType) and self.user_types.get(target.c_name) in ('struct', 'union'))
+        if is_aggregate:
+            self._check_brace_init(target, init, name_tok)
+            return
+        if len(init.elements) != 1 or isinstance(init.elements[0], (DesignatedInit, DesignatedIndex, AggregateInit)):
+            raise SemanticError(
+                f"{self.filename}:{init.line}:{init.col}: A scalar compound literal takes exactly one plain value, "
+                f"e.g. (u4){{ 5 }}")
+        elem = init.elements[0]
+        et = self._infer_expr_type(elem)
+        if not self._check_assign_compatible(target, elem, et):
+            raise SemanticError(
+                f"{self.filename}:{elem.line}:{elem.col}: Incompatible compound literal value: "
+                f"expected '{format_c_declarator(target)}', got '{format_c_declarator(et)}'")
+
     def _check_bitfield_base(self, tok: Token, ft: TypeNode):
         if not isinstance(ft, BaseType) or ft.c_name not in BITFIELD_WIDTH:
             raise SemanticError(
@@ -1983,6 +2042,21 @@ class Parser:
                     val = self.parse_pure_expr()
                 elements.append(DesignatedInit(line=dot_tok.line, col=dot_tok.col,
                                                field=fld_tok.value, value=val))
+            elif self._cur().kind == 'LBRACK':
+                lb_tok = self._eat('LBRACK')
+                idx_e = self.parse_pure_expr()
+                idx_v = self._eval_const_int_expr(idx_e)
+                if idx_v is None or idx_v < 0:
+                    raise SemanticError(
+                        f"{self.filename}:{lb_tok.line}:{lb_tok.col}: Array designator must be a non-negative integer constant")
+                self._eat('RBRACK')
+                self._eat('OP_ASSIGN')
+                if self._cur().kind == 'LBRACE':
+                    val = self.parse_brace_init()
+                else:
+                    val = self.parse_pure_expr()
+                elements.append(DesignatedIndex(line=lb_tok.line, col=lb_tok.col,
+                                                index_expr=idx_e, index_val=idx_v, value=val))
             else:
                 elements.append(self.parse_pure_expr())
             if self._cur().kind == 'COMMA':
@@ -1998,7 +2072,24 @@ class Parser:
         if isinstance(target, ArrayType):
             if any(isinstance(e, DesignatedInit) for e in init.elements):
                 raise SemanticError(
-                    f"{self.filename}:{init.line}:{init.col}: Designated initializers are only supported for struct types")
+                    f"{self.filename}:{init.line}:{init.col}: Struct designators '.field m,' cannot initialize an array")
+            if any(isinstance(e, DesignatedIndex) for e in init.elements):
+                seen_idx: Set[int] = set()
+                for elem in init.elements:
+                    if not isinstance(elem, DesignatedIndex):
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: Cannot mix designated '[index] m,' and positional "
+                            f"initializers in one list")
+                    if elem.index_val >= target.size_val:
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: Array designator [{elem.index_val}] out of range "
+                            f"(size is {target.size_val})")
+                    if elem.index_val in seen_idx:
+                        raise SemanticError(
+                            f"{self.filename}:{elem.line}:{elem.col}: Duplicate array designator [{elem.index_val}]")
+                    seen_idx.add(elem.index_val)
+                    self._check_init_element(target.element_type, elem.value, name_tok)
+                return
             if len(init.elements) > target.size_val:
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: Too many initializers for '{name_tok.value}': "
@@ -2012,6 +2103,9 @@ class Parser:
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: '{name_tok.value}' has incomplete type and cannot be initialized")
             fmap = self.struct_fields[target.c_name]
+            if any(isinstance(e, DesignatedIndex) for e in init.elements):
+                raise SemanticError(
+                    f"{self.filename}:{init.line}:{init.col}: Array designators '[index] m,' cannot initialize a {kind}; use '.field m,'")
             if any(isinstance(e, DesignatedInit) for e in init.elements):
                 seen: Set[str] = set()
                 for elem in init.elements:
@@ -2129,15 +2223,18 @@ class Parser:
             self.func_defined.add(name_tok.value)
 
             prev_ret = self.current_func_ret
+            prev_variadic = self.current_func_variadic
             prev_labels = self.func_labels
             prev_gotos = self.func_gotos
             self.current_func_ret = decl_type
+            self.current_func_variadic = is_variadic
             self.func_labels = set()
             self.func_gotos = []
             self.scopes.append({pname: pt for pt, pname in params})
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
             self.current_func_ret = prev_ret
+            self.current_func_variadic = prev_variadic
             for (lname, ltok) in self.func_gotos:
                 if lname not in self.func_labels:
                     raise SemanticError(
@@ -2291,6 +2388,9 @@ class Parser:
             self.func_labels.add(ltok.value)
             return LabelStmt(line=tok.line, col=tok.col, name=ltok.value)
 
+        if tok.kind == 'IDENT' and tok.value in ('va_start', 'va_end') and self.tokens[self.pos + 1].kind == 'LPAREN':
+            return self.parse_va_stmt()
+
         if tok.kind == 'KW_ATTR':
             attrs = self.parse_attrs()
             if self._cur().kind != 'KW_OBJECT':
@@ -2327,6 +2427,88 @@ class Parser:
         self._eat('RPAREN')
         self._eat('SEMI')
         return StaticAssertStmt(line=tok.line, col=tok.col, cond=cond, message=msg.value)
+
+    def parse_va_stmt(self) -> VaStmt:
+        name_tok = self._eat('IDENT')
+        self._eat('LPAREN')
+        ap = self.parse_pure_expr()
+        ap_t = self._infer_expr_type(ap)
+        if not (isinstance(ap_t, BaseType) and ap_t.c_name == 'va_list'):
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: '{name_tok.value}' requires a 'va_list' object")
+        if name_tok.value == 'va_start':
+            if not self.current_func_variadic:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: 'va_start' is only allowed inside a variadic function")
+            self._eat('COMMA')
+            last_tok = self._eat('IDENT')
+            self._eat('RPAREN')
+            self._eat('SEMI')
+            return VaStmt(line=name_tok.line, col=name_tok.col, kind='start', ap=ap, last_name=last_tok.value)
+        self._eat('RPAREN')
+        self._eat('SEMI')
+        return VaStmt(line=name_tok.line, col=name_tok.col, kind='end', ap=ap)
+
+    def parse_va_arg(self) -> VaArgExpr:
+        name_tok = self._eat('IDENT')
+        self._eat('LPAREN')
+        ap = self.parse_pure_expr()
+        ap_t = self._infer_expr_type(ap)
+        if not (isinstance(ap_t, BaseType) and ap_t.c_name == 'va_list'):
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: 'va_arg' requires a 'va_list' object")
+        self._eat('COMMA')
+        target_t = self.parse_type()
+        self._eat('RPAREN')
+        if is_void_type(target_t) or not self._is_complete_object_type(target_t):
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: 'va_arg' type must be a complete object type")
+        return VaArgExpr(line=name_tok.line, col=name_tok.col, ap=ap, target_type=target_t)
+
+    def parse_generic(self) -> ExprNode:
+        """`g? expr { T: e; ...; d: e }` —— 按控制表达式的静态类型选一条分支，转译期解析掉。"""
+        g_tok = self._eat('KW_GENERIC')
+        ctl = self.parse_unary()
+        ctl_t = strip_top_qualifiers(self._infer_expr_type(ctl))
+        self._eat('LBRACE')
+        assocs: List[Tuple[Optional[TypeNode], ExprNode]] = []
+        seen: Set[str] = set()
+        has_default = False
+        while self._cur().kind != 'RBRACE':
+            if self._cur().kind == 'KW_DEFAULT':
+                self._eat('KW_DEFAULT')      # `d:` 已经把冒号一起吃了
+                if has_default:
+                    raise SemanticError(f"{self.filename}:{g_tok.line}:{g_tok.col}: 'g?' allows at most one 'd:' association")
+                has_default = True
+                t = None
+            else:
+                t = self.parse_type()
+                key = format_c_declarator(strip_top_qualifiers(t))
+                if key in seen:
+                    raise SemanticError(f"{self.filename}:{g_tok.line}:{g_tok.col}: Duplicate 'g?' association for type '{key}'")
+                seen.add(key)
+                self._eat('COLON')
+            expr = self.parse_pure_expr()
+            assocs.append((t, expr))
+            if self._cur().kind == 'SEMI':
+                self._eat('SEMI')
+            elif self._cur().kind != 'RBRACE':
+                bad = self._cur()
+                raise ParseError(
+                    f"{self.filename}:{bad.line}:{bad.col}: Expected ';' or '}}' after a 'g?' association, got '{bad.value}'")
+        self._eat('RBRACE')
+        if not assocs:
+            raise SemanticError(f"{self.filename}:{g_tok.line}:{g_tok.col}: 'g?' requires at least one association")
+        for t, expr in assocs:
+            if t is not None and types_equal(strip_top_qualifiers(t), ctl_t):
+                self._infer_expr_type(expr)
+                return expr
+        for t, expr in assocs:
+            if t is None:
+                self._infer_expr_type(expr)
+                return expr
+        raise SemanticError(
+            f"{self.filename}:{g_tok.line}:{g_tok.col}: 'g?' has no association for '{format_c_declarator(ctl_t)}' and no 'd:' default")
 
     def parse_switch(self) -> SwitchStmt:
         sw_tok = self._eat('KW_SWITCH')
@@ -2520,11 +2702,21 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
             return SizeofExpr(line=tok.line, col=tok.col, target_type=None, operand=operand)
 
-        # 支持显式类型转换表达式 (Type)expr，如 (u4)w * (u4)h
+        # g? 按静态类型选分支（转译期解析，生成 C99 里只有被选中的那条）
+        if tok.kind == 'KW_GENERIC':
+            return self.parse_generic()
+
+        # 支持显式类型转换表达式 (Type)expr，以及复合字面量 (Type){ ... }
         if tok.kind == 'LPAREN' and self._is_type_start_at(self.pos + 1):
             self._eat('LPAREN')
             target_t = self.parse_type()
             self._eat('RPAREN')
+            if self._cur().kind == 'LBRACE':
+                init = self.parse_brace_init()
+                fake_tok = Token('IDENT', 'compound literal', tok.line, tok.col, 0)
+                self._check_compound_init(target_t, init, fake_tok)
+                return self.parse_postfix_tail(
+                    CompoundLiteral(line=tok.line, col=tok.col, target_type=target_t, init=init))
             operand = self.parse_unary()
             return CastExpr(line=tok.line, col=tok.col, target_type=target_t, operand=operand)
 
@@ -2538,7 +2730,9 @@ class Parser:
         return self.parse_postfix()
 
     def parse_postfix(self) -> ExprNode:
-        node = self.parse_primary()
+        return self.parse_postfix_tail(self.parse_primary())
+
+    def parse_postfix_tail(self, node: ExprNode) -> ExprNode:
         while True:
             tok = self._cur()
             if tok.kind == 'LBRACK':
@@ -2603,6 +2797,8 @@ class Parser:
             self._eat()
             return LiteralExpr(line=tok.line, col=tok.col, code=tok.value,
                                lit_kind='BOOL' if tok.kind == 'BOOL_LIT' else 'NULL')
+        if tok.kind == 'IDENT' and tok.value == 'va_arg' and self.tokens[self.pos + 1].kind == 'LPAREN':
+            return self.parse_va_arg()
         if tok.kind == 'IDENT':
             self._eat('IDENT')
             self._lookup_symbol(tok.value, tok)
@@ -2622,6 +2818,7 @@ class Parser:
 C99_HEADER_BODY = """#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdarg.h>
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ALIGNAS__)
   #define SIGIL_HAS_ALIGNMENT 1
@@ -2857,6 +3054,11 @@ class CodeGenerator:
             self._emit(f"goto {s.label};", s.line, indent)
         elif isinstance(s, LabelStmt):
             self._emit(f"{s.name}: ;", s.line, indent)
+        elif isinstance(s, VaStmt):
+            if s.kind == 'start':
+                self._emit(f"va_start({emit_expr(s.ap)}, {s.last_name});", s.line, indent)
+            else:
+                self._emit(f"va_end({emit_expr(s.ap)});", s.line, indent)
         elif isinstance(s, BlockStmt):
             self._emit("{", s.line, indent)
             for sub in s.stmts:
