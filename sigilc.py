@@ -122,12 +122,34 @@ class Lexer:
         is_float = False
         if self._peek() == '0' and self._peek(1) in ('x', 'X'):
             buf.append(self._advance(2))
-            if not (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
-                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid hex literal")
+            hex_digits = 0
             while self.pos < self.n and (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
                 buf.append(self._advance())
-            while self.pos < self.n and self._peek() in 'uUlL':
+                hex_digits += 1
+            has_hex_dot = self._peek() == '.'
+            if has_hex_dot:
                 buf.append(self._advance())
+                while self.pos < self.n and (self._peek().isdigit() or self._peek() in 'abcdefABCDEF'):
+                    buf.append(self._advance())
+                    hex_digits += 1
+            if not hex_digits:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid hex literal")
+            if self._peek() in ('p', 'P'):
+                is_float = True
+                buf.append(self._advance())
+                if self._peek() in ('+', '-'):
+                    buf.append(self._advance())
+                if not self._peek().isdigit():
+                    raise LexerError(f"{self.filename}:{start_line}:{start_col}: Malformed exponent in hexadecimal float literal")
+                while self.pos < self.n and self._peek().isdigit():
+                    buf.append(self._advance())
+                if self._peek() in 'fFlL':
+                    buf.append(self._advance())
+            elif has_hex_dot:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Hexadecimal floating literal requires a 'p' exponent")
+            else:
+                while self.pos < self.n and self._peek() in 'uUlL':
+                    buf.append(self._advance())
         elif self._peek() == '0' and self._peek(1) in ('b', 'B'):
             self._advance(2)
             bin_digits = []
