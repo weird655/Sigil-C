@@ -1,0 +1,64 @@
+#include <stdio.h>
+
+/* ------------------------------------------------------------------
+   场景三：网络帧解析
+
+   - 头部是 2 字节，位域视图直接叠在原始字节上
+   - 大端解码单独一个函数，端序假设只出现在那里
+   - 每一步都先检查剩余长度，再读payload
+   ------------------------------------------------------------------ */
+
+#define STREAM_CAP 64
+
+s{ FrameFlags {
+    u2 kind   w! 4;
+    u2 len    w! 10;
+    u2 more   w! 1;
+    u2 parity w! 1;
+};
+
+u{ FrameHeader {
+    u2 raw;
+    FrameFlags bits;
+};
+
+t! (z? FrameHeader =? 2, "frame header must overlay 2 bytes");
+
+o! u1[16] STREAM m, {
+    0x00, 0x31, 'A', 'B', 'C',
+    0x80, 0x22, 'h', 'i',
+};
+
+u2 be16(p* c@ u1 p) { r; (u2)(((u4)p[0] << 8) |^ (u4)p[1]); }
+
+i4 main(v.) {
+    o! u4 n m, 9;
+    o! u4 off m, 0;
+    o! u4 frames m, 0;
+
+    w~ (off + 2 <= n) {
+        o! FrameHeader h;
+        h.raw m, be16(a& STREAM[off]);
+        o! u4 len m, (u4)h.bits.len;
+
+        i? (off + 2 + len > n) {
+            printf("truncated frame at %u\n", off);
+            b!;
+        }
+
+        printf("frame %u kind=%u len=%u more=%u parity=%u payload=\"",
+               frames, (u4)h.bits.kind, len, (u4)h.bits.more, (u4)h.bits.parity);
+        o! u4 i m, 0;
+        w~ (i < len) {
+            printf("%c", (c1)STREAM[off + 2 + i]);
+            i m+ 1;
+        }
+        printf("\"\n");
+
+        off m+ 2 + len;
+        frames m+ 1;
+    }
+
+    printf("frames=%u bytes=%u\n", frames, off);
+    r; 0;
+}

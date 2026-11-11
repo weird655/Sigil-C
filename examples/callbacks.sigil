@@ -1,0 +1,57 @@
+#include <stdio.h>
+
+/* ------------------------------------------------------------------
+   场景二：事件回调表
+
+   - (f^(p* Ctx, i4) -> v.)[4] 是 C 里最难写的那类声明
+   - s@ 让四个处理函数保持内部链接
+   - 全局表在编译期用函数名初始化，没有运行时注册开销
+   ------------------------------------------------------------------ */
+
+#define MAX_EVENTS 4
+
+e{ Event { EV_NONE m, 0, EV_KEY m, 1, EV_TICK m, 2, EV_QUIT m, 3 };
+
+s{ Ctx {
+    u4 ticks;
+    u4 keys;
+    u4 running;
+    c1 last;
+};
+
+s@ v. on_none(p* Ctx c, i4 arg) { (v.)arg; c->ticks m+ 1; }
+
+s@ v. on_key(p* Ctx c, i4 arg) {
+    c->keys m+ 1;
+    c->last m, (c1)arg;
+}
+
+s@ v. on_tick(p* Ctx c, i4 arg) { (v.)arg; c->ticks m+ 1; }
+
+s@ v. on_quit(p* Ctx c, i4 arg) { (v.)arg; c->running m, 0; }
+
+o! (f^(p* Ctx, i4) -> v.)[4] TABLE m, { on_none, on_key, on_tick, on_quit };
+
+v. dispatch(p* Ctx c, Event ev, i4 arg) {
+    o! i4 idx m, (i4)ev;
+    i? (idx >= 0 &. idx < MAX_EVENTS) { TABLE[idx](c, arg); }
+}
+
+i4 main(v.) {
+    o! Ctx c;
+    c.ticks m, 0;
+    c.keys m, 0;
+    c.running m, 1;
+    c.last m, '?';
+
+    dispatch(a& c, EV_KEY, 'a');
+    dispatch(a& c, EV_TICK, 0);
+    dispatch(a& c, EV_KEY, 'b');
+    dispatch(a& c, EV_NONE, 0);
+    dispatch(a& c, EV_QUIT, 0);
+
+    i? (!.c.running) {
+        printf("quit after %u ticks, %u keys, last='%c'\n", c.ticks, c.keys, c.last);
+    }
+    r; 0;
+}

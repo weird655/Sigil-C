@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 from sigilc import (
     Lexer, Parser, CodeGenerator, compile_source, compile_header, check_source,
@@ -1469,12 +1470,47 @@ int main(void) {
     assert_ok("16. v1.1 xfn", "Distinct objects per r@ parameter and access through the r@ pointer stay legal",
               test_restrict_ok_cases)
 
+    # Layer 17: shipped examples build and run
+    EXAMPLES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
+
+    def build_example(name):
+        src = open(os.path.join(EXAMPLES, name + ".sigil"), encoding="utf-8").read()
+        with open(name + ".c", "w") as f:
+            f.write(compile_source(src, name + ".sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", name + ".c", "-o", name + "_bin"],
+            check=True
+        )
+        return subprocess.run(["./" + name + "_bin"], capture_output=True, text=True, check=True).stdout
+
+    def test_example_regmap():
+        out = build_example("regmap")
+        assert "ctrl=0x005d" in out, out
+        assert "enable=1 parity=2 stop=1 div=5" in out, out
+        assert "tx_ready=1" in out, out
+
+    assert_ok("17. examples", "regmap: packed MMIO block, bitfield overlay, offsetof asserts", test_example_regmap)
+
+    def test_example_callbacks():
+        out = build_example("callbacks")
+        assert "quit after 2 ticks, 2 keys, last='b'" in out, out
+
+    assert_ok("17. examples", "callbacks: global function-pointer table with static handlers", test_example_callbacks)
+
+    def test_example_wire():
+        out = build_example("wire")
+        assert 'frame 0 kind=1 len=3 more=0 parity=0 payload="ABC"' in out, out
+        assert 'frame 1 kind=2 len=2 more=0 parity=1 payload="hi"' in out, out
+        assert "frames=2 bytes=9" in out, out
+
+    assert_ok("17. examples", "wire: big-endian frame parse with bitfield header overlay", test_example_wire)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 16-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 17-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

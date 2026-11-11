@@ -1,0 +1,71 @@
+#include <stdio.h>
+
+/* ------------------------------------------------------------------
+   场景一：MMIO 寄存器映射
+
+   - a@(packed) 保证没有隐藏填充
+   - 位域视图与原始寄存器共用同一块内存
+   - v@ 保证访问真的落到内存
+   - offsetof / z? 断言把布局钉死在编译期
+   ------------------------------------------------------------------ */
+
+#define STATUS_RX 0x1
+#define STATUS_TX 0x2
+
+a@(packed) s{ Uart {
+    v@ u4 status;
+    v@ u4 data;
+    v@ u4 baud;
+    v@ u4 ctrl;
+};
+
+s{ CtrlBits {
+    u4 enable w! 1;
+    u4 parity w! 2;
+    u4 stop   w! 1;
+    u4 div    w! 12;
+};
+
+u{ CtrlReg {
+    u4 raw;
+    CtrlBits bits;
+};
+
+t! (offsetof(Uart, data) =? 4, "data register must sit at offset 4");
+t! (offsetof(Uart, ctrl) =? 12, "ctrl register must sit at offset 12");
+t! (z? Uart =? 16, "Uart block must be 16 bytes");
+t! (z? CtrlReg =? 4, "CtrlReg must overlay 4 bytes");
+
+b. tx_ready(p* c@ Uart u) { r; (u->status &^ STATUS_TX) !? 0; }
+
+v. write_ctrl(p* Uart u, u4 raw) { u->ctrl m, raw; }
+
+u4 read_ctrl(p* c@ Uart u) { r; u->ctrl; }
+
+v. uart_show(p* c@ Uart u, p* c@ c1 name) {
+    o! CtrlReg reg;
+    reg.raw m, u->ctrl;
+    printf("%-6s ctrl=0x%04x enable=%u parity=%u stop=%u div=%u status=0x%x\n",
+           name, reg.raw, (u4)reg.bits.enable, (u4)reg.bits.parity,
+           (u4)reg.bits.stop, (u4)reg.bits.div, u->status);
+}
+
+i4 main(v.) {
+    o! Uart u;
+    u.status m, STATUS_TX;
+    u.data m, 0;
+    u.baud m, 115200;
+    u.ctrl m, 0;
+
+    o! CtrlReg reg;
+    reg.raw m, 0;
+    reg.bits.enable m, 1;
+    reg.bits.parity m, 2;
+    reg.bits.stop m, 1;
+    reg.bits.div m, 5;
+    write_ctrl(a& u, reg.raw);
+
+    uart_show(a& u, "uart0");
+    printf("tx_ready=%u raw=0x%04x\n", (u4)tx_ready(a& u), read_ctrl(a& u));
+    r; 0;
+}
