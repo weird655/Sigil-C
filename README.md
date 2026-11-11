@@ -42,7 +42,8 @@ u4 pointer_guide_demo(v.) {
     ctx.w m, 3;
     ctx.h m, 1;
 
-    /* ro_ctx 与 rw_ctx 指向同一个结构体，权限不同。 */
+    /* ctx 是实际对象；a& ctx 取它的地址，初始化下面两个指针变量。 */
+    /* ro_ctx 与 rw_ctx 指向同一个对象，但权限不同。 */
     p* c@ SG ro_ctx m, a& ctx;
     p* SG rw_ctx m, a& ctx;
     u4 read_w m, ro_ctx->w;
