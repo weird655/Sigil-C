@@ -111,24 +111,46 @@ Sigil-C 的记号分成两个互不重叠的集合：
 
 唯一不是 2 字符的形态是 `a!N`（对齐，字母 + `!` + 十进制 2 的幂），由词法器特判，不计入上表的 43 个双字符印记。
 
+### 0.6 矩阵式对齐（推荐排版）
+
+印记**定长 2 字符**，标识符**变长**——所以把定长部分排成列、变长部分各占一列，视线竖着扫就能看出两行结构的差异（同汇编的助记符 / 操作数列）：
+
+```sigil
+s{ SG { p* c@ u4 buffer_read; p* u4 buffer_write; };
+
+u4 demo(p* SG ctx) {
+    o!  p*    c@    u4     src       m,   ctx->buffer_read;
+    o!  p*          u4     dst       m,   ctx->buffer_write;
+    o!  p*    c@    SG     ro_ctx    m,   ctx;
+    o!              u4     h         m,   2;
+    r; h + (u4)p* src + (u4)p* dst + (u4)(ro_ctx->buffer_read =? src);
+}
+```
+
+列序固定为：`o!` → 指针层 `p*` → 限定符 `c@` / `v@` → 基底类型 → 对象名 → 赋值印记 → 右值。某行没有的层**留空**，让同一列始终是同一角色。
+
+* 编译器不关心空白，这是给人眼看的排版约定；
+* 结构体字段没有 `o!`，首列留空即可；
+* 多层指针（`p* p* u4`）可把多个 `p*` 塞进同一列，或按层再拆列——只要**同一段代码内保持一致**。
+
 ---
 
 ## 1. 控制流印记（`KW_IF` … `KW_CONTINUE`）
 
 控制流印记由"1 个英文小写字母 + 1 个标点"构成，词法器优先于普通标识符进行双字符匹配：
 
-| 印记 | Token 类别 | 对应 C99 语法 | 记忆词源与静态语义约束 |
-| :--- | :--- | :--- | :--- |
-| `i?` | `KW_IF` | `if (cond) { ... }` | **i**f + `?`（条件分支），`cond` 必须为标量类型（算术或指针）且禁止包含赋值副作用 |
-| `e:` | `KW_ELSE` | `else { ... }` / `else if` | **e**lse + `:`（否则分支），后接 `{ ... }` 或紧跟 `i?` 构成 `e: i?` |
-| `w~` | `KW_WHILE` | `while (cond) { ... }` | **w**hile + `~`（条件循环），`cond` 必为标量纯表达式，开启循环作用域（允许 `b!` / `c^`） |
-| `f~` | `KW_FOR` | `for (init; cond; step) { ... }` | **f**or + `~`（步进循环），`init` 与 `step` 允许赋值并校验类型兼容，`cond` 必为标量纯表达式；若 `init` 声明变量，其作用域覆盖条件、步进子句和循环体，循环体块另有嵌套作用域 |
-| `s?` | `KW_SWITCH` | `switch (cond) { ... }` | **s**witch + `?`（多路派发），`cond` 静态类型必须为整型或枚举（拒绝浮点与指针） |
-| `k:` | `KW_CASE` | `case CONST_EXPR:` | **k**ase + `:`（分支标签），标签必须折叠为编译期整数常量（支持十进制、十六进制 `0xFE`、八进制 `077` 及转义字符如 `'\n'`、`'\101'`）且禁止重复 |
-| `d:` | `KW_DEFAULT` | `default:` | **d**efault + `:`（默认分支），同一 `s?` 内最多允许出现一次 `d:` |
-| `r;` | `KW_RETURN` | `return expr;` / `return;` | **r**eturn + `;`（函数返回），静态检查返回值类型与函数签名兼容；非 `void` 函数（除 `main`）要求每条能到达函数末尾的路径都已返回，并将可证明为真且没有 `break` 出口的整数常量循环视为不落到函数末尾；分析顺序执行和 `switch` 穿透 |
-| `b!` | `KW_BREAK` | `break;` | **b**reak + `!`（跳出中断），仅允许出现在 `w~`、`f~` 或 `s?` 内部 |
-| `c^` | `KW_CONTINUE` | `continue;` | **c**ontinue + `^`（继续下一轮），仅允许出现在 `w~` 或 `f~` 循环内部（仅在 `s?` 内而无外层循环时报错） |
+| 印记 | Token 类别 | 对应 C99 语法 | 词源 | 静态语义约束 |
+| :--- | :--- | :--- | :--- | :--- |
+| `i?` | `KW_IF` | `if (cond) { ... }` | **i**f + `?`（条件分支） | `cond` 必须为标量类型（算术或指针），且禁止包含赋值副作用 |
+| `e:` | `KW_ELSE` | `else { ... }` / `else if` | **e**lse + `:`（否则分支） | 后接 `{ ... }`，或紧跟 `i?` 构成 `e: i?` |
+| `w~` | `KW_WHILE` | `while (cond) { ... }` | **w**hile + `~`（条件循环） | `cond` 必为标量纯表达式；开启循环作用域，允许 `b!` / `c^` |
+| `f~` | `KW_FOR` | `for (init; cond; step) { ... }` | **f**or + `~`（步进循环） | `init` 与 `step` 允许赋值并校验类型兼容，`cond` 必为标量纯表达式；`init` 声明的变量作用域覆盖条件、步进与循环体，循环体另有嵌套作用域 |
+| `s?` | `KW_SWITCH` | `switch (cond) { ... }` | **s**witch + `?`（多路派发） | `cond` 静态类型必须为整型或枚举（拒绝浮点与指针） |
+| `k:` | `KW_CASE` | `case CONST_EXPR:` | **k**ase + `:`（分支标签） | 标签必须折叠为编译期整数常量（十进制、`0xFE`、`077`、`'\n'`、`'\101'`），且禁止重复 |
+| `d:` | `KW_DEFAULT` | `default:` | **d**efault + `:`（默认分支） | 同一 `s?` 内最多允许出现一次 |
+| `r;` | `KW_RETURN` | `return expr;` / `return;` | **r**eturn + `;`（函数返回） | 返回值类型须与函数签名兼容；非 `void` 函数（除 `main`）须全路径返回；可证明为真且无 `break` 出口的整数常量循环视为不落到末尾；分析顺序执行与 `switch` 穿透 |
+| `b!` | `KW_BREAK` | `break;` | **b**reak + `!`（跳出中断） | 仅允许出现在 `w~`、`f~` 或 `s?` 内部 |
+| `c^` | `KW_CONTINUE` | `continue;` | **c**ontinue + `^`（继续下一轮） | 仅允许出现在 `w~` 或 `f~` 内部（在 `s?` 内而无外层循环时报错） |
 
 ## 2. 类型定义印记（`s{` / `u{` / `e{`）
 
@@ -183,26 +205,48 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 
 在 `Parser.parse_type()` 中，`c@` 与 `v@` 都只修饰紧随其后的当前层节点，`p*` 递归包裹其右侧的整个子类型，而后缀 `[N]` 默认绑定在基底类型上（若需声明“指针的数组”，使用圆括号 `(p* T)[N]` 显式指定元素类型为指针）。数组维度在编译期通过 `_eval_const_int_expr()` 求值并在类型等价性判断（`types_equal`）中按常量数值比对（即 `i4[8]`、`i4[4 + 4]` 与 `i4[0x08]` 类型完全等价）：
 
-| 语义描述 | Sigil-C 写法（从左向右读） | AST 类型树结构 | 生成的 ISO C99 声明 |
-| :--- | :--- | :--- | :--- |
-| 指向只读 `u1` 的可变指针 | `o! p* c@ u1 ptr;` | `Pointer(Base(uint8_t, const))` | `const uint8_t *ptr;` |
-| 指向易变 `u4` 的可变指针 | `o! p* v@ u4 reg;` | `Pointer(Base(uint32_t, volatile))` | `volatile uint32_t *reg;` |
-| 指向普通 `u4` 的易变指针 | `o! v@ p* u4 reg;` | `Pointer(Base(uint32_t), volatile)` | `uint32_t * volatile reg;` |
-| 指向只读且易变 `u4` 的指针 | `o! p* c@ v@ u4 reg;` | `Pointer(Base(uint32_t, const volatile))` | `const volatile uint32_t *reg;` |
-| 指向可变 `u1` 的只读指针 | `o! c@ p* u1 ptr m, buf;` | `Pointer(Base(uint8_t), const)` | `uint8_t * const ptr = buf;` |
-| 指向只读 `u1` 的只读指针 | `o! c@ p* c@ u1 ptr m, buf;` | `Pointer(Base(uint8_t, const), const)` | `const uint8_t * const ptr = buf;` |
-| 指向只读一级指针的可变二级指针 | `o! p* c@ p* u1 pp;` | `Pointer(Pointer(Base(uint8_t), const))` | `uint8_t * const *pp;` |
-| 指向可变一级指针的只读二级指针 | `o! c@ p* p* u1 cpp m, pp;` | `Pointer(Pointer(Base(uint8_t)), const)` | `uint8_t ** const cpp = pp;` |
-| 二维定长数组（4 行 8 列） | `o! f4[4][8] matrix;` | `Array(Array(Base(float), 8), 4)` | `float matrix[4][8];` |
-| 指向含 8 个 `f4` 数组的指针 | `o! p* f4[8] row_ptr;` | `Pointer(Array(Base(float), 8))` | `float (*row_ptr)[8];` |
-| 包含 4 个 `u1` 指针的数组 | `o! (p* u1)[4] ptr_arr;` | `Array(Pointer(Base(uint8_t)), 4)` | `uint8_t *ptr_arr[4];` |
-| 无参返回 `i4` 的函数指针 | `o! f^(v.) -> i4 thunk;` | `FnPtr([] -> int32_t)` | `int32_t (*thunk)(void);` |
-| 含嵌套回调参数的函数指针 | `o! f^(u4 id, f^(i4 e) -> v. cb) -> i4 hook;` | `FnPtr([uint32_t, FnPtr] -> int32_t)` | `int32_t (*hook)(uint32_t id, void (*cb)(int32_t e));` |
-| 显式标量类型转换表达式 | `(u4)w * (u4)h` | `Binary('*', Cast(uint32_t, w), Cast(uint32_t, h))` | `((uint32_t)w * (uint32_t)h)` |
+| 语义描述 | Sigil-C 写法（从左向右读） | 生成的 ISO C99 声明 |
+| :--- | :--- | :--- |
+| 指向只读 `u1` 的可变指针 | `o! p* c@ u1 ptr;` | `const uint8_t *ptr;` |
+| 指向易变 `u4` 的可变指针 | `o! p* v@ u4 reg;` | `volatile uint32_t *reg;` |
+| 指向普通 `u4` 的易变指针 | `o! v@ p* u4 reg;` | `uint32_t * volatile reg;` |
+| 指向只读且易变 `u4` 的指针 | `o! p* c@ v@ u4 reg;` | `const volatile uint32_t *reg;` |
+| 指向可变 `u1` 的只读指针 | `o! c@ p* u1 ptr m, buf;` | `uint8_t * const ptr = buf;` |
+| 指向只读 `u1` 的只读指针 | `o! c@ p* c@ u1 ptr m, buf;` | `const uint8_t * const ptr = buf;` |
+| 指向只读一级指针的可变二级指针 | `o! p* c@ p* u1 pp;` | `uint8_t * const *pp;` |
+| 指向可变一级指针的只读二级指针 | `o! c@ p* p* u1 cpp m, pp;` | `uint8_t ** const cpp = pp;` |
+| 二维定长数组（4 行 8 列） | `o! f4[4][8] matrix;` | `float matrix[4][8];` |
+| 指向含 8 个 `f4` 数组的指针 | `o! p* f4[8] row_ptr;` | `float (*row_ptr)[8];` |
+| 包含 4 个 `u1` 指针的数组 | `o! (p* u1)[4] ptr_arr;` | `uint8_t *ptr_arr[4];` |
+| 无参返回 `i4` 的函数指针 | `o! f^(v.) -> i4 thunk;` | `int32_t (*thunk)(void);` |
+| 含嵌套回调参数的函数指针 | `o! f^(u4 id, f^(i4 e) -> v. cb) -> i4 hook;` | `int32_t (*hook)(uint32_t id, void (*cb)(int32_t e));` |
+| 显式标量类型转换表达式 | `(u4)w * (u4)h` | `((uint32_t)w * (uint32_t)h)` |
 
 函数原型允许省略形参名（例如 `i4 sum(i4, i4);`），函数定义仍须为每个形参命名。
 
 对内存映射寄存器，`o! p* v@ u4 timer_reg` 会生成 `volatile uint32_t *timer_reg`，经 `*timer_reg` 读取或写入时保留 `volatile` 限定。示例初始化可写为 `o! p* v@ u4 timer_reg m, (p* v@ u4)0x40000000;`；Sigil-C 要求显式指针类型转换，且整数地址转成指针属于目标平台相关的实现定义操作，需确认地址、位宽和访问方式符合目标 ABI。`volatile` 不等同于原子操作，也不代替平台所需的内存屏障。
+
+<details>
+<summary>附：AST 类型树对照（编译器开发者视角）</summary>
+
+| 语义描述 | AST 类型树结构 |
+| :--- | :--- |
+| 指向只读 `u1` 的可变指针 | `Pointer(Base(uint8_t, const))` |
+| 指向易变 `u4` 的可变指针 | `Pointer(Base(uint32_t, volatile))` |
+| 指向普通 `u4` 的易变指针 | `Pointer(Base(uint32_t), volatile)` |
+| 指向只读且易变 `u4` 的指针 | `Pointer(Base(uint32_t, const volatile))` |
+| 指向可变 `u1` 的只读指针 | `Pointer(Base(uint8_t), const)` |
+| 指向只读 `u1` 的只读指针 | `Pointer(Base(uint8_t, const), const)` |
+| 指向只读一级指针的可变二级指针 | `Pointer(Pointer(Base(uint8_t), const))` |
+| 指向可变一级指针的只读二级指针 | `Pointer(Pointer(Base(uint8_t)), const)` |
+| 二维定长数组（4 行 8 列） | `Array(Array(Base(float), 8), 4)` |
+| 指向含 8 个 `f4` 数组的指针 | `Pointer(Array(Base(float), 8))` |
+| 包含 4 个 `u1` 指针的数组 | `Array(Pointer(Base(uint8_t)), 4)` |
+| 无参返回 `i4` 的函数指针 | `FnPtr([] -> int32_t)` |
+| 含嵌套回调参数的函数指针 | `FnPtr([uint32_t, FnPtr] -> int32_t)` |
+| 显式标量类型转换表达式 | `Binary('*', Cast(uint32_t, w), Cast(uint32_t, h))` |
+
+</details>
 
 ## 6. 赋值印记（`ASSIGN_TOKENS`）
 
