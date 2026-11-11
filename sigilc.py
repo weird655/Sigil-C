@@ -30,6 +30,8 @@ SIGIL_KEYWORDS = {
     'a&': 'KW_ADDR',
     'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
     'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',   'a@': 'KW_ATTR',
+    'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',
+    'd~': 'KW_DO',       'g!': 'KW_GOTO',     'l!': 'KW_LABEL',
 }
 
 SIGIL_OPERATORS = {
@@ -61,6 +63,16 @@ INT_C_TYPES = {
 }
 
 NUMERIC_C_TYPES = INT_C_TYPES | {'float', 'double', 'long double'}
+
+# w! 位域：基底类型 -> 允许的最大位宽（C99 要求位域宽度不超过该类型位宽）
+BITFIELD_WIDTH = {
+    'bool': 1, 'char': 8,
+    'int8_t': 8, 'uint8_t': 8,
+    'int16_t': 16, 'uint16_t': 16,
+    'int32_t': 32, 'uint32_t': 32,
+    'int64_t': 64, 'uint64_t': 64,
+    'int': 32, 'size_t': 64, 'ptrdiff_t': 64, 'intptr_t': 64, 'uintptr_t': 64,
+}
 VALID_SIMPLE_ESCAPES = set('abfnrtv\\\'"?0')
 VALID_INTEGER_SUFFIXES = {
     '', 'u', 'U', 'l', 'L', 'll', 'LL',
@@ -379,6 +391,11 @@ class Lexer:
                     tokens.append(Token('IDENT', word, s_line, s_col, s_byte))
                 continue
 
+            if ch == '.' and nxt == '.' and self._peek(2) == '.':
+                self._advance(3)
+                tokens.append(Token('ELLIPSIS', '...', s_line, s_col, s_byte))
+                continue
+
             if ch.isdigit() or (ch == '.' and nxt.isdigit()):
                 tokens.append(self._scan_number(s_line, s_col, s_byte))
                 continue
@@ -560,6 +577,8 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
             curr = curr.element_type
         elif isinstance(curr, FunctionPointerType):
             params_c = [format_c_declarator(pt, pname or "") for pt, pname in curr.param_decls]
+            if curr.is_variadic:
+                params_c.append("...")
             param_list_str = ", ".join(params_c) if params_c else "void"
             qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
             qual = f"{qualifiers} " if qualifiers else ""
@@ -647,6 +666,7 @@ class VarDeclStmt(StmtNode):
     init_expr: Optional[ExprNode] = None
     is_static: bool = False
     attrs: List[Attribute] = field(default_factory=list)
+    bit_width: Optional[int] = None
 
 @dataclass
 class AssignStmt(StmtNode):
@@ -700,6 +720,24 @@ class JumpStmt(StmtNode):
     keyword: str
 
 @dataclass
+class DoWhileStmt(StmtNode):
+    body: BlockStmt
+    cond: ExprNode
+
+@dataclass
+class StaticAssertStmt(StmtNode):
+    cond: ExprNode
+    message: str
+
+@dataclass
+class GotoStmt(StmtNode):
+    label: str
+
+@dataclass
+class LabelStmt(StmtNode):
+    name: str
+
+@dataclass
 class StructDefNode(StmtNode):
     kind: str
     name: str
@@ -721,6 +759,8 @@ class FuncDefNode(StmtNode):
     body: Optional[BlockStmt]
     is_static: bool = False
     attrs: List[Attribute] = field(default_factory=list)
+    is_inline: bool = False
+    is_variadic: bool = False
 
 @dataclass
 class SizeofExpr(ExprNode):
@@ -790,6 +830,10 @@ class Parser:
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
         self.func_defined: Set[str] = set()
+        self.func_variadic: Set[str] = set()
+        self.struct_bitfields: Dict[str, Dict[str, int]] = {}
+        self.func_labels: Set[str] = set()
+        self.func_gotos: List[Tuple[str, Token]] = []
         self.current_func_ret: Optional[TypeNode] = None
         self.loop_depth: int = 0
         self.switch_depth: int = 0
@@ -1123,6 +1167,9 @@ class Parser:
                     return sub_t.element_type
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference non-pointer type")
             if expr.op == '&':
+                if isinstance(expr.operand, MemberExpr) and self._member_is_bitfield(expr.operand):
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: Cannot take the address ('a&') of bit-field '{expr.operand.field}'")
                 if not isinstance(expr.operand, (IdentExpr, IndexExpr, MemberExpr)) and not (isinstance(expr.operand, UnaryExpr) and expr.operand.op == '*'):
                     raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot take address ('a&') of rvalue expression")
                 return PointerType(line=expr.line, col=expr.col, pointee=sub_t)
@@ -1317,6 +1364,21 @@ class Parser:
         if isinstance(t, ArrayType):
             return PointerType(line=t.line, col=t.col, pointee=t.element_type, is_const=False)
         return t
+
+    def _member_is_bitfield(self, me: MemberExpr) -> bool:
+        try:
+            base_t = self._infer_expr_type(me.base)
+        except SemanticError:
+            return False
+        if me.is_arrow:
+            if not isinstance(base_t, PointerType) or not isinstance(base_t.pointee, BaseType):
+                return False
+            sname = base_t.pointee.c_name
+        else:
+            if not isinstance(base_t, BaseType):
+                return False
+            sname = base_t.c_name
+        return me.field in self.struct_bitfields.get(sname, {})
 
     def _is_null_ptr_const(self, expr: ExprNode, expr_t: TypeNode) -> bool:
         if isinstance(expr, LiteralExpr) and expr.lit_kind == 'NULL':
@@ -1592,10 +1654,19 @@ class Parser:
             self._eat('LPAREN')
             params: List[Tuple[TypeNode, Optional[str]]] = []
             seen_pnames = set()
+            is_variadic = False
             if self._cur().kind == 'TYPE_VOID' and self.tokens[self.pos + 1].kind == 'RPAREN':
                 self._eat('TYPE_VOID')
             elif self._cur().kind != 'RPAREN':
                 while True:
+                    if self._cur().kind == 'ELLIPSIS':
+                        if not params:
+                            raise SemanticError(
+                                f"{self.filename}:{self._cur().line}:{self._cur().col}: "
+                                f"A variadic function pointer requires at least one named parameter before '...'")
+                        self._eat('ELLIPSIS')
+                        is_variadic = True
+                        break
                     pt = decay_parameter_type(self.parse_type())
                     self._validate_non_void_var(pt, fn_tok)
                     pname = None
@@ -1615,7 +1686,7 @@ class Parser:
             ret_type = self.parse_type()
             if isinstance(ret_type, ArrayType):
                 raise SemanticError(f"{self.filename}:{fn_tok.line}:{fn_tok.col}: Function cannot return array type")
-            base_node = FunctionPointerType(line=fn_tok.line, col=fn_tok.col, param_decls=params, return_type=ret_type, is_const=is_const, is_volatile=is_volatile)
+            base_node = FunctionPointerType(line=fn_tok.line, col=fn_tok.col, param_decls=params, return_type=ret_type, is_const=is_const, is_volatile=is_volatile, is_variadic=is_variadic)
         elif tok.kind in ('TYPE_INT', 'TYPE_VOID', 'TYPE_BOOL'):
             t_tok = self._eat()
             c_map = {**BASIC_TYPES, 'v.': 'void', 'b.': 'bool'}
@@ -1671,19 +1742,35 @@ class Parser:
                     tok = self._cur()
                     raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'a@' attributes are not supported on 'e{{' enum definitions")
                 top_nodes.append(self.parse_enum())
+            elif self._cur().kind == 'KW_STATIC_ASSERT':
+                top_nodes.append(self.parse_static_assert())
             elif self._cur().kind == 'KW_OBJECT':
                 object_tok = self._eat('KW_OBJECT')
                 top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, attrs=attrs))
-            elif self._cur().kind == 'KW_STATIC':
-                self._eat('KW_STATIC')
+            elif self._cur().kind in ('KW_STATIC', 'KW_INLINE'):
+                is_static = False
+                is_inline = False
+                while self._cur().kind in ('KW_STATIC', 'KW_INLINE'):
+                    mod_tok = self._eat()
+                    if mod_tok.kind == 'KW_STATIC':
+                        if is_static:
+                            raise ParseError(f"{self.filename}:{mod_tok.line}:{mod_tok.col}: Duplicate 's@' storage class")
+                        is_static = True
+                    else:
+                        if is_inline:
+                            raise ParseError(f"{self.filename}:{mod_tok.line}:{mod_tok.col}: Duplicate 'i@' specifier")
+                        is_inline = True
                 if self._cur().kind == 'KW_OBJECT':
+                    if is_inline:
+                        raise SemanticError(
+                            f"{self.filename}:{self._cur().line}:{self._cur().col}: 'i@' (inline) cannot be applied to an object declaration")
                     object_tok = self._eat('KW_OBJECT')
-                    top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, is_static=True, attrs=attrs))
+                    top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, is_static=is_static, attrs=attrs))
                 elif self._is_type_start(self._cur()):
-                    top_nodes.append(self.parse_top_decl_or_func(is_static=True, attrs=attrs))
+                    top_nodes.append(self.parse_top_decl_or_func(is_static=is_static, is_inline=is_inline, attrs=attrs))
                 else:
                     tok = self._cur()
-                    raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 's@' must be followed by a type, got '{tok.value}'")
+                    raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 's@' / 'i@' must be followed by a function, got '{tok.value}'")
             elif self._is_type_start(self._cur()):
                 top_nodes.append(self.parse_top_decl_or_func(attrs=attrs))
             else:
@@ -1737,6 +1824,21 @@ class Parser:
                 field_attrs = self.parse_attrs()
             ft = self.parse_type()
             fname_tok = self._eat('IDENT')
+            bit_width = None
+            if self._cur().kind == 'KW_BITFIELD':
+                bf_tok = self._eat('KW_BITFIELD')
+                w_tok = self._eat('INT_NUM')
+                width = self._attr_int_value(w_tok, w_tok.value)
+                if not isinstance(ft, BaseType) or ft.c_name not in BITFIELD_WIDTH:
+                    raise SemanticError(
+                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: 'w!' bit-field requires an integer base type, "
+                        f"got '{format_c_declarator(ft)}'")
+                limit = BITFIELD_WIDTH[ft.c_name]
+                if width < 1 or width > limit:
+                    raise SemanticError(
+                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: 'w!{width}' out of range for '{ft.c_name}': "
+                        f"width must be 1..{limit}")
+                bit_width = width
             self._check_attr_placement(field_attrs, 'field', fname_tok)
             self._validate_non_void_var(ft, fname_tok)
             if not self._is_complete_object_type(ft):
@@ -1744,9 +1846,11 @@ class Parser:
             if fname_tok.value in field_map:
                 raise SemanticError(f"{self.filename}:{fname_tok.line}:{fname_tok.col}: Duplicate field '{fname_tok.value}' in {kind} '{name_tok.value}'")
             field_map[fname_tok.value] = ft
+            if bit_width is not None:
+                self.struct_bitfields.setdefault(name_tok.value, {})[fname_tok.value] = bit_width
             self._eat('SEMI')
             fields.append(VarDeclStmt(line=fname_tok.line, col=fname_tok.col, var_type=ft,
-                                      name=fname_tok.value, attrs=field_attrs))
+                                      name=fname_tok.value, attrs=field_attrs, bit_width=bit_width))
         if not fields:
             raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Empty {kind} '{name_tok.value}' is forbidden in ISO C99")
         self._eat('RBRACE')
@@ -1877,7 +1981,8 @@ class Parser:
                 f"expected '{format_c_declarator(target)}', got '{format_c_declarator(et)}'")
 
     def parse_top_decl_or_func(self, object_marker: Optional[Token] = None, is_static: bool = False,
-                               attrs: Optional[List[Attribute]] = None) -> StmtNode:
+                               attrs: Optional[List[Attribute]] = None,
+                               is_inline: bool = False) -> StmtNode:
         attrs = attrs or []
         decl_type = self.parse_type()
         name_tok = self._eat('IDENT')
@@ -1891,10 +1996,19 @@ class Parser:
             self._eat('LPAREN')
             params: List[Tuple[TypeNode, str]] = []
             seen_params = set()
+            is_variadic = False
             if self._cur().kind == 'TYPE_VOID' and self.tokens[self.pos + 1].kind == 'RPAREN':
                 self._eat('TYPE_VOID')
             elif self._cur().kind != 'RPAREN':
                 while True:
+                    if self._cur().kind == 'ELLIPSIS':
+                        if not params:
+                            raise SemanticError(
+                                f"{self.filename}:{self._cur().line}:{self._cur().col}: "
+                                f"A variadic function requires at least one named parameter before '...'")
+                        self._eat('ELLIPSIS')
+                        is_variadic = True
+                        break
                     raw_pt = self.parse_type()
                     pt = decay_parameter_type(raw_pt)
                     pname = ''
@@ -1923,13 +2037,15 @@ class Parser:
                 if len(old_params) != len(param_types) or not types_equal(strip_top_qualifiers(old_ret), strip_top_qualifiers(decl_type)) or not all(types_equal(strip_top_qualifiers(a), strip_top_qualifiers(b)) for a, b in zip(old_params, param_types)):
                     raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Conflicting types for function '{name_tok.value}'")
 
-            fn_ptr_equiv = FunctionPointerType(line=name_tok.line, col=name_tok.col, param_decls=[(pt, pn) for pt, pn in params], return_type=decl_type)
+            fn_ptr_equiv = FunctionPointerType(line=name_tok.line, col=name_tok.col, param_decls=[(pt, pn) for pt, pn in params], return_type=decl_type, is_variadic=is_variadic)
             self.scopes[0][name_tok.value] = fn_ptr_equiv
             self.func_sigs[name_tok.value] = (param_types, decl_type)
+            if is_variadic:
+                self.func_variadic.add(name_tok.value)
 
             if self._cur().kind == 'SEMI':
                 self._eat('SEMI')
-                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None, is_static=is_static, attrs=attrs)
+                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None, is_static=is_static, attrs=attrs, is_inline=is_inline, is_variadic=is_variadic)
 
             if any(not pname for _, pname in params):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function definition parameters must have names")
@@ -1938,14 +2054,25 @@ class Parser:
             self.func_defined.add(name_tok.value)
 
             prev_ret = self.current_func_ret
+            prev_labels = self.func_labels
+            prev_gotos = self.func_gotos
             self.current_func_ret = decl_type
+            self.func_labels = set()
+            self.func_gotos = []
             self.scopes.append({pname: pt for pt, pname in params})
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
             self.current_func_ret = prev_ret
+            for (lname, ltok) in self.func_gotos:
+                if lname not in self.func_labels:
+                    raise SemanticError(
+                        f"{self.filename}:{ltok.line}:{ltok.col}: 'g!' target '{lname}' has no matching 'l!' label "
+                        f"in function '{name_tok.value}'")
+            self.func_labels = prev_labels
+            self.func_gotos = prev_gotos
             if not is_void_type(decl_type) and name_tok.value != 'main' and self._can_fall_through(body):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
-            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static, attrs=attrs)
+            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static, attrs=attrs, is_inline=is_inline, is_variadic=is_variadic)
 
         if object_marker is None:
             raise ParseError(f"{self.filename}:{name_tok.line}:{name_tok.col}: File-scope object declarations must begin with 'o!'")
@@ -2057,6 +2184,38 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'c^' (continue) statement not within a loop")
             return JumpStmt(line=tok.line, col=tok.col, keyword="continue")
 
+        if tok.kind == 'KW_DO':
+            self._eat('KW_DO')
+            self.loop_depth += 1
+            body = self.parse_block()
+            self.loop_depth -= 1
+            self._eat('KW_WHILE')
+            self._eat('LPAREN')
+            cond = self.parse_pure_expr()
+            self._check_scalar_cond(cond, 'd~')
+            self._eat('RPAREN')
+            self._eat('SEMI')
+            return DoWhileStmt(line=tok.line, col=tok.col, body=body, cond=cond)
+
+        if tok.kind == 'KW_STATIC_ASSERT':
+            return self.parse_static_assert()
+
+        if tok.kind == 'KW_GOTO':
+            self._eat('KW_GOTO')
+            ltok = self._eat('IDENT')
+            self._eat('SEMI')
+            self.func_gotos.append((ltok.value, ltok))
+            return GotoStmt(line=tok.line, col=tok.col, label=ltok.value)
+
+        if tok.kind == 'KW_LABEL':
+            self._eat('KW_LABEL')
+            ltok = self._eat('IDENT')
+            self._eat('SEMI')
+            if ltok.value in self.func_labels:
+                raise SemanticError(f"{self.filename}:{ltok.line}:{ltok.col}: Duplicate label '{ltok.value}' in this function")
+            self.func_labels.add(ltok.value)
+            return LabelStmt(line=tok.line, col=tok.col, name=ltok.value)
+
         if tok.kind == 'KW_ATTR':
             attrs = self.parse_attrs()
             if self._cur().kind != 'KW_OBJECT':
@@ -2081,6 +2240,18 @@ class Parser:
         stmt = self.parse_assign_or_expr_no_semi()
         self._eat('SEMI')
         return stmt
+
+    def parse_static_assert(self) -> StaticAssertStmt:
+        tok = self._eat('KW_STATIC_ASSERT')
+        self._eat('LPAREN')
+        cond = self.parse_pure_expr()
+        # 条件交给后端 C 编译器判定：sizeof 等本身就是整型常量表达式，
+        # 在这里折叠会把 ABI 尺寸假设写死进转译器。
+        self._eat('COMMA')
+        msg = self._eat('STRING')
+        self._eat('RPAREN')
+        self._eat('SEMI')
+        return StaticAssertStmt(line=tok.line, col=tok.col, cond=cond, message=msg.value)
 
     def parse_switch(self) -> SwitchStmt:
         sw_tok = self._eat('KW_SWITCH')
@@ -2406,14 +2577,38 @@ C99_HEADER_BODY = """#include <stdint.h>
   #define SIGIL_ATTR(...)
 #endif
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+  #define SIGIL_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#else
+  #define SIGIL_SA_CAT_(a, b) a##b
+  #define SIGIL_SA_CAT(a, b) SIGIL_SA_CAT_(a, b)
+  #if defined(__GNUC__) || defined(__clang__)
+    #define SIGIL_STATIC_ASSERT(cond, msg) typedef char SIGIL_SA_CAT(sigil_static_assert_, __LINE__)[(cond) ? 1 : -1] __attribute__((unused))
+  #else
+    #define SIGIL_STATIC_ASSERT(cond, msg) typedef char SIGIL_SA_CAT(sigil_static_assert_, __LINE__)[(cond) ? 1 : -1]
+  #endif
+#endif
+
+#if (defined(__GNUC__) && __GNUC__ >= 7) || defined(__clang__)
+  #define SIGIL_FALLTHROUGH() __attribute__((fallthrough))
+#else
+  #define SIGIL_FALLTHROUGH() ((void)0)
+#endif
+
 """
 
 C99_HEADER = "/* Generated by Sigil-C v3.1.0 AST Compiler. DO NOT EDIT. */\n" + C99_HEADER_BODY
 
+C99_PRELUDE = ("/* Sigil-C shared prelude: generated by Sigil-C. Include this once per build,\n"
+               "   then let every generated .c/.h pick it up with --prelude. DO NOT EDIT. */\n"
+               + C99_HEADER_BODY)
+
 class CodeGenerator:
-    def __init__(self, filename: str = "input.sigil", header_mode: bool = False):
+    def __init__(self, filename: str = "input.sigil", header_mode: bool = False,
+                 prelude_include: Optional[str] = None):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.header_mode = header_mode
+        self.prelude_include = prelude_include
         self.lines: List[str] = []
 
     def _emit(self, code: str, line: int, indent: int = 0):
@@ -2435,7 +2630,10 @@ class CodeGenerator:
         return any(a.name in ('packed', 'aligned') for a in attrs)
 
     def generate(self, nodes: List[StmtNode]) -> str:
-        self.lines.append(C99_HEADER)
+        if self.prelude_include:
+            self.lines.append(f'#include "{self.prelude_include}"\n')
+        else:
+            self.lines.append(C99_HEADER)
         for node in nodes:
             self.gen_top(node)
         return "".join(self.lines)
@@ -2443,7 +2641,10 @@ class CodeGenerator:
     def generate_header(self, nodes: List[StmtNode], guard: str) -> str:
         self.lines.append(f"/* Public interface generated by Sigil-C from {self.safe_filename}. DO NOT EDIT. */\n")
         self.lines.append(f"#ifndef {guard}\n#define {guard}\n\n")
-        self.lines.append(C99_HEADER_BODY)
+        if self.prelude_include:
+            self.lines.append(f'#include "{self.prelude_include}"\n')
+        else:
+            self.lines.append(C99_HEADER_BODY)
         for node in nodes:
             self.gen_top(node)
         self.lines.append(f"\n#endif /* {guard} */\n")
@@ -2472,6 +2673,8 @@ class CodeGenerator:
                 for index, f in enumerate(node.fields):
                     align_member = f"SIGIL_ALIGN_MEMBER({node.alignment}) " if index == 0 and node.alignment else ""
                     field_decl = format_c_declarator(f.var_type, f.name)
+                    if f.bit_width is not None:
+                        field_decl = f"{field_decl} : {f.bit_width}"
                     field_attr = self._attrs_c(f.attrs)
                     if field_attr:
                         field_decl = f"{field_decl} {field_attr}"
@@ -2497,21 +2700,34 @@ class CodeGenerator:
             self._emit(f"}} {node.name};", node.line)
         elif isinstance(node, FuncDefNode):
             params_c = [format_c_declarator(pt, pname) for pt, pname in node.params]
+            if node.is_variadic:
+                params_c.append("...")
             fn_sig = format_c_declarator(node.return_type, f"{node.name}({', '.join(params_c) if params_c else 'void'})")
             attr = self._attrs_c(node.attrs)
             attr_prefix = f"{attr} " if attr else ""
+            storage = ("static " if node.is_static else "") + ("inline " if node.is_inline else "")
             if self.header_mode:
-                if node.body is not None and not node.is_static:
-                    self._emit(f"{attr_prefix}{fn_sig};", node.line)
+                if node.body is None:
+                    if not node.is_static:
+                        self._emit(f"{storage}{attr_prefix}{fn_sig};", node.line)
+                    return
+                if node.is_static and node.is_inline:
+                    self._emit(f"{storage}{attr_prefix}{fn_sig} {{", node.line)
+                    for s in node.body.stmts:
+                        self.gen_stmt(s, indent=1)
+                    self._emit("}", node.line)
+                elif not node.is_static:
+                    self._emit(f"{storage}{attr_prefix}{fn_sig};", node.line)
                 return
-            prefix = "static " if node.is_static else ""
             if node.body is None:
-                self._emit(f"{prefix}{attr_prefix}{fn_sig};", node.line)
+                self._emit(f"{storage}{attr_prefix}{fn_sig};", node.line)
             else:
-                self._emit(f"{prefix}{attr_prefix}{fn_sig} {{", node.line)
+                self._emit(f"{storage}{attr_prefix}{fn_sig} {{", node.line)
                 for s in node.body.stmts:
                     self.gen_stmt(s, indent=1)
                 self._emit("}", node.line)
+        elif isinstance(node, StaticAssertStmt):
+            self._emit(f"SIGIL_STATIC_ASSERT({emit_expr(node.cond)}, {node.message});", node.line)
         elif isinstance(node, VarDeclStmt):
             decl = format_c_declarator(node.var_type, node.name)
             attr = self._attrs_c(node.attrs)
@@ -2555,6 +2771,17 @@ class CodeGenerator:
             self._emit(f"return{f' {emit_expr(s.expr)}' if s.expr else ''};", s.line, indent)
         elif isinstance(s, JumpStmt):
             self._emit(f"{s.keyword};", s.line, indent)
+        elif isinstance(s, DoWhileStmt):
+            self._emit("do {", s.line, indent)
+            for sub in s.body.stmts:
+                self.gen_stmt(sub, indent + 1)
+            self._emit(f"}} while ({emit_expr(s.cond)});", s.line, indent)
+        elif isinstance(s, StaticAssertStmt):
+            self._emit(f"SIGIL_STATIC_ASSERT({emit_expr(s.cond)}, {s.message});", s.line, indent)
+        elif isinstance(s, GotoStmt):
+            self._emit(f"goto {s.label};", s.line, indent)
+        elif isinstance(s, LabelStmt):
+            self._emit(f"{s.name}: ;", s.line, indent)
         elif isinstance(s, BlockStmt):
             self._emit("{", s.line, indent)
             for sub in s.stmts:
@@ -2589,20 +2816,33 @@ class CodeGenerator:
             self._emit("}", s.line, indent)
         elif isinstance(s, SwitchStmt):
             self._emit(f"switch ({emit_expr(s.cond)}) {{", s.line, indent)
-            for c in s.cases:
+            for idx, c in enumerate(s.cases):
                 if c.value is not None:
                     self._emit(f"case {emit_expr(c.value)}: {{", c.line, indent + 1)
                 else:
                     self._emit("default: {", c.line, indent + 1)
                 for sub in c.stmts:
                     self.gen_stmt(sub, indent + 2)
+                if idx < len(s.cases) - 1 and not self._case_terminates(c.stmts):
+                    # 本语言不自动补 break：不写 b!/r;/g! 就是 C 的穿透语义。
+                    # 用 GCC/Clang 的 fallthrough 属性显式标注，避免 -Wextra 告警。
+                    self._emit("SIGIL_FALLTHROUGH();", c.line, indent + 2)
                 self._emit("}", c.line, indent + 1)
             self._emit("}", s.line, indent)
 
-def compile_source(src: str, filename: str = "input.sigil") -> str:
+    @staticmethod
+    def _case_terminates(stmts: List[StmtNode]) -> bool:
+        if not stmts:
+            return False
+        last = stmts[-1]
+        if isinstance(last, JumpStmt) and last.keyword == 'break':
+            return True
+        return isinstance(last, (ReturnStmt, GotoStmt))
+
+def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None) -> str:
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename).parse_program()
-    return CodeGenerator(filename).generate(ast)
+    return CodeGenerator(filename, prelude_include=prelude).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil") -> None:
     """词法 + 语法 + 静态语义检查，不产生任何输出。"""
@@ -2613,11 +2853,12 @@ def _header_guard(header_name: str) -> str:
     base = os.path.basename(header_name).upper()
     return "SIGIL_" + "".join(ch if ch.isalnum() else "_" for ch in base)
 
-def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h") -> str:
+def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h",
+                   prelude: Optional[str] = None) -> str:
     """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename).parse_program()
-    return CodeGenerator(filename, header_mode=True).generate_header(ast, _header_guard(header_name))
+    return CodeGenerator(filename, header_mode=True, prelude_include=prelude).generate_header(ast, _header_guard(header_name))
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
@@ -2631,6 +2872,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="also emit a C header next to the output (same basename, .h)")
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
     ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
+    ap.add_argument("--emit-prelude", metavar="PATH",
+                    help="write the shared Sigil-C C prelude (macros) to PATH")
+    ap.add_argument("--prelude", metavar="NAME",
+                    help="include NAME instead of inlining the prelude macro block in generated files")
     ap.add_argument("--version", action="version", version="Sigil-C 3.1.0")
     args = ap.parse_args(argv)
 
@@ -2640,19 +2885,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         src = f.read()
     fname = os.path.basename(in_path)
 
+    if args.emit_prelude:
+        with open(args.emit_prelude, "w", encoding="utf-8") as f:
+            f.write(C99_PRELUDE)
+        print(f"Prelude  {args.emit_prelude}")
+
     if args.check:
         check_source(src, fname)
         print(f"Checked {in_path}: OK")
         return 0
 
-    c_src = compile_source(src, fname)
+    c_src = compile_source(src, fname, prelude=args.prelude)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(c_src)
     print(f"Compiled {in_path} -> {out_path}")
 
     header_path = args.header or (os.path.splitext(out_path)[0] + ".h" if args.emit_header else None)
     if header_path:
-        h_src = compile_header(src, fname, os.path.basename(header_path))
+        h_src = compile_header(src, fname, os.path.basename(header_path), prelude=args.prelude)
         with open(header_path, "w", encoding="utf-8") as f:
             f.write(h_src)
         print(f"Header   {header_path}")

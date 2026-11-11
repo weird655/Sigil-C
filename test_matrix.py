@@ -761,12 +761,199 @@ int main(void) {
     assert_raises("9. v3.2 init", "Reject non-constant element in a global aggregate initializer",
                   SemanticError, "o! i4 g m, 1; o! u4[2] t m, { 1, g }; i4 main(v.) { r; 0; }")
 
+    # Layer 10: v3.2 语言补全（inline / 位域 / 变参 / 静态断言 / do-while / goto / 共享前导头）
+    def test_static_inline_header():
+        sigil = """
+        s@ i@ i4 sat_add(i4 a, i4 b) { r; a + b; }
+        """
+        with open("inl.h", "w") as f:
+            f.write(compile_header(sigil, "inl.sigil", "inl.h"))
+        h = open("inl.h").read()
+        assert "static inline int32_t sat_add(int32_t a, int32_t b) {" in h, h
+        with open("inl_use.c", "w") as f:
+            f.write('#include "inl.h"\nint main(void) { return sat_add(20, 22) == 42 ? 0 : 1; }\n')
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "inl_use.c", "-o", "inl_bin"],
+            check=True
+        )
+        assert subprocess.run(["./inl_bin"], check=False).returncode == 0
+
+    assert_ok("10. v3.2 full", "s@ i@ emits a static inline definition into the public header", test_static_inline_header)
+
+    def test_bitfields():
+        sigil = """
+        s{ Ctrl { u4 enable w! 1; u4 mode w! 3; u4 rsvd w! 28; };
+        i4 main(v.) {
+            o! Ctrl c;
+            c.enable m, 1;
+            c.mode m, 5;
+            i? (c.enable =? 1) { r; (i4)(z? Ctrl) + (i4)c.mode; }
+            r; 1;
+        }
+        """
+        with open("bf.c", "w") as f:
+            f.write(compile_source(sigil, "bf.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "bf.c", "-o", "bf_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./bf_bin"], check=False).returncode
+        assert rc == 9, rc   # sizeof(Ctrl) == 4, mode == 5
+
+    assert_ok("10. v3.2 full", "w! bit-fields pack into 4 bytes and read back", test_bitfields)
+
+    assert_raises("10. v3.2 full", "Reject a bit-field wider than its base type",
+                  SemanticError, "s{ C { u4 x w! 33; }; i4 main(v.) { r; 0; }")
+    assert_raises("10. v3.2 full", "Reject a bit-field on a non-integer base type",
+                  SemanticError, "s{ C { f4 x w! 3; }; i4 main(v.) { r; 0; }")
+    assert_raises("10. v3.2 full", "Reject taking the address of a bit-field",
+                  SemanticError, "s{ C { u4 b w! 1; }; i4 main(v.) { o! C c; o! p* u4 q m, a& c.b; r; 0; }")
+
+    def test_variadic():
+        sigil = """
+        i4 trace_write(p* c@ c1 fmt, ...) { r; (i4)(p* fmt); }
+        i4 main(v.) {
+            i? (trace_write("x", 1, 2) =? 120) { r; 0; }
+            r; 1;
+        }
+        """
+        with open("va.c", "w") as f:
+            f.write(compile_source(sigil, "va.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "va.c", "-o", "va_bin"],
+            check=True
+        )
+        assert subprocess.run(["./va_bin"], check=False).returncode == 0
+
+    assert_ok("10. v3.2 full", "... declares and defines variadic functions; extra args are accepted", test_variadic)
+
+    assert_raises("10. v3.2 full", "Reject '...' before any named parameter",
+                  SemanticError, "i4 f(...) { r; 0; } i4 main(v.) { r; 0; }")
+
+    def test_static_assert_pass():
+        sigil = 't! (z? u4 =? 4, "u4 must be 4 bytes"); i4 main(v.) { r; 0; }'
+        with open("sa_ok.c", "w") as f:
+            f.write(compile_source(sigil, "sa_ok.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "sa_ok.c", "-o", "sa_ok_bin"],
+            check=True
+        )
+        assert subprocess.run(["./sa_ok_bin"], check=False).returncode == 0
+
+    assert_ok("10. v3.2 full", "t! emits a compile-time assertion that holds", test_static_assert_pass)
+
+    def test_static_assert_fail():
+        sigil = 't! (z? u4 =? 5, "u4 is not 5 bytes"); i4 main(v.) { r; 0; }'
+        with open("sa_bad.c", "w") as f:
+            f.write(compile_source(sigil, "sa_bad.sigil"))
+        rc = subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-c", "sa_bad.c", "-o", "sa_bad.o"],
+            check=False, capture_output=True
+        ).returncode
+        assert rc != 0, "a false t! must fail to compile"
+
+    assert_ok("10. v3.2 full", "t! with a false condition fails at C compile time", test_static_assert_fail)
+
+    def test_do_while():
+        sigil = """
+        i4 main(v.) {
+            o! i4 n m, 0;
+            d~ { n m+ 1; } w~ (n < 3);
+            r; n;
+        }
+        """
+        with open("dowhile.c", "w") as f:
+            f.write(compile_source(sigil, "dowhile.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "dowhile.c", "-o", "dowhile_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./dowhile_bin"], check=False).returncode
+        assert rc == 3, rc
+
+    assert_ok("10. v3.2 full", "d~ / w~ do-while runs the body before testing", test_do_while)
+
+    def test_goto_label():
+        sigil = """
+        i4 main(v.) {
+            o! i4 n m, 0;
+            l! again;
+            n m+ 1;
+            i? (n < 3) { g! again; }
+            r; n;
+        }
+        """
+        with open("goto.c", "w") as f:
+            f.write(compile_source(sigil, "goto.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "goto.c", "-o", "goto_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./goto_bin"], check=False).returncode
+        assert rc == 3, rc
+
+    assert_ok("10. v3.2 full", "g! / l! emit a goto/backward-label loop", test_goto_label)
+
+    assert_raises("10. v3.2 full", "Reject a g! target with no matching l! label",
+                  SemanticError, "i4 main(v.) { g! nowhere; r; 0; }")
+
+    def test_shared_prelude():
+        from sigilc import C99_PRELUDE
+        with open("sigil_prelude.h", "w") as f:
+            f.write(C99_PRELUDE)
+        with open("pa.c", "w") as f:
+            f.write(compile_source("u4 alpha(v.) { r; 1; }", "pa.sigil", prelude="sigil_prelude.h"))
+        with open("pb.c", "w") as f:
+            f.write(compile_source("u4 beta(v.) { r; 2; }", "pb.sigil", prelude="sigil_prelude.h"))
+        src = open("pa.c").read()
+        assert '#include "sigil_prelude.h"' in src, src
+        assert "#define SIGIL_ATTR" not in src, src
+        with open("pab_use.c", "w") as f:
+            f.write(
+                '#include <stdint.h>\n'
+                'uint32_t alpha(void); uint32_t beta(void);\n'
+                'int main(void) { return (alpha() + beta()) == 3 ? 0 : 1; }\n'
+            )
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-I.", "pa.c", "pb.c", "pab_use.c", "-o", "pab_bin"],
+            check=True
+        )
+        assert subprocess.run(["./pab_bin"], check=False).returncode == 0
+
+    assert_ok("10. v3.2 full", "--emit-prelude / --prelude share one macro header instead of duplicating it", test_shared_prelude)
+
+    def test_switch_fallthrough():
+        sigil = """
+        i4 f(i4 x) {
+            o! i4 n m, 0;
+            s? (x) {
+                k: 1: n m+ 1;
+                k: 2: n m+ 10; b!;
+                d: n m, 99;
+            }
+            r; n;
+        }
+        i4 main(v.) {
+            i? (f(1) =? 11) { i? (f(3) =? 99) { r; 0; } }
+            r; 1;
+        }
+        """
+        with open("fall.c", "w") as f:
+            f.write(compile_source(sigil, "fall.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "fall.c", "-o", "fall_bin"],
+            check=True
+        )
+        assert subprocess.run(["./fall_bin"], check=False).returncode == 0
+
+    assert_ok("10. v3.2 full", "Switch falls through unless b!/r;/g! ends the case (C semantics, marked explicitly)", test_switch_fallthrough)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 9-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 10-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
