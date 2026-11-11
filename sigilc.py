@@ -1093,17 +1093,53 @@ class Parser:
         if '<assert.h>' in txt:
             reg_fn('assert', [t_int], t_void)
 
-    def _guarantees_return(self, stmt: StmtNode) -> bool:
+    def _sequence_flow(self, stmts: List[StmtNode]) -> Set[str]:
+        outcomes = {"fallthrough"}
+        for stmt in stmts:
+            if "fallthrough" not in outcomes:
+                break
+            outcomes = (outcomes - {"fallthrough"}) | self._statement_flow(stmt)
+        return outcomes
+
+    def _statement_flow(self, stmt: StmtNode) -> Set[str]:
+        """Possible exits from a statement: return, break, continue, or fallthrough."""
         if isinstance(stmt, ReturnStmt):
-            return True
+            return {"return"}
+        if isinstance(stmt, JumpStmt):
+            return {stmt.keyword}
         if isinstance(stmt, BlockStmt):
-            return any(self._guarantees_return(s) for s in stmt.stmts)
+            return self._sequence_flow(stmt.stmts)
         if isinstance(stmt, IfStmt):
-            return stmt.else_branch is not None and self._guarantees_return(stmt.then_block) and self._guarantees_return(stmt.else_branch)
+            outcomes = self._statement_flow(stmt.then_block)
+            if stmt.else_branch is None:
+                outcomes.add("fallthrough")
+            else:
+                outcomes |= self._statement_flow(stmt.else_branch)
+            return outcomes
         if isinstance(stmt, SwitchStmt):
-            has_def = any(c.value is None for c in stmt.cases)
-            return has_def and all(any(self._guarantees_return(s) for s in c.stmts) for c in stmt.cases)
-        return False
+            outcomes: Set[str] = set()
+            has_default = any(case.value is None for case in stmt.cases)
+            for start in range(len(stmt.cases)):
+                case_outcomes = {"fallthrough"}
+                for case in stmt.cases[start:]:
+                    if "fallthrough" not in case_outcomes:
+                        break
+                    case_outcomes = (case_outcomes - {"fallthrough"}) | self._sequence_flow(case.stmts)
+                if "break" in case_outcomes:
+                    case_outcomes = (case_outcomes - {"break"}) | {"fallthrough"}
+                outcomes |= case_outcomes
+            if not has_default:
+                outcomes.add("fallthrough")
+            return outcomes
+        if isinstance(stmt, (WhileStmt, ForStmt)):
+            outcomes = {"fallthrough"}
+            if "return" in self._statement_flow(stmt.body):
+                outcomes.add("return")
+            return outcomes
+        return {"fallthrough"}
+
+    def _guarantees_return(self, stmt: StmtNode) -> bool:
+        return self._statement_flow(stmt) == {"return"}
 
     def _is_static_const_init(self, expr: ExprNode) -> bool:
         if self._eval_const_int_expr(expr) is not None:
