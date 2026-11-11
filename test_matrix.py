@@ -1428,12 +1428,53 @@ int main(void) {
 
     assert_ok("15. v1.1 ptr", "In-scope pointers, globals and switch-local assignments stay legal", test_pointer_scope_ok)
 
+    # Layer 16: v1.1 cross-function escape and r@ promise checks
+    assert_raises("16. v1.1 xfn", "Reject passing a local address to a callee that stores it into a global",
+                  SemanticError,
+                  "o! p* u4 g; v. keep(p* u4 p) { g m, p; } v. f(v.) { o! u4 x m, 1; keep(a& x); }")
+
+    def test_escape_ok_cases():
+        sigil = """
+        o! u4 gv m, 1;
+        o! p* u4 g;
+        v. keep(p* u4 p) { g m, p; }
+        v. keep_local(p* u4 p) { o! p* u4 local m, p; o! u4 t m, p* local; }
+        v. f(v.) { keep(a& gv); keep_local(a& gv); }
+        """
+        check_source(sigil, "escape_ok.sigil")
+
+    assert_ok("16. v1.1 xfn", "Global addresses and local-only stores are not escapes", test_escape_ok_cases)
+
+    assert_raises("16. v1.1 xfn", "Reject passing one object to an r@ parameter and another parameter",
+                  SemanticError,
+                  "u4 sum(r@ p* u4 a, p* u4 b) { r; a[0] + b[0]; } i4 f(v.) { o! u4[4] arr m, { 1, 2, 3, 4 }; r; (i4)sum(arr, arr); }")
+    assert_raises("16. v1.1 xfn", "Reject touching an object directly after a local r@ pointer claims it",
+                  SemanticError,
+                  "i4 f(v.) { o! u4[4] arr m, { 1, 2, 3, 4 }; o! r@ p* u4 p m, a& arr[0]; o! u4 x m, arr[1]; r; (i4)x; }")
+
+    def test_restrict_ok_cases():
+        sigil = """
+        u4 sum(r@ p* u4 a, r@ p* u4 b) { r; a[0] + b[0]; }
+        i4 f(v.) {
+            o! u4[2] x m, { 1, 2 };
+            o! u4[2] y m, { 3, 4 };
+            o! u4 s m, sum(x, y);
+            o! r@ p* u4 p m, a& x[0];
+            o! u4 t m, p[1];
+            r; (i4)s + (i4)t;
+        }
+        """
+        check_source(sigil, "restrict_ok.sigil")
+
+    assert_ok("16. v1.1 xfn", "Distinct objects per r@ parameter and access through the r@ pointer stay legal",
+              test_restrict_ok_cases)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 15-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 16-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

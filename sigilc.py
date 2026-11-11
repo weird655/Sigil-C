@@ -910,6 +910,14 @@ class Parser:
         self.prov: Dict[str, Tuple[str, int, int]] = {}
         self.local_objects: Set[str] = set()
         self.param_names: Set[str] = set()
+        # 跨函数逃逸：函数名 -> 被写进全局的参数名
+        self.cur_func_name: Optional[str] = None
+        self.cur_escape: Set[str] = set()
+        self.escape_params: Dict[str, Set[str]] = {}
+        self.func_param_names: Dict[str, List[str]] = {}
+        self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
+        # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
+        self.restricted: Dict[str, int] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
         self.func_defined: Set[str] = set()
@@ -1267,6 +1275,7 @@ class Parser:
                     return sub_t.element_type
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference non-pointer type")
             if expr.op == '&':
+                self._check_restricted_base(expr.operand)
                 if isinstance(expr.operand, MemberExpr) and self._member_is_bitfield(expr.operand):
                     raise SemanticError(
                         f"{self.filename}:{expr.line}:{expr.col}: Cannot take the address ('a&') of bit-field '{expr.operand.field}'")
@@ -1288,6 +1297,7 @@ class Parser:
             return sub_t
 
         if isinstance(expr, IndexExpr):
+            self._check_restricted_base(expr.base)
             base_t = self._infer_expr_type(expr.base)
             idx_t = self._infer_expr_type(expr.index)
             if not (isinstance(idx_t, BaseType) and (idx_t.c_name in INT_C_TYPES or self.user_types.get(idx_t.c_name) == 'enum')):
@@ -1323,6 +1333,7 @@ class Parser:
             raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Subscripted value is neither array nor pointer")
 
         if isinstance(expr, MemberExpr):
+            self._check_restricted_base(expr.base)
             base_t = self._infer_expr_type(expr.base)
             if expr.is_arrow:
                 if not isinstance(base_t, PointerType) or not isinstance(base_t.pointee, BaseType):
@@ -1542,6 +1553,64 @@ class Parser:
                     and inner.base.name in self.local_objects:
                 return inner.base.name
         return None
+
+    def _param_source(self, expr: Optional[ExprNode]) -> Optional[str]:
+        """表达式是否携带某个形参的地址/指针值（跨函数逃逸摘要用）。"""
+        if expr is None:
+            return None
+        if isinstance(expr, IdentExpr) and expr.name in self.param_names:
+            return expr.name
+        if isinstance(expr, UnaryExpr) and expr.op == '&':
+            inner = expr.operand
+            if isinstance(inner, IdentExpr) and inner.name in self.param_names:
+                return inner.name
+            if isinstance(inner, IndexExpr) and isinstance(inner.base, IdentExpr) \
+                    and inner.base.name in self.param_names:
+                return inner.base.name
+        p = self._prov_of(expr)
+        if p is not None and p.base in self.param_names:
+            return p.base
+        return None
+
+    def _target_is_global(self, lhs: ExprNode) -> bool:
+        return isinstance(lhs, IdentExpr) and lhs.name in self.scopes[0] and lhs.name not in self.local_objects
+
+    def _check_restricted_base(self, expr: ExprNode) -> None:
+        if isinstance(expr, IdentExpr) and expr.name in self.restricted:
+            if self.restricted[expr.name] < len(self.scopes):
+                raise SemanticError(
+                    f"{self.filename}:{expr.line}:{expr.col}: '{expr.name}' is accessed through another path while a "
+                    f"'r@' (restrict) pointer claims exclusive access to it")
+
+    def _check_calls(self) -> None:
+        for fname, provs, line, col in self.pending_calls:
+            sig = self.func_sigs.get(fname)
+            if sig is None:
+                continue
+            params = sig[0]
+            esc = self.escape_params.get(fname, set())
+            pnames = self.func_param_names.get(fname, [])
+            if esc:
+                for idx, (_arg, prov) in enumerate(provs):
+                    if idx >= len(pnames) or pnames[idx] not in esc:
+                        continue
+                    if prov is not None and prov.depth >= 1:
+                        raise SemanticError(
+                            f"{self.filename}:{line}:{col}: Argument {idx + 1} of '{fname}' points to local object "
+                            f"'{prov.base}', but '{fname}' stores it into a global; it would dangle after this function returns")
+            for i, pt in enumerate(params):
+                if not (isinstance(pt, PointerType) and pt.is_restrict):
+                    continue
+                if i >= len(provs) or provs[i][1] is None:
+                    continue
+                base_i = provs[i][1].base
+                for j, (_a2, p2) in enumerate(provs):
+                    if j == i or p2 is None:
+                        continue
+                    if p2.base == base_i:
+                        raise SemanticError(
+                            f"{self.filename}:{line}:{col}: Parameter {i + 1} of '{fname}' is 'r@' (restrict) but "
+                            f"argument {j + 1} aliases the same object '{base_i}'")
 
     def _note_prov(self, name: str, decl_type: TypeNode, init_expr: Optional[ExprNode]) -> None:
         depth = len(self.scopes) - 1
@@ -2030,6 +2099,7 @@ class Parser:
             else:
                 tok = self._cur()
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'")
+        self._check_calls()
         return top_nodes
 
     def _check_compound_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
@@ -2278,6 +2348,8 @@ class Parser:
         if not global_scope:
             self.local_objects.add(name_tok.value)
         self._note_prov(name_tok.value, decl_type, init_expr)
+        if isinstance(decl_type, PointerType) and decl_type.is_restrict and name_tok.value in self.prov:
+            self.restricted[self.prov[name_tok.value].base] = len(self.scopes) - 1
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
                            name=name_tok.value, init_expr=init_expr, is_static=is_static, attrs=attrs)
 
@@ -2496,12 +2568,23 @@ class Parser:
             self.prov = {k: v for k, v in prev_prov.items() if k in self.scopes[0]}
             self.local_objects = set()
             self.param_names = set()
+            prev_cur_name = self.cur_func_name
+            prev_escape = self.cur_escape
+            prev_restricted = self.restricted
+            self.cur_func_name = name_tok.value
+            self.cur_escape = set()
+            self.restricted = {}
+            self.func_param_names[name_tok.value] = [pname for _, pname in params]
             self.scopes.append({pname: pt for pt, pname in params})
             for _pt, pname in params:
                 self.local_objects.add(pname)
                 self.param_names.add(pname)
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
+            self.escape_params[name_tok.value] = self.cur_escape
+            self.cur_func_name = prev_cur_name
+            self.cur_escape = prev_escape
+            self.restricted = prev_restricted
             self.current_func_ret = prev_ret
             self.current_func_variadic = prev_variadic
             self.prov = prev_prov
@@ -2890,6 +2973,10 @@ class Parser:
                             f"'{bad}' into '{lhs.name}' would dangle after this function returns")
                 if isinstance(lhs, IdentExpr) and isinstance(strip_top_qualifiers(lhs_t), PointerType):
                     self._note_prov(lhs.name, lhs_t, rhs)
+                if self.cur_func_name is not None:
+                    src = self._param_source(rhs)
+                    if src is not None and self._target_is_global(lhs):
+                        self.cur_escape.add(src)
             else:
                 self._check_compound_assign_types(op_tok.kind, lhs_t, rhs_t, op_tok)
                 if isinstance(lhs, IdentExpr) and op_tok.kind in ('OP_ADD_ASSIGN', 'OP_SUB_ASSIGN'):
@@ -3100,6 +3187,7 @@ class Parser:
                         )
                     for idx, arg_e in enumerate(args, 1):
                         act_t = self._infer_expr_type(arg_e)
+                        self._check_restricted_base(arg_e)
                         self._prov_live(self._prov_of(arg_e), arg_e)
                         if is_void_type(act_t):
                             raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Argument {idx} cannot have 'v.' (void) type")
@@ -3112,6 +3200,9 @@ class Parser:
                 else:
                     raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Called object is not a function or function pointer")
 
+                if isinstance(node, IdentExpr) and node.name in self.func_sigs:
+                    self.pending_calls.append(
+                        (node.name, [(a, self._prov_of(a)) for a in args], node.line, node.col))
                 node = CallExpr(line=tok.line, col=tok.col, callee=node, args=args)
             else:
                 break
