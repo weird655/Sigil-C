@@ -16,62 +16,67 @@ Sigil-C 是一种面向系统编程、游戏底层内核（ECS、网格平流、
 
 ## 指针指南：从声明读到访问
 
-Sigil-C 把指针层级写在类型前缀里。下面用刻意完整的变量名，把“数组 → 指针 → 解引用/下标 → 写回”的关系逐步展开：
+Sigil-C 把指针层级写在类型前缀里。下面用简短变量名，把“数组 → 指针 → 解引用/下标 → 写回”的关系逐步展开：
 
 ```sigil
-/* 用户定义类型：指针限定符可以直接修饰结构体对象。 */
-s{ ScentGridContext {
-    u4 width;
-    u4 height;
+/* 用户定义类型：rd 指向只读元素，wr 指向可写元素。 */
+s{ SG {
+    p* c@ u4 rd;
+    p* u4 wr;
+    u4 w;
+    u4 h;
 };
 
 u4 pointer_guide_demo(v.) {
     /* 两个普通定长数组：每个数组包含三个 u4 元素。 */
     u4[3] source_values;
-    u4[3] destination_values;
+    u4[3] target_values;
     source_values[0] m, 17;
     source_values[1] m, 23;
     source_values[2] m, 41;
 
-    /* 同一结构体对象分别经只读指针和可写指针访问。 */
-    ScentGridContext grid_context;
-    grid_context.width m, 3;
-    grid_context.height m, 1;
-    p* c@ ScentGridContext read_only_grid_context  m, a& grid_context;
-    p*     ScentGridContext writable_grid_context m, a& grid_context;
-    u4 width_seen_through_read_only_pointer m, read_only_grid_context->width;
+    /* ctx 保存缓冲区地址和网格尺寸；数组在赋值时退化为首元素地址。 */
+    SG ctx;
+    ctx.rd m, source_values;
+    ctx.wr m, target_values;
+    ctx.w m, 3;
+    ctx.h m, 1;
+
+    /* ro_ctx 与 rw_ctx 指向同一个结构体，权限不同。 */
+    p* c@ SG ro_ctx m, a& ctx;
+    p* SG rw_ctx m, a& ctx;
+    u4 read_w m, ro_ctx->w;
     /* 取消下一行注释会因只读左值写入而静态报错。 */
-    /* read_only_grid_context->width m, 4; */
-    writable_grid_context->height m, 2;
-    u4 height_seen_through_writable_pointer m, writable_grid_context->height;
+    /* ro_ctx->w m, 4; */
+    rw_ctx->h m, 2;
+    u4 written_h m, rw_ctx->h;
 
-    /* p* c@ u4：可改 source 指针本身，但不能经它写源元素。 */
-    /* p* u4：可读写目标元素。 */
-    p* c@ u4    read_only_source_buffer      m, source_values;
-    p*     u4   writable_destination_buffer m, destination_values;
+    /* src、dst 是普通变量名；它们的类型决定缓冲区的读写权限。 */
+    p* c@ u4 src m, ro_ctx->rd;
+    p* u4 dst m, rw_ctx->wr;
 
-    /* 数组初始化指针时退化为首元素地址；[1] 表示向后偏移一个 u4。 */
-    u4 first_source_value  m, p* read_only_source_buffer;
-    u4 second_source_value m, read_only_source_buffer[1];
-    writable_destination_buffer[0] m, first_source_value;
-    writable_destination_buffer[1] m, second_source_value;
+    /* p* 解引用；[1] 表示向后偏移一个 u4。 */
+    u4 first m, p* src;
+    u4 second m, src[1];
+    dst[0] m, first;
+    dst[1] m, second;
 
     /* c@ 修饰指针自身：地址固定，指向的 u4 仍可写。 */
-    c@ p* u4 fixed_destination_pointer  m, a& destination_values[0];
-    fixed_destination_pointer[2] m, source_values[2];
+    c@ p* u4 fixed_dst m, a& target_values[0];
+    fixed_dst[2] m, source_values[2];
 
     /* p* p* u4 是 u4 **：先取回内层指针，再经双重解引用读值。 */
-    p* p* u4 destination_pointer_slot   m, a& writable_destination_buffer;
-    p* u4 recovered_destination_pointer m, p* destination_pointer_slot;
-    u4 first_written_value m, p* p* destination_pointer_slot;
+    p* p* u4 dst_slot m, a& dst;
+    p* u4 dst2 m, p* dst_slot;
+    u4 first_written m, p* p* dst_slot;
+    u4 third_written m, dst2[2];
 
-    r; first_source_value + second_source_value + first_written_value
-       + width_seen_through_read_only_pointer + height_seen_through_writable_pointer;
+    r; first + second + first_written + third_written + read_w + written_h;
 }
 
 /* v@ 限定指向的硬件对象；读写都经过 volatile u4 左值。 */
-u4 read_hardware_register(p* v@ u4 mapped_register_address) {
-    r; p* mapped_register_address;
+u4 read_hardware_register(p* v@ u4 reg_addr) {
+    r; p* reg_addr;
 }
 ```
 
@@ -79,15 +84,15 @@ u4 read_hardware_register(p* v@ u4 mapped_register_address) {
 
 | Sigil-C 类型 | C99 类型 | 含义 |
 | :--- | :--- | :--- |
-| `p* u4 value_pointer` | `uint32_t *value_pointer` | 指向可读写 `u4` 的可变指针 |
-| `p* c@ u4 source_pointer` | `const uint32_t *source_pointer` | 指向只读 `u4` 的可变指针 |
-| `c@ p* u4 fixed_pointer` | `uint32_t * const fixed_pointer` | 地址固定，目标 `u4` 可写 |
-| `p* c@ ScentGridContext context` | `const ScentGridContext *context` | 指向用户定义结构体的只读指针 |
-| `p* ScentGridContext context` | `ScentGridContext *context` | 指向用户定义结构体的可写指针 |
-| `p* v@ u4 register_pointer` | `volatile uint32_t *register_pointer` | 指向易变 `u4`，适用于寄存器访问 |
-| `p* p* u4 pointer_slot` | `uint32_t **pointer_slot` | 指向 `u4` 指针的指针 |
+| `p* u4 p` | `uint32_t *p` | 指向可读写 `u4` 的可变指针 |
+| `p* c@ u4 src` | `const uint32_t *src` | 指向只读 `u4` 的可变指针 |
+| `c@ p* u4 fixed` | `uint32_t * const fixed` | 地址固定，目标 `u4` 可写 |
+| `p* c@ SG ro_ctx` | `const SG *ro_ctx` | 指向用户定义结构体的只读指针 |
+| `p* SG rw_ctx` | `SG *rw_ctx` | 指向用户定义结构体的可写指针 |
+| `p* v@ u4 reg` | `volatile uint32_t *reg` | 指向易变 `u4`，适用于寄存器访问 |
+| `p* p* u4 pp` | `uint32_t **pp` | 指向 `u4` 指针的指针 |
 
-`ScentGridContext` 是前面实际定义的结构体类型。`p* c@ ScentGridContext` 将只读限定传播到成员左值，所以通过它写 `width` 会被静态检查拒绝；`p* ScentGridContext` 保持成员可写。阅读规则很直接：`p*` 每出现一次，就多一层指针；`c@` / `v@` 修饰紧随其后的那一层；`a&` 取左值地址，表达式位置的 `p*` 解引用。数组传给指针形参时会退化为首元素地址，原始指针本身不携带长度，因此下标范围仍由调用方负责。
+`SG` 定义了两个不同权限的缓冲区指针：`rd` 是只读元素指针，`wr` 是可写元素指针。数组赋给字段时退化为首元素地址；之后经 `ro_ctx->rd`、`rw_ctx->wr` 取出指针，分别初始化 `src` 和 `dst`，形成“结构体字段 → 局部指针 → 下标读写”的完整链路。`p* c@ SG` 只让结构体的直接成员经该指针不可写；它不会递归改变指针字段所指对象的权限，所以 `rd` 自身声明为 `p* c@ u4`，`wr` 声明为 `p* u4`。`p*` 每出现一次就多一层指针；`c@` / `v@` 修饰紧随其后的那一层；`a&` 取左值地址，表达式位置的 `p*` 解引用。数组和指针本身不携带长度，下标范围由调用方负责。
 
 ### 完整平流更新示例
 
