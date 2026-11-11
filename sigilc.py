@@ -26,7 +26,7 @@ SIGIL_KEYWORDS = {
     'r;': 'KW_RETURN',   'b!': 'KW_BREAK',    'c^': 'KW_CONTINUE', 's?': 'KW_SWITCH',
     'k:': 'KW_CASE',     'd:': 'KW_DEFAULT',  's{': 'KW_STRUCT',   'u{': 'KW_UNION',
     'e{': 'KW_ENUM',     'f^': 'KW_FNPTR',    'p*': 'KW_PTR',      'a&': 'KW_ADDR',
-    'c@': 'KW_CONST',    'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
+    'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
 }
 
 SIGIL_OPERATORS = {
@@ -365,11 +365,13 @@ class TypeNode:
 class BaseType(TypeNode):
     c_name: str
     is_const: bool = False
+    is_volatile: bool = False
 
 @dataclass
 class PointerType(TypeNode):
     pointee: TypeNode
     is_const: bool = False
+    is_volatile: bool = False
 
 @dataclass
 class ArrayType(TypeNode):
@@ -382,6 +384,7 @@ class FunctionPointerType(TypeNode):
     param_decls: List[Tuple[TypeNode, Optional[str]]]
     return_type: TypeNode
     is_const: bool = False
+    is_volatile: bool = False
     is_variadic: bool = False
 
 def is_void_type(t: TypeNode) -> bool:
@@ -392,28 +395,50 @@ def is_const_qualified(t: TypeNode) -> bool:
         return t.is_const
     return False
 
-def strip_top_const(t: TypeNode) -> TypeNode:
+def is_volatile_qualified(t: TypeNode) -> bool:
+    if isinstance(t, (BaseType, PointerType, FunctionPointerType)):
+        return t.is_volatile
+    return False
+
+def strip_top_qualifiers(t: TypeNode) -> TypeNode:
     if isinstance(t, BaseType):
-        return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=False)
+        return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=False, is_volatile=False)
     if isinstance(t, PointerType):
-        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=False)
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=False, is_volatile=False)
     if isinstance(t, FunctionPointerType):
-        return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=False, is_variadic=t.is_variadic)
+        return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=False, is_volatile=False, is_variadic=t.is_variadic)
     return t
 
 def with_const(t: TypeNode) -> TypeNode:
     if isinstance(t, BaseType):
-        return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=True)
+        return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=True, is_volatile=t.is_volatile)
     if isinstance(t, PointerType):
-        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=True)
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=True, is_volatile=t.is_volatile)
     if isinstance(t, FunctionPointerType):
-        return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=True, is_variadic=t.is_variadic)
+        return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=True, is_volatile=t.is_volatile, is_variadic=t.is_variadic)
     if isinstance(t, ArrayType):
         return ArrayType(line=t.line, col=t.col, element_type=with_const(t.element_type), size_expr=t.size_expr, size_val=t.size_val)
     return t
 
+def with_volatile(t: TypeNode) -> TypeNode:
+    if isinstance(t, BaseType):
+        return BaseType(line=t.line, col=t.col, c_name=t.c_name, is_const=t.is_const, is_volatile=True)
+    if isinstance(t, PointerType):
+        return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=t.is_const, is_volatile=True)
+    if isinstance(t, FunctionPointerType):
+        return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=t.is_const, is_volatile=True, is_variadic=t.is_variadic)
+    if isinstance(t, ArrayType):
+        return ArrayType(line=t.line, col=t.col, element_type=with_volatile(t.element_type), size_expr=t.size_expr, size_val=t.size_val)
+    return t
+
+def qualifiers_are_assignable(destination: TypeNode, source: TypeNode) -> bool:
+    return not (
+        (is_const_qualified(source) and not is_const_qualified(destination))
+        or (is_volatile_qualified(source) and not is_volatile_qualified(destination))
+    )
+
 def decay_parameter_type(t: TypeNode) -> TypeNode:
-    """C99 6.7.5.3p7: 函数形参的最外层数组 T[N][M] 退化为指向子数组的指针 T (*)[M]，保留形参自身顶层 const 供函数体内部作用域检查"""
+    """C99 6.7.5.3p7: 函数形参最外层数组退化为指针；非数组形参保留顶层 const/volatile 供函数体检查"""
     if isinstance(t, ArrayType):
         return PointerType(line=t.line, col=t.col, pointee=t.element_type, is_const=False)
     return t
@@ -422,40 +447,38 @@ def types_equal(a: TypeNode, b: TypeNode) -> bool:
     if type(a) is not type(b):
         return False
     if isinstance(a, BaseType) and isinstance(b, BaseType):
-        return a.c_name == b.c_name and a.is_const == b.is_const
+        return a.c_name == b.c_name and a.is_const == b.is_const and a.is_volatile == b.is_volatile
     if isinstance(a, PointerType) and isinstance(b, PointerType):
-        return a.is_const == b.is_const and types_equal(a.pointee, b.pointee)
+        return a.is_const == b.is_const and a.is_volatile == b.is_volatile and types_equal(a.pointee, b.pointee)
     if isinstance(a, ArrayType) and isinstance(b, ArrayType):
         same_len = (a.size_val == b.size_val) if (a.size_val is not None and b.size_val is not None) else (emit_expr(a.size_expr) == emit_expr(b.size_expr))
         return types_equal(a.element_type, b.element_type) and same_len
     if isinstance(a, FunctionPointerType) and isinstance(b, FunctionPointerType):
-        if len(a.param_decls) != len(b.param_decls) or a.is_variadic != b.is_variadic:
+        if a.is_const != b.is_const or a.is_volatile != b.is_volatile or len(a.param_decls) != len(b.param_decls) or a.is_variadic != b.is_variadic:
             return False
-        if not types_equal(strip_top_const(a.return_type), strip_top_const(b.return_type)):
+        if not types_equal(strip_top_qualifiers(a.return_type), strip_top_qualifiers(b.return_type)):
             return False
-        return all(types_equal(strip_top_const(decay_parameter_type(pa[0])), strip_top_const(decay_parameter_type(pb[0]))) for pa, pb in zip(a.param_decls, b.param_decls))
+        return all(types_equal(strip_top_qualifiers(decay_parameter_type(pa[0])), strip_top_qualifiers(decay_parameter_type(pb[0]))) for pa, pb in zip(a.param_decls, b.param_decls))
     return False
 
 def types_compatible_for_assign(expected: TypeNode, actual: TypeNode) -> bool:
-    exp_clean = strip_top_const(expected)
-    act_clean = strip_top_const(actual)
+    exp_clean = strip_top_qualifiers(expected)
+    act_clean = strip_top_qualifiers(actual)
     if types_equal(exp_clean, act_clean):
         return True
     if isinstance(exp_clean, BaseType) and isinstance(act_clean, BaseType):
         if exp_clean.c_name in NUMERIC_C_TYPES and act_clean.c_name in NUMERIC_C_TYPES:
             return True
     if isinstance(exp_clean, PointerType) and isinstance(act_clean, ArrayType):
-        if types_equal(strip_top_const(exp_clean.pointee), strip_top_const(act_clean.element_type)):
-            if not is_const_qualified(act_clean.element_type) or is_const_qualified(exp_clean.pointee):
+        if types_equal(strip_top_qualifiers(exp_clean.pointee), strip_top_qualifiers(act_clean.element_type)):
+            if qualifiers_are_assignable(exp_clean.pointee, act_clean.element_type):
                 return True
     if isinstance(exp_clean, PointerType) and isinstance(act_clean, PointerType):
         if is_void_type(exp_clean.pointee) or is_void_type(act_clean.pointee):
-            if not is_const_qualified(act_clean.pointee) or is_const_qualified(exp_clean.pointee):
+            if qualifiers_are_assignable(exp_clean.pointee, act_clean.pointee):
                 return True
-        if types_equal(strip_top_const(exp_clean.pointee), strip_top_const(act_clean.pointee)):
-            if is_const_qualified(act_clean.pointee) and not is_const_qualified(exp_clean.pointee):
-                return False
-            return True
+        if types_equal(strip_top_qualifiers(exp_clean.pointee), strip_top_qualifiers(act_clean.pointee)):
+            return qualifiers_are_assignable(exp_clean.pointee, act_clean.pointee)
     return False
 
 def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
@@ -463,13 +486,12 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
     curr = t
     while True:
         if isinstance(curr, BaseType):
-            prefix = "const " if curr.is_const else ""
+            qualifiers = [q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled]
+            prefix = " ".join(qualifiers) + (" " if qualifiers else "")
             return f"{prefix}{curr.c_name}" + (f" {inner}" if inner else "")
         elif isinstance(curr, PointerType):
-            if curr.is_const:
-                ptr_str = f"* const {inner}" if inner else "* const"
-            else:
-                ptr_str = f"*{inner}"
+            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
+            ptr_str = f"* {qualifiers} {inner}" if qualifiers and inner else (f"* {qualifiers}" if qualifiers else f"*{inner}")
             if isinstance(curr.pointee, (ArrayType, FunctionPointerType)):
                 inner = f"({ptr_str.strip()})"
             else:
@@ -482,7 +504,8 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
         elif isinstance(curr, FunctionPointerType):
             params_c = [format_c_declarator(pt, pname or "") for pt, pname in curr.param_decls]
             param_list_str = ", ".join(params_c) if params_c else "void"
-            qual = "const " if curr.is_const else ""
+            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
+            qual = f"{qualifiers} " if qualifiers else ""
             fn_inner = f"(*{qual}{inner})({param_list_str})"
             return format_c_declarator(curr.return_type, fn_inner)
         else:
@@ -694,12 +717,12 @@ class Parser:
 
     def _is_type_start_at(self, start_idx: int) -> bool:
         idx = start_idx
-        while idx < len(self.tokens) and self.tokens[idx].kind in ('KW_PTR', 'KW_CONST'):
+        while idx < len(self.tokens) and self.tokens[idx].kind in ('KW_PTR', 'KW_CONST', 'KW_VOLATILE'):
             idx += 1
         if idx >= len(self.tokens):
             return False
         t = self.tokens[idx]
-        if t.kind == 'LPAREN' and idx + 1 < len(self.tokens) and self.tokens[idx + 1].kind in ('KW_PTR', 'KW_CONST', 'KW_FNPTR'):
+        if t.kind == 'LPAREN' and idx + 1 < len(self.tokens) and self.tokens[idx + 1].kind in ('KW_PTR', 'KW_CONST', 'KW_VOLATILE', 'KW_FNPTR'):
             return self._is_type_start_at(idx + 1)
         return t.kind in ('TYPE_INT', 'TYPE_VOID', 'TYPE_BOOL', 'KW_FNPTR') or (
             t.kind == 'IDENT' and t.value in self.user_types
@@ -914,11 +937,13 @@ class Parser:
                     raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: '->' applied to non-struct pointer")
                 struct_name = base_t.pointee.c_name
                 parent_is_const = base_t.pointee.is_const
+                parent_is_volatile = base_t.pointee.is_volatile
             else:
                 if not isinstance(base_t, BaseType):
                     raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: '.' applied to non-struct type")
                 struct_name = base_t.c_name
                 parent_is_const = base_t.is_const
+                parent_is_volatile = base_t.is_volatile
 
             if struct_name not in self.struct_fields:
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Type '{struct_name}' has no member fields")
@@ -926,7 +951,11 @@ class Parser:
             if expr.field not in f_map:
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: '{struct_name}' has no member named '{expr.field}'")
             ft = f_map[expr.field]
-            return with_const(ft) if parent_is_const else ft
+            if parent_is_const:
+                ft = with_const(ft)
+            if parent_is_volatile:
+                ft = with_volatile(ft)
+            return ft
 
         if isinstance(expr, CallExpr):
             if isinstance(expr.callee, IdentExpr) and expr.callee.name in self.func_sigs:
@@ -954,9 +983,9 @@ class Parser:
                 if self._is_numeric_type(lt) and self._is_numeric_type(rt):
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
                 if isinstance(lt, PointerType) and isinstance(rt, PointerType):
-                    if is_void_type(lt.pointee) or is_void_type(rt.pointee) or types_equal(strip_top_const(lt.pointee), strip_top_const(rt.pointee)):
+                    if is_void_type(lt.pointee) or is_void_type(rt.pointee) or types_equal(strip_top_qualifiers(lt.pointee), strip_top_qualifiers(rt.pointee)):
                         return BaseType(line=expr.line, col=expr.col, c_name='bool')
-                if isinstance(lt, FunctionPointerType) and isinstance(rt, FunctionPointerType) and types_equal(strip_top_const(lt), strip_top_const(rt)):
+                if isinstance(lt, FunctionPointerType) and isinstance(rt, FunctionPointerType) and types_equal(strip_top_qualifiers(lt), strip_top_qualifiers(rt)):
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
                 if (isinstance(lt, (PointerType, FunctionPointerType)) and self._is_null_ptr_const(expr.right, rt)) or (
                     isinstance(rt, (PointerType, FunctionPointerType)) and self._is_null_ptr_const(expr.left, lt)
@@ -966,7 +995,7 @@ class Parser:
             if op in ('<', '<=', '>', '>='):
                 if self._is_numeric_type(lt) and self._is_numeric_type(rt):
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
-                if isinstance(lt, PointerType) and isinstance(rt, PointerType) and not is_void_type(lt.pointee) and types_equal(strip_top_const(lt.pointee), strip_top_const(rt.pointee)):
+                if isinstance(lt, PointerType) and isinstance(rt, PointerType) and not is_void_type(lt.pointee) and types_equal(strip_top_qualifiers(lt.pointee), strip_top_qualifiers(rt.pointee)):
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Invalid operands to relational operator '{op}'")
             if op == '+':
@@ -989,7 +1018,7 @@ class Parser:
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Pointer subtraction requires pointer to complete object type")
                     return lt
                 if isinstance(lt, PointerType) and isinstance(rt, PointerType):
-                    if not self._is_complete_object_type(lt.pointee) or not types_equal(strip_top_const(lt.pointee), strip_top_const(rt.pointee)):
+                    if not self._is_complete_object_type(lt.pointee) or not types_equal(strip_top_qualifiers(lt.pointee), strip_top_qualifiers(rt.pointee)):
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Pointer subtraction requires pointers to compatible complete object types")
                     return BaseType(line=expr.line, col=expr.col, c_name='ptrdiff_t')
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Invalid operands to binary '-'")
@@ -1094,7 +1123,7 @@ class Parser:
             return True
         if self._is_numeric_type(expected) and self._is_numeric_type(actual):
             return True
-        if isinstance(strip_top_const(expected), (PointerType, FunctionPointerType)) and self._is_null_ptr_const(rhs_expr, actual):
+        if isinstance(strip_top_qualifiers(expected), (PointerType, FunctionPointerType)) and self._is_null_ptr_const(rhs_expr, actual):
             return True
         return False
 
@@ -1277,11 +1306,16 @@ class Parser:
         if isinstance(t_then, PointerType) and isinstance(t_else, PointerType):
             p1, p2 = t_then.pointee, t_else.pointee
             merged_const = is_const_qualified(p1) or is_const_qualified(p2)
-            if types_equal(strip_top_const(p1), strip_top_const(p2)):
-                pt = with_const(p1) if merged_const else strip_top_const(p1)
+            merged_volatile = is_volatile_qualified(p1) or is_volatile_qualified(p2)
+            if types_equal(strip_top_qualifiers(p1), strip_top_qualifiers(p2)):
+                pt = strip_top_qualifiers(p1)
+                if merged_const:
+                    pt = with_const(pt)
+                if merged_volatile:
+                    pt = with_volatile(pt)
                 return PointerType(line=expr.line, col=expr.col, pointee=pt)
             if is_void_type(p1) or is_void_type(p2):
-                v_base = BaseType(line=expr.line, col=expr.col, c_name='void', is_const=merged_const)
+                v_base = BaseType(line=expr.line, col=expr.col, c_name='void', is_const=merged_const, is_volatile=merged_volatile)
                 return PointerType(line=expr.line, col=expr.col, pointee=v_base)
 
         try:
@@ -1294,28 +1328,36 @@ class Parser:
             else_zero = False
 
         if isinstance(t_then, (PointerType, FunctionPointerType)) and else_zero:
-            return strip_top_const(t_then)
+            return strip_top_qualifiers(t_then)
         if isinstance(t_else, (PointerType, FunctionPointerType)) and then_zero:
-            return strip_top_const(t_else)
+            return strip_top_qualifiers(t_else)
 
-        if types_equal(strip_top_const(t_then), strip_top_const(t_else)):
+        if types_equal(strip_top_qualifiers(t_then), strip_top_qualifiers(t_else)):
             if is_const_qualified(t_then) or is_const_qualified(t_else):
-                return with_const(t_then)
-            return strip_top_const(t_then)
+                result_t = with_const(strip_top_qualifiers(t_then))
+            else:
+                result_t = strip_top_qualifiers(t_then)
+            if is_volatile_qualified(t_then) or is_volatile_qualified(t_else):
+                result_t = with_volatile(result_t)
+            return result_t
 
         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Incompatible branch types in ternary conditional expression")
 
     def parse_type(self) -> TypeNode:
         tok = self._cur()
         is_const = False
-        if tok.kind == 'KW_CONST':
-            self._eat('KW_CONST')
-            is_const = True
-            tok = self._cur()
+        is_volatile = False
+        while self._cur().kind in ('KW_CONST', 'KW_VOLATILE'):
+            qualifier_tok = self._eat()
+            if qualifier_tok.kind == 'KW_CONST':
+                is_const = True
+            else:
+                is_volatile = True
+        tok = self._cur()
 
         if tok.kind == 'KW_PTR':
             ptr_tok = self._eat('KW_PTR')
-            base_node: TypeNode = PointerType(line=ptr_tok.line, col=ptr_tok.col, pointee=self.parse_type(), is_const=is_const)
+            base_node: TypeNode = PointerType(line=ptr_tok.line, col=ptr_tok.col, pointee=self.parse_type(), is_const=is_const, is_volatile=is_volatile)
         elif tok.kind == 'KW_FNPTR':
             fn_tok = self._eat('KW_FNPTR')
             self._eat('LPAREN')
@@ -1344,20 +1386,22 @@ class Parser:
             ret_type = self.parse_type()
             if isinstance(ret_type, ArrayType):
                 raise SemanticError(f"{self.filename}:{fn_tok.line}:{fn_tok.col}: Function cannot return array type")
-            base_node = FunctionPointerType(line=fn_tok.line, col=fn_tok.col, param_decls=params, return_type=ret_type, is_const=is_const)
+            base_node = FunctionPointerType(line=fn_tok.line, col=fn_tok.col, param_decls=params, return_type=ret_type, is_const=is_const, is_volatile=is_volatile)
         elif tok.kind in ('TYPE_INT', 'TYPE_VOID', 'TYPE_BOOL'):
             t_tok = self._eat()
             c_map = {**BASIC_TYPES, 'v.': 'void', 'b.': 'bool'}
-            base_node = BaseType(line=t_tok.line, col=t_tok.col, c_name=c_map[t_tok.value], is_const=is_const)
+            base_node = BaseType(line=t_tok.line, col=t_tok.col, c_name=c_map[t_tok.value], is_const=is_const, is_volatile=is_volatile)
         elif tok.kind == 'IDENT' and tok.value in self.user_types:
             t_tok = self._eat('IDENT')
-            base_node = BaseType(line=t_tok.line, col=t_tok.col, c_name=t_tok.value, is_const=is_const)
+            base_node = BaseType(line=t_tok.line, col=t_tok.col, c_name=t_tok.value, is_const=is_const, is_volatile=is_volatile)
         elif tok.kind == 'LPAREN':
             self._eat('LPAREN')
             base_node = self.parse_type()
             self._eat('RPAREN')
             if is_const:
                 base_node = with_const(base_node)
+            if is_volatile:
+                base_node = with_volatile(base_node)
         else:
             raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Expected type specifier, got '{tok.value}'")
 
@@ -1517,7 +1561,7 @@ class Parser:
                 if name_tok.value not in self.func_sigs:
                     raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: '{name_tok.value}' redeclared as different kind of symbol")
                 old_params, old_ret = self.func_sigs[name_tok.value]
-                if len(old_params) != len(param_types) or not types_equal(strip_top_const(old_ret), strip_top_const(decl_type)) or not all(types_equal(strip_top_const(a), strip_top_const(b)) for a, b in zip(old_params, param_types)):
+                if len(old_params) != len(param_types) or not types_equal(strip_top_qualifiers(old_ret), strip_top_qualifiers(decl_type)) or not all(types_equal(strip_top_qualifiers(a), strip_top_qualifiers(b)) for a, b in zip(old_params, param_types)):
                     raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Conflicting types for function '{name_tok.value}'")
 
             fn_ptr_equiv = FunctionPointerType(line=name_tok.line, col=name_tok.col, param_decls=[(pt, pn) for pt, pn in params], return_type=decl_type)
