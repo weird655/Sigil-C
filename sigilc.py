@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Sigil-C v3.0.0 Compiler
+Sigil-C v3.1.0 Compiler
 Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer -> C99 Codegen
 """
 
 import sys
 import os
+import argparse
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict, Set
 
@@ -28,6 +29,7 @@ SIGIL_KEYWORDS = {
     'e{': 'KW_ENUM',     'o!': 'KW_OBJECT',   'f^': 'KW_FNPTR',    'p*': 'KW_PTR',
     'a&': 'KW_ADDR',
     'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
+    'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',
 }
 
 SIGIL_OPERATORS = {
@@ -586,6 +588,7 @@ class VarDeclStmt(StmtNode):
     var_type: TypeNode
     name: str
     init_expr: Optional[ExprNode] = None
+    is_static: bool = False
 
 @dataclass
 class AssignStmt(StmtNode):
@@ -657,6 +660,12 @@ class FuncDefNode(StmtNode):
     name: str
     params: List[Tuple[TypeNode, str]]
     body: Optional[BlockStmt]
+    is_static: bool = False
+
+@dataclass
+class SizeofExpr(ExprNode):
+    target_type: Optional[TypeNode]
+    operand: Optional[ExprNode]
 
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
@@ -665,6 +674,10 @@ def emit_expr(e: ExprNode) -> str:
         return e.name
     if isinstance(e, CastExpr):
         return f"(({format_c_declarator(e.target_type)})({emit_expr(e.operand)}))"
+    if isinstance(e, SizeofExpr):
+        if e.target_type is not None:
+            return f"sizeof({format_c_declarator(e.target_type)})"
+        return f"sizeof({emit_expr(e.operand)})"
     if isinstance(e, UnaryExpr):
         return f"({e.op}{emit_expr(e.operand)})"
     if isinstance(e, BinaryExpr):
@@ -739,6 +752,18 @@ class Parser:
 
     def _is_type_start(self, tok: Token) -> bool:
         return self._is_type_start_at(self.pos)
+
+    def _sizeof_takes_type(self) -> bool:
+        """z? 后面接的是类型还是表达式。
+
+        只有"确定是类型"的前缀才按类型解析：内置类型、指针/限定符前缀、已知用户类型。
+        其余一律按表达式解析——这样 z? (p* src) 稳定读作"解引用后取大小"，
+        而 z? p* u4 稳定读作"取指针类型大小"，避免 p* 既是类型前缀又是解引用运算符的歧义。
+        """
+        t = self._cur()
+        if t.kind in ('TYPE_INT', 'TYPE_VOID', 'TYPE_BOOL', 'KW_FNPTR', 'KW_PTR', 'KW_CONST', 'KW_VOLATILE'):
+            return True
+        return t.kind == 'IDENT' and t.value in self.user_types
 
     def _lookup_symbol(self, name: str, tok: Token) -> TypeNode:
         for scope in reversed(self.scopes):
@@ -895,6 +920,10 @@ class Parser:
             if (dst_is_float and isinstance(src_t, (PointerType, FunctionPointerType))) or (src_is_float and isinstance(dst_t, (PointerType, FunctionPointerType))):
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot cast between floating-point and pointer type")
             return dst_t
+
+        if isinstance(expr, SizeofExpr):
+            # sizeof 的结果类型是 size_t（已内置为整型，可与其它整型互相赋值）
+            return BaseType(line=expr.line, col=expr.col, c_name='size_t')
 
         if isinstance(expr, UnaryExpr):
             sub_t = self._infer_expr_type(expr.operand)
@@ -1445,6 +1474,16 @@ class Parser:
             elif self._cur().kind == 'KW_OBJECT':
                 object_tok = self._eat('KW_OBJECT')
                 top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok))
+            elif self._cur().kind == 'KW_STATIC':
+                self._eat('KW_STATIC')
+                if self._cur().kind == 'KW_OBJECT':
+                    object_tok = self._eat('KW_OBJECT')
+                    top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, is_static=True))
+                elif self._is_type_start(self._cur()):
+                    top_nodes.append(self.parse_top_decl_or_func(is_static=True))
+                else:
+                    tok = self._cur()
+                    raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 's@' must be followed by a type, got '{tok.value}'")
             elif self._is_type_start(self._cur()):
                 top_nodes.append(self.parse_top_decl_or_func())
             else:
@@ -1535,7 +1574,8 @@ class Parser:
         return EnumDefNode(line=kw_tok.line, col=kw_tok.col, name=name_tok.value, items=items)
 
     def _parse_object_decl_after_name(self, decl_type: TypeNode, name_tok: Token,
-                                      global_scope: bool = False, consume_semi: bool = True) -> VarDeclStmt:
+                                      global_scope: bool = False, consume_semi: bool = True,
+                                      is_static: bool = False) -> VarDeclStmt:
         self._validate_non_void_var(decl_type, name_tok)
         self._register_symbol(name_tok.value, decl_type, name_tok)
         init_expr = None
@@ -1550,9 +1590,9 @@ class Parser:
         if consume_semi:
             self._eat('SEMI')
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
-                           name=name_tok.value, init_expr=init_expr)
+                           name=name_tok.value, init_expr=init_expr, is_static=is_static)
 
-    def parse_top_decl_or_func(self, object_marker: Optional[Token] = None) -> StmtNode:
+    def parse_top_decl_or_func(self, object_marker: Optional[Token] = None, is_static: bool = False) -> StmtNode:
         decl_type = self.parse_type()
         name_tok = self._eat('IDENT')
 
@@ -1602,7 +1642,7 @@ class Parser:
 
             if self._cur().kind == 'SEMI':
                 self._eat('SEMI')
-                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None)
+                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None, is_static=is_static)
 
             if any(not pname for _, pname in params):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function definition parameters must have names")
@@ -1618,11 +1658,11 @@ class Parser:
             self.current_func_ret = prev_ret
             if not is_void_type(decl_type) and name_tok.value != 'main' and self._can_fall_through(body):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
-            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body)
+            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static)
 
         if object_marker is None:
             raise ParseError(f"{self.filename}:{name_tok.line}:{name_tok.col}: File-scope object declarations must begin with 'o!'")
-        return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True)
+        return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True, is_static=is_static)
 
     def parse_block(self, create_new_scope: bool = True) -> BlockStmt:
         lb = self._eat('LBRACE')
@@ -1919,6 +1959,21 @@ class Parser:
 
     def parse_unary(self) -> ExprNode:
         tok = self._cur()
+        # z? 取类型或表达式的大小，结果为 size_t
+        if tok.kind == 'KW_SIZEOF':
+            self._eat('KW_SIZEOF')
+            if self._sizeof_takes_type():
+                target_t = self.parse_type()
+                if is_void_type(target_t):
+                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
+                if not self._is_complete_object_type(target_t):
+                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' requires a complete object type")
+                return SizeofExpr(line=tok.line, col=tok.col, target_type=target_t, operand=None)
+            operand = self.parse_unary()
+            if is_void_type(self._infer_expr_type(operand)):
+                raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
+            return SizeofExpr(line=tok.line, col=tok.col, target_type=None, operand=operand)
+
         # 支持显式类型转换表达式 (Type)expr，如 (u4)w * (u4)h
         if tok.kind == 'LPAREN' and self._is_type_start_at(self.pos + 1):
             self._eat('LPAREN')
@@ -2014,8 +2069,7 @@ class Parser:
 # 4. C99 Code Generator
 # ============================================================================
 
-C99_HEADER = """/* Generated by Sigil-C v3.0.0 AST Compiler. DO NOT EDIT. */
-#include <stdint.h>
+C99_HEADER_BODY = """#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -2042,18 +2096,34 @@ C99_HEADER = """/* Generated by Sigil-C v3.0.0 AST Compiler. DO NOT EDIT. */
 
 """
 
+C99_HEADER = "/* Generated by Sigil-C v3.1.0 AST Compiler. DO NOT EDIT. */\n" + C99_HEADER_BODY
+
 class CodeGenerator:
-    def __init__(self, filename: str = "input.sigil"):
+    def __init__(self, filename: str = "input.sigil", header_mode: bool = False):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
-        self.lines: List[str] = [C99_HEADER]
+        self.header_mode = header_mode
+        self.lines: List[str] = []
 
     def _emit(self, code: str, line: int, indent: int = 0):
         pad = "    " * indent
-        self.lines.append(f'#line {line} "{self.safe_filename}"\n{pad}{code}\n')
+        if self.header_mode:
+            self.lines.append(f"{pad}{code}\n")
+        else:
+            self.lines.append(f'#line {line} "{self.safe_filename}"\n{pad}{code}\n')
 
     def generate(self, nodes: List[StmtNode]) -> str:
+        self.lines.append(C99_HEADER)
         for node in nodes:
             self.gen_top(node)
+        return "".join(self.lines)
+
+    def generate_header(self, nodes: List[StmtNode], guard: str) -> str:
+        self.lines.append(f"/* Public interface generated by Sigil-C from {self.safe_filename}. DO NOT EDIT. */\n")
+        self.lines.append(f"#ifndef {guard}\n#define {guard}\n\n")
+        self.lines.append(C99_HEADER_BODY)
+        for node in nodes:
+            self.gen_top(node)
+        self.lines.append(f"\n#endif /* {guard} */\n")
         return "".join(self.lines)
 
     def gen_top(self, node: StmtNode):
@@ -2093,15 +2163,28 @@ class CodeGenerator:
         elif isinstance(node, FuncDefNode):
             params_c = [format_c_declarator(pt, pname) for pt, pname in node.params]
             fn_sig = format_c_declarator(node.return_type, f"{node.name}({', '.join(params_c) if params_c else 'void'})")
+            if self.header_mode:
+                if node.body is not None and not node.is_static:
+                    self._emit(f"{fn_sig};", node.line)
+                return
+            prefix = "static " if node.is_static else ""
             if node.body is None:
-                self._emit(f"{fn_sig};", node.line)
+                self._emit(f"{prefix}{fn_sig};", node.line)
             else:
-                self._emit(f"{fn_sig} {{", node.line)
+                self._emit(f"{prefix}{fn_sig} {{", node.line)
                 for s in node.body.stmts:
                     self.gen_stmt(s, indent=1)
                 self._emit("}", node.line)
         elif isinstance(node, VarDeclStmt):
-            self.gen_stmt(node, indent=0)
+            if self.header_mode:
+                if not node.is_static:
+                    self._emit(f"extern {format_c_declarator(node.var_type, node.name)};", node.line)
+                return
+            if node.is_static:
+                decl = format_c_declarator(node.var_type, node.name)
+                self._emit(f"static {decl}{f' = {emit_expr(node.init_expr)}' if node.init_expr else ''};", node.line, indent=0)
+            else:
+                self.gen_stmt(node, indent=0)
 
     def _format_inline_stmt(self, s: Optional[StmtNode]) -> str:
         if s is None:
@@ -2178,19 +2261,63 @@ def compile_source(src: str, filename: str = "input.sigil") -> str:
     ast = Parser(tokens, filename).parse_program()
     return CodeGenerator(filename).generate(ast)
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 sigilc.py <input.sigil> [-o output.c | output.c]")
-        sys.exit(1)
-    in_path = sys.argv[1]
-    if len(sys.argv) >= 4 and sys.argv[2] == "-o":
-        out_path = sys.argv[3]
-    elif len(sys.argv) > 2:
-        out_path = sys.argv[2]
-    else:
-        out_path = os.path.splitext(in_path)[0] + ".c"
+def check_source(src: str, filename: str = "input.sigil") -> None:
+    """词法 + 语法 + 静态语义检查，不产生任何输出。"""
+    tokens = Lexer(src, filename).tokenize()
+    Parser(tokens, filename).parse_program()
+
+def _header_guard(header_name: str) -> str:
+    base = os.path.basename(header_name).upper()
+    return "SIGIL_" + "".join(ch if ch.isalnum() else "_" for ch in base)
+
+def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h") -> str:
+    """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
+    tokens = Lexer(src, filename).tokenize()
+    ast = Parser(tokens, filename).parse_program()
+    return CodeGenerator(filename, header_mode=True).generate_header(ast, _header_guard(header_name))
+
+def main(argv: Optional[List[str]] = None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="sigilc.py",
+        description="Sigil-C v3.1.0 — transpile .sigil sources to ISO C99",
+    )
+    ap.add_argument("input", help="input .sigil source file")
+    ap.add_argument("output", nargs="?", help="output .c path (default: <input>.c)")
+    ap.add_argument("-o", "--output", dest="output_opt", metavar="PATH", help="output .c path")
+    ap.add_argument("--emit-header", action="store_true",
+                    help="also emit a C header next to the output (same basename, .h)")
+    ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
+    ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
+    ap.add_argument("--version", action="version", version="Sigil-C 3.1.0")
+    args = ap.parse_args(argv)
+
+    in_path = args.input
+    out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".c")
     with open(in_path, "r", encoding="utf-8") as f:
-        c_src = compile_source(f.read(), os.path.basename(in_path))
+        src = f.read()
+    fname = os.path.basename(in_path)
+
+    if args.check:
+        check_source(src, fname)
+        print(f"Checked {in_path}: OK")
+        return 0
+
+    c_src = compile_source(src, fname)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(c_src)
     print(f"Compiled {in_path} -> {out_path}")
+
+    header_path = args.header or (os.path.splitext(out_path)[0] + ".h" if args.emit_header else None)
+    if header_path:
+        h_src = compile_header(src, fname, os.path.basename(header_path))
+        with open(header_path, "w", encoding="utf-8") as f:
+            f.write(h_src)
+        print(f"Header   {header_path}")
+    return 0
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (LexerError, ParseError, SemanticError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)

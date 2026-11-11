@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 from sigilc import (
-    Lexer, Parser, CodeGenerator, compile_source,
+    Lexer, Parser, CodeGenerator, compile_source, compile_header,
     LexerError, ParseError, SemanticError, format_c_declarator
 )
 
@@ -39,7 +39,7 @@ def run_test_matrix():
 
     gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
     uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
-    print(f"=== SIGIL-C v3.0.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v3.1.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -344,12 +344,102 @@ i4 main(v.) {
         assert out == "dot = 56"
 
     assert_ok("5 & 6. Codegen + GCC Integration", "Compile & execute README minimal.sigil with gcc -std=c99 -Wall -Wextra -Werror -pedantic", test_readme_minimal_example_gcc)
+    # Layer 7: v3.1.0 additions — z? / s@ / header emission
+    def test_sizeof_forms():
+        src = """
+        s{ Vec2 { i4 x; i4 y; };
+        u4 f(p* u4 p) {
+            o! u4[8] a;
+            o! u4 n m, z? u4;
+            o! u4 m2 m, z? p* u4;
+            o! u4 k m, z? Vec2;
+            o! u4 arr m, z? u4[3];
+            o! u4 e m, z? n;
+            o! u4 d m, z? (p* p);
+            o! u4 len m, z? a / z? a[0];
+            r; n + m2 + k + arr + e + d + len;
+        }
+        """
+        c = compile_source(src, "sizeof.sigil")
+        assert "sizeof(uint32_t)" in c
+        assert "sizeof(uint32_t *)" in c
+        assert "sizeof(Vec2)" in c
+        assert "sizeof(uint32_t [3])" in c
+        assert "sizeof((*p))" in c
+        assert "(sizeof(a) / sizeof(a[0]))" in c
+
+    assert_ok("7. v3.1", "z? takes builtin/pointer/array/user types and expressions, result is size_t", test_sizeof_forms)
+    assert_raises("7. v3.1", "Reject z? applied to void", SemanticError, "u4 f(v.) { r; z? v.; }")
+    assert_raises("7. v3.1", "Reject z? on incomplete struct type", SemanticError, "s{ Fwd; u4 f(v.) { r; z? Fwd; }")
+
+    def test_static_and_header():
+        src = """
+        s{ Vec2 { i4 x; i4 y; };
+        e{ Mode { MODE_A m, 0 };
+        s@ o! u4 hidden_counter m, 0;
+        o! u4 shown_counter m, 0;
+        s@ i4 hidden_helper(i4 v) { hidden_counter m+ 1; r; v * 2; }
+        i4 api_fn(i4 v) { r; hidden_helper(v) + 1; }
+        u4 api_size(v.) { r; z? Vec2; }
+        """
+        c = compile_source(src, "api.sigil")
+        assert "static uint32_t hidden_counter = 0;" in c
+        assert "static int32_t hidden_helper(int32_t v) {" in c
+        assert "uint32_t shown_counter = 0;" in c
+        h = compile_header(src, "api.sigil", "api.h")
+        assert "#ifndef SIGIL_API_H" in h
+        assert "int32_t api_fn(int32_t v);" in h
+        assert "uint32_t api_size(void);" in h
+        assert "extern uint32_t shown_counter;" in h
+        assert "hidden_helper" not in h and "hidden_counter" not in h
+        assert "struct Vec2 {" in h and "MODE_A" in h
+
+    assert_ok("7. v3.1", "s@ emits static and internal symbols are excluded from the header", test_static_and_header)
+
+    def test_header_end_to_end():
+        sigil = """
+        s{ Vec2 { i4 x; i4 y; };
+        s@ o! u4 calls m, 0;
+        i4 dot(p* c@ Vec2 a, p* c@ Vec2 b) {
+            calls m+ 1;
+            r; (a->x * b->x) + (a->y * b->y);
+        }
+        u4 vec_bytes(v.) { r; z? Vec2; }
+        u4 call_count(v.) { r; calls; }
+        """
+        with open("api.sigil", "w") as f:
+            f.write(sigil)
+        with open("api.c", "w") as f:
+            f.write(compile_source(sigil, "api.sigil"))
+        with open("api.h", "w") as f:
+            f.write(compile_header(sigil, "api.sigil", "api.h"))
+        with open("consumer.c", "w") as f:
+            f.write(
+                '#include <stdio.h>\n'
+                '#include "api.h"\n'
+                'int main(void) {\n'
+                '    Vec2 a = { 3, 4 };\n'
+                '    Vec2 b = { 10, 2 };\n'
+                '    int d = dot(&a, &b);\n'
+                '    printf("%d %u %u\\n", d, (unsigned)vec_bytes(), (unsigned)call_count());\n'
+                '    return 0;\n'
+                '}\n'
+            )
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "api.c", "consumer.c", "-o", "api_bin"],
+            check=True
+        )
+        out = subprocess.run(["./api_bin"], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == "38 8 1", out
+
+    assert_ok("7. v3.1", "Generated .h consumed by an independent .c file: compile, link, run", test_header_end_to_end)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 6-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 7-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

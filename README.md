@@ -166,13 +166,45 @@ python3 sigilc.py golden.sigil -o golden.c
 # 2. 使用 GCC C99 严格模式编译
 gcc -std=c99 -O2 -Wall -Wextra -Werror -pedantic golden.c -c
 
-# 3. 运行 6 层 65 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
+# 3. 运行 7 层 70 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
 python3 test_matrix.py
 ```
 
+### 作为可链接模块使用（v3.1.0）
+
+Sigil-C 生成的 `.c` 可以被普通 C 代码直接链接。加 `--emit-header` 会同时产出公共接口头文件：
+
+```bash
+# 生成 vec.c 与 vec.h（vec.h 只包含公开符号，s@ 修饰的内部符号被排除）
+python3 sigilc.py vec.sigil -o vec.c --emit-header
+
+# 普通 C 文件 include 它即可调用
+gcc -std=c99 -Wall -Wextra -Werror -pedantic vec.c consumer.c -o demo
+```
+
+```c
+#include "vec.h"           /* 类型定义 + 函数原型 + extern 全局，全自动生成 */
+
+int main(void) {
+    Vec2 a = { 3, 4 }, b = { 10, 2 };
+    int d = dot(&a, &b);   /* Sigil-C 实现的函数 */
+    return d == 38 ? 0 : 1;
+}
+```
+
+其他命令行选项：
+
+| 选项 | 作用 |
+|---|---|
+| `-o, --output PATH` | 输出 `.c` 路径 |
+| `--emit-header` | 同时生成同名 `.h` |
+| `--header PATH` | 指定头文件路径（隐含 `--emit-header`） |
+| `--check` | 只做词法/语法/语义检查，不写任何文件 |
+| `--version` / `-h` | 版本与帮助 |
+
 ## 最小可运行示例
 
-以下示例（已纳入 `test_matrix.py` 第 65 项端到端测试）按原 C 模板直接调用 `<stdio.h>` 的 `printf`，展示结构体声明、指向只读结构体的指针形参（`p* c@ Vec2`）、单字母结构体成员访问（`v.x`）与 `(v.)` 空参列表的自动区分，以及**逻辑与（`&.` → `&&`）**和**按位与（`&^` → `&`）**的明确区分：
+以下示例（已纳入 `test_matrix.py` 端到端测试）按原 C 模板直接调用 `<stdio.h>` 的 `printf`，展示结构体声明、指向只读结构体的指针形参（`p* c@ Vec2`）、单字母结构体成员访问（`v.x`）与 `(v.)` 空参列表的自动区分，以及**逻辑与（`&.` → `&&`）**和**按位与（`&^` → `&`）**的明确区分：
 
 **Sigil-C 源码（`minimal.sigil`）**：
 
@@ -242,5 +274,5 @@ int32_t main(void) {
 
 * **`README.md`**：项目介绍、安装使用与原生 C 模板最小可运行示例。
 * **`SYNTAX.md`**：印记符号速查表、前缀类型绑定规则、运算符静态语义与语言子集边界。
-* **`CHANGELOG.md`**：版本演进记录、31→65 项测试覆盖增量明细与平流内核验证参数说明。
-* **`sigilc.py` / `test_matrix.py`**：转译器源码与 65 项自动化验证脚本。
+* **`CHANGELOG.md`**：版本演进记录、31→70 项测试覆盖增量明细与平流内核验证参数说明。
+* **`sigilc.py` / `test_matrix.py`**：转译器源码与 70 项自动化验证脚本。

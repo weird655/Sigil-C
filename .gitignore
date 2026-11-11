@@ -6,6 +6,12 @@ test_runner.exe
 minimal.c
 minimal_bin
 minimal_bin.exe
+api.sigil
+api.c
+api.h
+api_bin
+api_bin.exe
+consumer.c
 
 # 编译产物
 *.o
