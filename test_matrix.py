@@ -28,7 +28,7 @@ def run_test_matrix():
 
     gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
     uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
-    print(f"=== SIGIL-C v2.0.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v3.0.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -54,7 +54,7 @@ def run_test_matrix():
         src = """
         e{ Mode { M_A m, 0xFE, M_B m, (17 % 5) + (10 / -3) };
         i4 test_fn(i4 a, p* i4 out_ptr) {
-            i4 x m, 0xFE;
+            o! i4 x m, 0xFE;
             p* out_ptr m, (i4)x;
             s? (a) {
                 k: 0xFE: { x m+ 1; b!; }
@@ -74,15 +74,15 @@ def run_test_matrix():
         u{ WordUnion a!16 { u4 u; i4 i; };
         i4 helper(v.) { r; 0b1010; }
         i4 test_ext(p* i4 p, p* i4 q, f^(v.) -> i4 cb) {
-            ptrdiff_t diff m, p - q;
-            p* i4 null_p m, 0;
-            WordUnion w;
+            o! ptrdiff_t diff m, p - q;
+            o! p* i4 null_p m, 0;
+            o! WordUnion w;
             w.u m, (u4)cb();
             s? ((i4)diff) {
                 k: '\n': { r; 1; }
                 k: '\101': { r; 2; }
-                k: 077: { i4 local_tmp m, 10; r; local_tmp; }
-                k: (0 &. (1 / 0)): { i4 local_tmp m, 20; r; local_tmp; }
+                k: 077: { o! i4 local_tmp m, 10; r; local_tmp; }
+                k: (0 &. (1 / 0)): { o! i4 local_tmp m, 20; r; local_tmp; }
                 d: { i? (null_p =? 0) { r; (i4)w.u; } }
             }
             r; 0;
@@ -117,32 +117,32 @@ def run_test_matrix():
     assert_ok("3. Type AST", "2D arrays, pointer-to-array, const-ptr vs ptr-to-const, nested function pointers", test_type_declarators)
 
     def test_array_const_size_equivalence():
-        src = "v. f(p* i4[8] a, p* i4[4 + 4] b, p* i4[0x08] c) { p* i4[8] x m, b; x m, c; }"
+        src = "v. f(p* i4[8] a, p* i4[4 + 4] b, p* i4[0x08] c) { o! p* i4[8] x m, b; x m, c; }"
         compile_source(src, "arr_eq.sigil")
 
     assert_ok("3. Type AST", "Compile-time array dimension equivalence (i4[8] == i4[4 + 4] == i4[0x08])", test_array_const_size_equivalence)
 
     # Layer 4: Static Semantic Checks (23 Negative Tests)
     assert_raises("4. Semantic", "Reject side-effect 'm-' inside loop condition y < (h m- 1)", SemanticError,
-                  "v. f(i4 h) { f~ (i4 y m, 0; y < (h m- 1); y m+ 1) { r;; } }")
+                  "v. f(i4 h) { f~ (o! i4 y m, 0; y < (h m- 1); y m+ 1) { r;; } }")
     assert_raises("4. Semantic", "Reject pointer += pointer (p m+ q)", SemanticError,
                   "v. f(p* i4 p, p* i4 q) { p m+ q; }")
     assert_raises("4. Semantic", "Reject pointer *= integer (p m* 2)", SemanticError,
                   "v. f(p* i4 p) { p m* 2; }")
     assert_raises("4. Semantic", "Reject incompatible ternary branches (pointer vs integer)", SemanticError,
-                  "v. f(i4 c, p* i4 p) { i4 x m, (c > 0) ? p : 1; }")
+                  "v. f(i4 c, p* i4 p) { o! i4 x m, (c > 0) ? p : 1; }")
     assert_raises("4. Semantic", "Reject undeclared identifier", SemanticError,
                   "v. f() { unknown_var m, 1; }")
     assert_raises("4. Semantic", "Reject local variable redefinition", SemanticError,
-                  "v. f() { i4 a m, 1; i4 a m, 2; }")
+                  "v. f() { o! i4 a m, 1; o! i4 a m, 2; }")
     assert_raises("4. Semantic", "Reject global variable redefinition", SemanticError,
-                  "i4 g m, 1; i4 g m, 2;")
+                  "o! i4 g m, 1; o! i4 g m, 2;")
     assert_raises("4. Semantic", "Reject duplicate struct field", SemanticError,
                   "s{ Node { i4 x; i4 x; };")
     assert_raises("4. Semantic", "Reject non-power-of-2 struct alignment a!63", SemanticError,
                   "s{ Node a!63 { i4 x; };")
     assert_raises("4. Semantic", "Reject direct assignment to const variable (c@)", SemanticError,
-                  "v. f() { c@ i4 k m, 5; k m, 6; }")
+                  "v. f() { o! c@ i4 k m, 5; k m, 6; }")
     assert_raises("4. Semantic", "Reject dereference write '*ptr m, 10' when ptr is p* c@ u1", SemanticError,
                   "v. f(p* c@ u1 ptr) { p* ptr m, 10; }")
     assert_raises("4. Semantic", "Reject indexed write 'ptr[0] m, 10' when ptr is p* c@ u1", SemanticError,
@@ -158,7 +158,7 @@ def run_test_matrix():
     assert_raises("4. Semantic", "Reject duplicate function definition (two bodies)", SemanticError,
                   "i4 foo(i4 a) { r; a; } i4 foo(i4 a) { r; a + 1; }")
     assert_raises("4. Semantic", "Reject function pointer call with wrong argument count", SemanticError,
-                  "v. f(f^(i4 a, i4 b) -> i4 cb) { i4 res m, cb(1); }")
+                  "v. f(f^(i4 a, i4 b) -> i4 cb) { o! i4 res m, cb(1); }")
     assert_raises("4. Semantic", "Reject incompatible return expression type (returning pointer from i4 function)", SemanticError,
                   "i4 f(p* i4 ptr) { r; ptr; }")
     assert_raises("4. Semantic", "Reject non-integer switch condition (switching on float f4)", SemanticError,
@@ -174,7 +174,7 @@ def run_test_matrix():
     assert_raises("4. Semantic", "Reject pointer arithmetic 'p m- 1' on void pointer (p* v.)", SemanticError,
                   "v. f(p* v. p) { p m- 1; }")
     assert_raises("4. Semantic", "Reject nested function pointer assignment with mismatched inner callback parameter type", SemanticError,
-                  "v. f(f^(i4 a, f^(f4 x) -> v. cb) -> i4 bad) { f^(i4 a, f^(u1 x) -> v. cb) -> i4 good m, bad; }")
+                  "v. f(f^(i4 a, f^(f4 x) -> v. cb) -> i4 bad) { o! f^(i4 a, f^(u1 x) -> v. cb) -> i4 good m, bad; }")
     assert_raises("4. Semantic", "Reject dereference write on ternary (c ? pm : pc) due to const qualification propagation", SemanticError,
                   "v. f(i4 c, p* u1 pm, p* c@ u1 pc) { p* ((c > 0) ? pm : pc) m, 1; }")
     assert_raises("4. Semantic", "Reject compile-time constant division by zero (10 / 0)", SemanticError,
@@ -182,17 +182,17 @@ def run_test_matrix():
     assert_raises("4. Semantic", "Reject compile-time constant shift count out of range (1 << 65)", SemanticError,
                   "v. f(i4 x) { s? (x) { k: (1 << 65): { b!; } } }")
     assert_raises("4. Semantic", "Reject declaring value variable of incomplete struct type", SemanticError,
-                  "s{ Incomplete; v. f(v.) { Incomplete x; }")
+                  "s{ Incomplete; v. f(v.) { o! Incomplete x; }")
     assert_raises("4. Semantic", "Reject taking address ('a&') of rvalue expression", SemanticError,
-                  "v. f(i4 x) { p* i4 p m, a& (x + 1); }")
+                  "v. f(i4 x) { o! p* i4 p m, a& (x + 1); }")
     assert_raises("4. Semantic", "Reject bitwise operator '&^' on floating-point operand", SemanticError,
-                  "v. f(f4 x) { i4 y m, x &^ 1; }")
+                  "v. f(f4 x) { o! i4 y m, x &^ 1; }")
     assert_raises("4. Semantic", "Reject binary pointer addition (p + q)", SemanticError,
-                  "v. f(p* i4 p, p* i4 q) { p* i4 r m, p + q; }")
+                  "v. f(p* i4 p, p* i4 q) { o! p* i4 r m, p + q; }")
     assert_raises("4. Semantic", "Reject binary pointer addition (p + 1) on incomplete struct pointer", SemanticError,
-                  "s{ Incomplete; v. f(p* Incomplete p) { p* Incomplete q m, p + 1; }")
+                  "s{ Incomplete; v. f(p* Incomplete p) { o! p* Incomplete q m, p + 1; }")
     assert_raises("4. Semantic", "Reject explicit cast from float (f4) to pointer (p* i4)", SemanticError,
-                  "v. f(f4 x) { p* i4 p m, (p* i4)x; }")
+                  "v. f(f4 x) { o! p* i4 p m, (p* i4)x; }")
     assert_raises("4. Semantic", "Reject non-scalar struct condition in 'i?' (if) statement", SemanticError,
                   "s{ Node { i4 x; }; v. f(Node n) { i? (n) { r;; } }")
     assert_raises("4. Semantic", "Reject 'b!' (break) outside of loop or switch", SemanticError,
@@ -206,13 +206,13 @@ def run_test_matrix():
     assert_raises("4. Semantic", "Reject indexed write 'n.arr[0] m, 1' when parent struct 'n' is c@ Node (C99 6.7.3p8)", SemanticError,
                   "s{ Node { i4[4] arr; }; v. f(c@ Node n) { n.arr[0] m, 1; }")
     assert_raises("4. Semantic", "Reject decaying const struct array member 'n.arr' to non-const pointer 'p* i4'", SemanticError,
-                  "s{ Node { i4[4] arr; }; v. f(c@ Node n) { p* i4 p m, n.arr; }")
+                  "s{ Node { i4[4] arr; }; v. f(c@ Node n) { o! p* i4 p m, n.arr; }")
     assert_raises("4. Semantic", "Reject non-void function lacking a 'r;' (return) statement", SemanticError,
-                  "i4 bad_fn(i4 x) { i4 y m, x + 1; }")
+                  "i4 bad_fn(i4 x) { o! i4 y m, x + 1; }")
     assert_raises("4. Semantic", "Reject non-void function with partial return path (if without else)", SemanticError,
                   "i4 partial_fn(i4 x) { i? (x > 0) { r; x; } }")
     assert_raises("4. Semantic", "Reject non-constant global variable initializer (referencing runtime variable)", SemanticError,
-                  "i4 g1 m, 1; i4 g2 m, g1 + 1;")
+                  "o! i4 g1 m, 1; o! i4 g2 m, g1 + 1;")
     assert_raises("4. Semantic", "Reject unnamed 'v.' (void) parameter mixed with other parameters in function pointer", SemanticError,
                   "v. f(f^(v., i4) -> i4 cb) { r;; }")
     assert_raises("4. Semantic", "Reject ordered relational comparison '<' on void* (p* v.) pointers", SemanticError,
@@ -307,14 +307,14 @@ i4 dot_product(p* c@ Vec2 a, p* c@ Vec2 b) {
 }
 
 i4 main(v.) {
-    Vec2 u;
-    Vec2 v;
+    o! Vec2 u;
+    o! Vec2 v;
     u.x m, 3;
     u.y m, 4;
     v.x m, 0x10;
     v.y m, 2;
 
-    i4 res m, dot_product(a& u, a& v);
+    o! i4 res m, dot_product(a& u, a& v);
     /* &. 为逻辑与 (&&)，&^ 为按位与 (&)，=? 为相等比较 (==) */
     i? (res > 0 &. (res &^ 1) =? 0) {
         printf("dot = %d\n", (int)res);

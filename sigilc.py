@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sigil-C v2.0.0 Compiler
+Sigil-C v3.0.0 Compiler
 Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer -> C99 Codegen
 """
 
@@ -25,7 +25,8 @@ SIGIL_KEYWORDS = {
     'i?': 'KW_IF',       'e:': 'KW_ELSE',     'w~': 'KW_WHILE',    'f~': 'KW_FOR',
     'r;': 'KW_RETURN',   'b!': 'KW_BREAK',    'c^': 'KW_CONTINUE', 's?': 'KW_SWITCH',
     'k:': 'KW_CASE',     'd:': 'KW_DEFAULT',  's{': 'KW_STRUCT',   'u{': 'KW_UNION',
-    'e{': 'KW_ENUM',     'f^': 'KW_FNPTR',    'p*': 'KW_PTR',      'a&': 'KW_ADDR',
+    'e{': 'KW_ENUM',     'o!': 'KW_OBJECT',   'f^': 'KW_FNPTR',    'p*': 'KW_PTR',
+    'a&': 'KW_ADDR',
     'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
 }
 
@@ -1441,6 +1442,9 @@ class Parser:
                 top_nodes.append(self.parse_struct_or_union())
             elif self._cur().kind == 'KW_ENUM':
                 top_nodes.append(self.parse_enum())
+            elif self._cur().kind == 'KW_OBJECT':
+                object_tok = self._eat('KW_OBJECT')
+                top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok))
             elif self._is_type_start(self._cur()):
                 top_nodes.append(self.parse_top_decl_or_func())
             else:
@@ -1530,11 +1534,31 @@ class Parser:
         self._eat('SEMI')
         return EnumDefNode(line=kw_tok.line, col=kw_tok.col, name=name_tok.value, items=items)
 
-    def parse_top_decl_or_func(self) -> StmtNode:
+    def _parse_object_decl_after_name(self, decl_type: TypeNode, name_tok: Token,
+                                      global_scope: bool = False, consume_semi: bool = True) -> VarDeclStmt:
+        self._validate_non_void_var(decl_type, name_tok)
+        self._register_symbol(name_tok.value, decl_type, name_tok)
+        init_expr = None
+        if self._cur().kind == 'OP_ASSIGN':
+            op_tok = self._eat('OP_ASSIGN')
+            init_expr = self.parse_pure_expr()
+            actual_t = self._infer_expr_type(init_expr)
+            if not self._check_assign_compatible(decl_type, init_expr, actual_t):
+                raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{name_tok.value}'")
+            if global_scope and not self._is_static_const_init(init_expr):
+                raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Global initializer for '{name_tok.value}' is not a compile-time constant")
+        if consume_semi:
+            self._eat('SEMI')
+        return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
+                           name=name_tok.value, init_expr=init_expr)
+
+    def parse_top_decl_or_func(self, object_marker: Optional[Token] = None) -> StmtNode:
         decl_type = self.parse_type()
         name_tok = self._eat('IDENT')
 
         if self._cur().kind == 'LPAREN':
+            if object_marker is not None:
+                raise ParseError(f"{self.filename}:{object_marker.line}:{object_marker.col}: 'o!' introduces an object declaration, not a function")
             if isinstance(decl_type, ArrayType):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function '{name_tok.value}' cannot return array type")
             self._eat('LPAREN')
@@ -1596,19 +1620,9 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
             return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body)
 
-        self._validate_non_void_var(decl_type, name_tok)
-        self._register_symbol(name_tok.value, decl_type, name_tok)
-        init_expr = None
-        if self._cur().kind == 'OP_ASSIGN':
-            op_tok = self._eat('OP_ASSIGN')
-            init_expr = self.parse_pure_expr()
-            actual_t = self._infer_expr_type(init_expr)
-            if not self._check_assign_compatible(decl_type, init_expr, actual_t):
-                raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{name_tok.value}'")
-            if not self._is_static_const_init(init_expr):
-                raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Global initializer for '{name_tok.value}' is not a compile-time constant")
-        self._eat('SEMI')
-        return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type, name=name_tok.value, init_expr=init_expr)
+        if object_marker is None:
+            raise ParseError(f"{self.filename}:{name_tok.line}:{name_tok.col}: File-scope object declarations must begin with 'o!'")
+        return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True)
 
     def parse_block(self, create_new_scope: bool = True) -> BlockStmt:
         lb = self._eat('LBRACE')
@@ -1659,19 +1673,14 @@ class Parser:
             self.scopes.append({})
             init_stmt = None
             if self._cur().kind != 'SEMI':
-                if self._is_type_start(self._cur()):
+                if self._cur().kind == 'KW_OBJECT':
+                    self._eat('KW_OBJECT')
                     vt = self.parse_type()
                     vname = self._eat('IDENT')
-                    self._validate_non_void_var(vt, vname)
-                    self._register_symbol(vname.value, vt, vname)
-                    vinit = None
-                    if self._cur().kind == 'OP_ASSIGN':
-                        op_tok = self._eat('OP_ASSIGN')
-                        vinit = self.parse_pure_expr()
-                        actual_t = self._infer_expr_type(vinit)
-                        if not self._check_assign_compatible(vt, vinit, actual_t):
-                            raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{vname.value}'")
-                    init_stmt = VarDeclStmt(line=vname.line, col=vname.col, var_type=vt, name=vname.value, init_expr=vinit)
+                    init_stmt = self._parse_object_decl_after_name(vt, vname, consume_semi=False)
+                elif self._is_type_start(self._cur()):
+                    decl_tok = self._cur()
+                    raise ParseError(f"{self.filename}:{decl_tok.line}:{decl_tok.col}: Object declarations in a 'f~' initializer must begin with 'o!'")
                 else:
                     init_stmt = self.parse_assign_or_expr_no_semi()
             self._eat('SEMI')
@@ -1720,20 +1729,14 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'c^' (continue) statement not within a loop")
             return JumpStmt(line=tok.line, col=tok.col, keyword="continue")
 
-        if self._is_type_start(tok):
+        if tok.kind == 'KW_OBJECT':
+            self._eat('KW_OBJECT')
             vt = self.parse_type()
             vname = self._eat('IDENT')
-            self._validate_non_void_var(vt, vname)
-            self._register_symbol(vname.value, vt, vname)
-            vinit = None
-            if self._cur().kind == 'OP_ASSIGN':
-                op_tok = self._eat('OP_ASSIGN')
-                vinit = self.parse_pure_expr()
-                actual_t = self._infer_expr_type(vinit)
-                if not self._check_assign_compatible(vt, vinit, actual_t):
-                    raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible initializer type for '{vname.value}'")
-            self._eat('SEMI')
-            return VarDeclStmt(line=vname.line, col=vname.col, var_type=vt, name=vname.value, init_expr=vinit)
+            return self._parse_object_decl_after_name(vt, vname)
+
+        if self._is_type_start(tok):
+            raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Object declarations must begin with 'o!'")
 
         stmt = self.parse_assign_or_expr_no_semi()
         self._eat('SEMI')
@@ -2011,7 +2014,7 @@ class Parser:
 # 4. C99 Code Generator
 # ============================================================================
 
-C99_HEADER = """/* Generated by Sigil-C v2.0.0 AST Compiler. DO NOT EDIT. */
+C99_HEADER = """/* Generated by Sigil-C v3.0.0 AST Compiler. DO NOT EDIT. */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>

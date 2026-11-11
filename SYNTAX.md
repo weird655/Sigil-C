@@ -1,12 +1,14 @@
-# Sigil-C (印记-C) 语法与印记速查表 (v2.0.0)
+# Sigil-C (印记-C) 语法与印记速查表 (v3.0.0)
 
-本速查表收录 Sigil-C v2.0.0 的关键字印记、基础类型、前缀复合类型绑定规则、赋值与运算符静态语义阶梯，以及当前受限语言子集的词法与语义边界。
+本速查表收录 Sigil-C v3.0.0 的关键字印记、基础类型、前缀复合类型绑定规则、赋值与运算符静态语义阶梯，以及当前受限语言子集的词法与语义边界。
 
+> **v3.0.0 语法迁移（破坏兼容）**：独立对象声明必须以 `o!` 开始，裸写法不再接受：`SG ctx;` → `o! SG ctx;`、`u4 n;` → `o! u4 n;`。局部/全局对象及 `f~` 初始化声明均须添加；结构体字段与函数形参处在明确的声明语境中，保持原写法。`o!` 不表示堆分配或构造。
+>
 > **v2.0.0 语法迁移**：只读限定符从 `c$` 改为 `c@`，旧写法 `c$` 不再接受；将源码中的 `c$` 替换为 `c@` 即可。复合赋值印记仍沿用 v1.0.0 的 `m+`、`m-`、`m*`、`m/`。
 
-## 1. 控制流与结构定义印记 (`SIGIL_KEYWORDS`)
+## 1. 控制流、结构与对象声明印记 (`SIGIL_KEYWORDS`)
 
-所有控制流与复合结构印记均由**“1 个英文小写字母 + 1 个标点符号”**构成，词法器优先于普通标识符进行双字符匹配：
+控制流与结构印记由**“1 个英文小写字母 + 1 个标点符号”**构成；词法器优先于普通标识符进行双字符匹配。`o!` 是对象声明引导印记：
 
 | 印记 | Token 类别 | 对应 C99 语法 | 记忆词源与静态语义约束 |
 | :--- | :--- | :--- | :--- |
@@ -23,6 +25,7 @@
 | `s{` | `KW_STRUCT` | `typedef struct Name Name; struct Name { ... };` | **s**truct + `{`（结构体声明/定义），支持重复的 `s{ Forward;` 前置声明、前置声明后再定义，以及 `a!N` 对齐修饰；每个标签只生成一次 typedef，且只允许一个定义 |
 | `u{` | `KW_UNION` | `typedef union Name Name; union Name { ... };` | **u**nion + `{`（联合体声明/定义），支持重复的 `u{ Forward;` 前置声明、前置声明后再定义、`a!N` 对齐修饰及 `.` / `->` 访问；每个标签只生成一次 typedef，且只允许一个定义 |
 | `e{` | `KW_ENUM` | `typedef enum Name { ... } Name;` | **e**num + `{`（枚举定义），枚举项支持 `ITEM m, CONST_EXPR` 显式常量赋值；枚举类型按 C99 整数类型规则参与算术和隐式转换 |
+| `o!` | `KW_OBJECT` | 对象声明前缀 | **o**bject + `!`：独立对象声明写作 `o! Type name;` 或 `o! Type name m, expr;`。必须用于文件作用域、块作用域对象以及 `f~` 初始化声明；结构体字段和函数形参保留其上下文声明语法。此印记声明对象，不暗示堆分配或构造 |
 | `a!N` | `KW_ALIGN` | `SIGIL_ALIGNED_TAG(kind, Name, N)` | **a**lign + `!` + 2 的幂 $N$：GCC/Clang/MSVC 使用编译器对齐扩展；C11 使用首字段上的 `_Alignas(N)` 提升整个结构体/联合体对齐。生成代码会用静态断言核验实际类型对齐至少为 $N$。纯 C99 没有通用过对齐机制；不支持对齐原语的后端会在使用 `a!N` 时编译报错，不再静默退化。所请求的扩展对齐值仍须由目标实现支持 |
 
 ## 2. 基础标量类型与前缀修饰符 (`BASIC_TYPES` & Qualifiers)
@@ -36,7 +39,7 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 | `f4`, `f8`, `fl` | `float`, `double`, `long double` | 单精度、双精度与扩展精度浮点数；`long double` 的表示宽度和额外精度由目标实现决定 |
 | `c1` | `char` | 字符类型：C 标准仅规定 `sizeof(char) == 1`（1 个 C 字节含 `CHAR_BIT` 位，并非所有架构均保证等于 8 位）；若需要严格 8 位数据，应使用 `u1` (`uint8_t`) 或 `i1` (`int8_t`) |
 | `b.` | `bool` | 布尔类型（由 `<stdbool.h>` 提供，底层对应 C99 `_Bool`）。**前瞻消歧**：当 `b.` 后紧跟标识符字符（如 `b.flag`）时，自动拆分为结构体变量 `b` 的成员访问 `.flag` |
-| `v.` | `void` | 空类型：用于函数返回类型、`(v.)` 空参列表（包括 `i4 main(v.)` 与 `f^(v.) -> i4`）、`(v.)expr` 显式丢弃求值或 `p* v.` 通用指针；禁止声明值变量 `v. x;`。**前瞻消歧**：当 `v.` 后紧跟标识符字符（如 `v.x`）时，自动拆分为结构体变量 `v` 的成员访问 `.x` |
+| `v.` | `void` | 空类型：用于函数返回类型、`(v.)` 空参列表（包括 `i4 main(v.)` 与 `f^(v.) -> i4`）、`(v.)expr` 显式丢弃求值或 `p* v.` 通用指针；禁止声明值变量 `o! v. x;`。**前瞻消歧**：当 `v.` 后紧跟标识符字符（如 `v.x`）时，自动拆分为结构体变量 `v` 的成员访问 `.x` |
 | `p*` | `*`（指针类型前缀 / 一元解引用算子） | 在类型位置表示“指向右侧完整类型的指针”；在表达式前缀位置表示一元解引用 `*expr`（禁止解引用 `p* v.` 或未完成结构体指针） |
 | `c@` | `const`（只读类型限定符） | **严格绑定紧随其后的那一层类型节点**（`c@ p* T` 修饰指针自身只读，`p* c@ T` 修饰指向物只读；对数组类型应用 `const` 时按 C99 6.7.3p8 自动向数组元素递归传播） |
 | `v@` | `volatile`（易变限定符） | **严格绑定紧随其后的那一层类型节点**；可与 `c@` 组合（如 `c@ v@ u4`），对数组会传播到元素，对 `volatile` 结构体/联合体的成员访问也会传播。`p* v@ u4` 是指向 `volatile u4` 的可变指针，`v@ p* u4` 是指向普通 `u4` 的 `volatile` 指针。它用于内存映射寄存器等外部可能改变的对象访问，不提供原子性或线程同步/内存屏障保证 |
@@ -49,24 +52,24 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 
 | 语义描述 | Sigil-C 写法（从左向右读） | AST 类型树结构 | 生成的 ISO C99 声明 |
 | :--- | :--- | :--- | :--- |
-| 指向只读 `u1` 的可变指针 | `p* c@ u1 ptr;` | `Pointer(Base(uint8_t, const))` | `const uint8_t *ptr;` |
-| 指向易变 `u4` 的可变指针 | `p* v@ u4 reg;` | `Pointer(Base(uint32_t, volatile))` | `volatile uint32_t *reg;` |
-| 指向普通 `u4` 的易变指针 | `v@ p* u4 reg;` | `Pointer(Base(uint32_t), volatile)` | `uint32_t * volatile reg;` |
-| 指向只读且易变 `u4` 的指针 | `p* c@ v@ u4 reg;` | `Pointer(Base(uint32_t, const volatile))` | `const volatile uint32_t *reg;` |
-| 指向可变 `u1` 的只读指针 | `c@ p* u1 ptr m, buf;` | `Pointer(Base(uint8_t), const)` | `uint8_t * const ptr = buf;` |
-| 指向只读 `u1` 的只读指针 | `c@ p* c@ u1 ptr m, buf;` | `Pointer(Base(uint8_t, const), const)` | `const uint8_t * const ptr = buf;` |
-| 指向只读一级指针的可变二级指针 | `p* c@ p* u1 pp;` | `Pointer(Pointer(Base(uint8_t), const))` | `uint8_t * const *pp;` |
-| 指向可变一级指针的只读二级指针 | `c@ p* p* u1 cpp m, pp;` | `Pointer(Pointer(Base(uint8_t)), const)` | `uint8_t ** const cpp = pp;` |
-| 二维定长数组（4 行 8 列） | `f4[4][8] matrix;` | `Array(Array(Base(float), 8), 4)` | `float matrix[4][8];` |
-| 指向含 8 个 `f4` 数组的指针 | `p* f4[8] row_ptr;` | `Pointer(Array(Base(float), 8))` | `float (*row_ptr)[8];` |
-| 包含 4 个 `u1` 指针的数组 | `(p* u1)[4] ptr_arr;` | `Array(Pointer(Base(uint8_t)), 4)` | `uint8_t *ptr_arr[4];` |
-| 无参返回 `i4` 的函数指针 | `f^(v.) -> i4 thunk;` | `FnPtr([] -> int32_t)` | `int32_t (*thunk)(void);` |
-| 含嵌套回调参数的函数指针 | `f^(u4 id, f^(i4 e) -> v. cb) -> i4 hook;` | `FnPtr([uint32_t, FnPtr] -> int32_t)` | `int32_t (*hook)(uint32_t id, void (*cb)(int32_t e));` |
+| 指向只读 `u1` 的可变指针 | `o! p* c@ u1 ptr;` | `Pointer(Base(uint8_t, const))` | `const uint8_t *ptr;` |
+| 指向易变 `u4` 的可变指针 | `o! p* v@ u4 reg;` | `Pointer(Base(uint32_t, volatile))` | `volatile uint32_t *reg;` |
+| 指向普通 `u4` 的易变指针 | `o! v@ p* u4 reg;` | `Pointer(Base(uint32_t), volatile)` | `uint32_t * volatile reg;` |
+| 指向只读且易变 `u4` 的指针 | `o! p* c@ v@ u4 reg;` | `Pointer(Base(uint32_t, const volatile))` | `const volatile uint32_t *reg;` |
+| 指向可变 `u1` 的只读指针 | `o! c@ p* u1 ptr m, buf;` | `Pointer(Base(uint8_t), const)` | `uint8_t * const ptr = buf;` |
+| 指向只读 `u1` 的只读指针 | `o! c@ p* c@ u1 ptr m, buf;` | `Pointer(Base(uint8_t, const), const)` | `const uint8_t * const ptr = buf;` |
+| 指向只读一级指针的可变二级指针 | `o! p* c@ p* u1 pp;` | `Pointer(Pointer(Base(uint8_t), const))` | `uint8_t * const *pp;` |
+| 指向可变一级指针的只读二级指针 | `o! c@ p* p* u1 cpp m, pp;` | `Pointer(Pointer(Base(uint8_t)), const)` | `uint8_t ** const cpp = pp;` |
+| 二维定长数组（4 行 8 列） | `o! f4[4][8] matrix;` | `Array(Array(Base(float), 8), 4)` | `float matrix[4][8];` |
+| 指向含 8 个 `f4` 数组的指针 | `o! p* f4[8] row_ptr;` | `Pointer(Array(Base(float), 8))` | `float (*row_ptr)[8];` |
+| 包含 4 个 `u1` 指针的数组 | `o! (p* u1)[4] ptr_arr;` | `Array(Pointer(Base(uint8_t)), 4)` | `uint8_t *ptr_arr[4];` |
+| 无参返回 `i4` 的函数指针 | `o! f^(v.) -> i4 thunk;` | `FnPtr([] -> int32_t)` | `int32_t (*thunk)(void);` |
+| 含嵌套回调参数的函数指针 | `o! f^(u4 id, f^(i4 e) -> v. cb) -> i4 hook;` | `FnPtr([uint32_t, FnPtr] -> int32_t)` | `int32_t (*hook)(uint32_t id, void (*cb)(int32_t e));` |
 | 显式标量类型转换表达式 | `(u4)w * (u4)h` | `Binary('*', Cast(uint32_t, w), Cast(uint32_t, h))` | `((uint32_t)w * (uint32_t)h)` |
 
 函数原型允许省略形参名（例如 `i4 sum(i4, i4);`），函数定义仍须为每个形参命名。
 
-对内存映射寄存器，`p* v@ u4 timer_reg` 会生成 `volatile uint32_t *timer_reg`，经 `*timer_reg` 读取或写入时保留 `volatile` 限定。示例初始化可写为 `p* v@ u4 timer_reg m, (p* v@ u4)0x40000000;`；Sigil-C 要求显式指针类型转换，且整数地址转成指针属于目标平台相关的实现定义操作，需确认地址、位宽和访问方式符合目标 ABI。`volatile` 不等同于原子操作，也不代替平台所需的内存屏障。
+对内存映射寄存器，`o! p* v@ u4 timer_reg` 会生成 `volatile uint32_t *timer_reg`，经 `*timer_reg` 读取或写入时保留 `volatile` 限定。示例初始化可写为 `o! p* v@ u4 timer_reg m, (p* v@ u4)0x40000000;`；Sigil-C 要求显式指针类型转换，且整数地址转成指针属于目标平台相关的实现定义操作，需确认地址、位宽和访问方式符合目标 ABI。`volatile` 不等同于原子操作，也不代替平台所需的内存屏障。
 
 ## 4. Sigil-C 赋值印记、通用含义与 C99 对照 (`ASSIGN_TOKENS`)
 
@@ -103,9 +106,9 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 ## 6. 字面量、常量折叠与语言子集边界
 
 * **整数字面量 (`INT_NUM`) vs 浮点字面量 (`FLOAT_NUM`)**：词法器在 `_scan_number()` 中直接区分十进制、C99 八进制（如 `077`，若含非法数字如 `09` 直接抛 `LexerError`）、十六进制（`0xFE`）、二进制扩展（`0b1010`，自动转为标准 C99 十六进制字面量 `0xa` 以保证 `-std=c99 -pedantic` 零警告）与浮点字面量；接受 `1.`、`.5`、`1.e2` 及十六进制浮点 `0x1.fp2`、`0x.8p1` 等 C99 写法（十六进制浮点必须包含 `p/P` 二进制指数）；整数字面量校验 C99 `u/U`、`l/L`、`ll/LL` 后缀及其合法组合。
-* **全局算术常量初始化**：全局变量初始化接受由整型、枚举、字符或浮点常量构成的算术常量表达式（例如 `1.25 + 2.0`），静态检查拒绝依赖运行时变量或函数调用的表达式。
+* **全局算术常量初始化**：全局对象以 `o!` 声明；初始化接受由整型、枚举、字符或浮点常量构成的算术常量表达式（例如 `o! f4 rate m, 1.25 + 2.0;`），静态检查拒绝依赖运行时变量或函数调用的表达式。
 * **字符转义与 `\xHH` 受限子集规则**：
   * 支持标准单字符转义（`\a, \b, \f, \n, \r, \t, \v, \\, \', \", \?, \0`）及 1～3 位八进制转义（`\0`～`\377`，超出 `\377` 如 `'\400'` 直接抛 `LexerError`），且在编译期常量折叠中支持转义字符求值（如 `k: '\n':`、`k: '\101':`）。
   * **受限子集说明**：ISO C99 允许 `\x` 后接任意位数十六进制数字；**Sigil-C 作为受限语言子集，显式规定 `\x` 仅消费 1～2 位十六进制数字**，在单字符字面量中写 `'\x4142'` 会在词法阶段被拒绝。
 * **C99 标准头文件内建函数签名**：当文件顶部包含 `#include <stdio.h>`、`<stdlib.h>`、`<string.h>` 或 `<assert.h>` 时，编译器自动在全局符号表注册常用标准函数签名（如可变参 `printf`、`puts`、`putchar`、`malloc`、`calloc`、`free`、`memcpy`、`memset`、`memcmp`、`strlen`、`assert`），使原生 C 模板可直接通过静态类型校验。
-* **不完整类型（Incomplete Types）约束**：前置声明但尚未定义字段的结构体/联合体（`s{ Incomplete;`）仅可用于声明指针（`p* Incomplete`），禁止按值声明变量、形参、数组元素或结构体字段，也禁止对其指针执行解引用（`p* p`）、下标访问（`p[0]`）或指针算术（`p + 1`、`p m+ 1`）。
+* **不完整类型（Incomplete Types）约束**：前置声明但尚未定义字段的结构体/联合体（`s{ Incomplete;`）仅可用于声明指针（`p* Incomplete`），禁止按值声明变量（如 `o! Incomplete x;`）、形参、数组元素或结构体字段，也禁止对其指针执行解引用（`p* p`）、下标访问（`p[0]`）或指针算术（`p + 1`、`p m+ 1`）。
