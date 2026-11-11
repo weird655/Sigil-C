@@ -2,7 +2,7 @@
 #include <assert.h>
 
 /* 跨行注释包含伪印记 i? r; m- w~ */
-p* c$ c1 G_TAG m, "Sigil-C v1.0.0 Verified";
+p* c@ c1 G_TAG m, "Sigil-C v2.0.0 Verified";
 
 e{ OpMode {
     MODE_IDLE m, 0,
@@ -16,9 +16,9 @@ u{ PayloadUnion {
 };
 
 s{ ScentGridContext a!64 {
-    p* c$ u4 buffer_read;
+    p* c@ u4 buffer_read;
     p* u4 buffer_write;
-    p* c$ u1 wind_dir;
+    p* c@ u1 wind_dir;
     i4[4][8] matrix2d;
     u2 width;
     u2 height;
@@ -43,7 +43,7 @@ i4 sample_callback(u4 id, i4 delta) {
  *    边界格质量 100% 参与守恒计算，绝不丢弃边界输入。
  */
 i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
-    p* c$ u4 src m, ctx->buffer_read;
+    p* c@ u4 src m, ctx->buffer_read;
     p* u4 dst m, ctx->buffer_write;
     u2 w m, ctx->width;
     u2 h m, ctx->height;
