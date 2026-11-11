@@ -19,6 +19,12 @@ Sigil-C 是一种面向系统编程、游戏底层内核（ECS、网格平流、
 Sigil-C 把指针层级写在类型前缀里。下面用刻意完整的变量名，把“数组 → 指针 → 解引用/下标 → 写回”的关系逐步展开：
 
 ```sigil
+/* 用户定义类型：指针限定符可以直接修饰结构体对象。 */
+s{ ScentGridContext {
+    u4 width;
+    u4 height;
+};
+
 u4 pointer_guide_demo(v.) {
     /* 两个普通定长数组：每个数组包含三个 u4 元素。 */
     u4[3] source_values;
@@ -26,6 +32,18 @@ u4 pointer_guide_demo(v.) {
     source_values[0] m, 17;
     source_values[1] m, 23;
     source_values[2] m, 41;
+
+    /* 同一结构体对象分别经只读指针和可写指针访问。 */
+    ScentGridContext grid_context;
+    grid_context.width m, 3;
+    grid_context.height m, 1;
+    p* c@ ScentGridContext read_only_grid_context  m, a& grid_context;
+    p*     ScentGridContext writable_grid_context m, a& grid_context;
+    u4 width_seen_through_read_only_pointer m, read_only_grid_context->width;
+    /* 取消下一行注释会因只读左值写入而静态报错。 */
+    /* read_only_grid_context->width m, 4; */
+    writable_grid_context->height m, 2;
+    u4 height_seen_through_writable_pointer m, writable_grid_context->height;
 
     /* p* c@ u4：可改 source 指针本身，但不能经它写源元素。 */
     /* p* u4：可读写目标元素。 */
@@ -47,7 +65,8 @@ u4 pointer_guide_demo(v.) {
     p* u4 recovered_destination_pointer m, p* destination_pointer_slot;
     u4 first_written_value m, p* p* destination_pointer_slot;
 
-    r; first_source_value + second_source_value + first_written_value;
+    r; first_source_value + second_source_value + first_written_value
+       + width_seen_through_read_only_pointer + height_seen_through_writable_pointer;
 }
 
 /* v@ 限定指向的硬件对象；读写都经过 volatile u4 左值。 */
@@ -63,10 +82,12 @@ u4 read_hardware_register(p* v@ u4 mapped_register_address) {
 | `p* u4 value_pointer` | `uint32_t *value_pointer` | 指向可读写 `u4` 的可变指针 |
 | `p* c@ u4 source_pointer` | `const uint32_t *source_pointer` | 指向只读 `u4` 的可变指针 |
 | `c@ p* u4 fixed_pointer` | `uint32_t * const fixed_pointer` | 地址固定，目标 `u4` 可写 |
+| `p* c@ ScentGridContext context` | `const ScentGridContext *context` | 指向用户定义结构体的只读指针 |
+| `p* ScentGridContext context` | `ScentGridContext *context` | 指向用户定义结构体的可写指针 |
 | `p* v@ u4 register_pointer` | `volatile uint32_t *register_pointer` | 指向易变 `u4`，适用于寄存器访问 |
 | `p* p* u4 pointer_slot` | `uint32_t **pointer_slot` | 指向 `u4` 指针的指针 |
 
-阅读规则很直接：`p*` 每出现一次，就多一层指针；`c@` / `v@` 修饰紧随其后的那一层；`a&` 取左值地址，表达式位置的 `p*` 解引用。数组传给指针形参时会退化为首元素地址，原始指针本身不携带长度，因此下标范围仍由调用方负责。
+`ScentGridContext` 是前面实际定义的结构体类型。`p* c@ ScentGridContext` 将只读限定传播到成员左值，所以通过它写 `width` 会被静态检查拒绝；`p* ScentGridContext` 保持成员可写。阅读规则很直接：`p*` 每出现一次，就多一层指针；`c@` / `v@` 修饰紧随其后的那一层；`a&` 取左值地址，表达式位置的 `p*` 解引用。数组传给指针形参时会退化为首元素地址，原始指针本身不携带长度，因此下标范围仍由调用方负责。
 
 ### 完整平流更新示例
 
