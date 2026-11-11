@@ -899,6 +899,10 @@ class Parser:
         self.complete_structs: Set[str] = set()
         self.enum_constants: Dict[str, int] = {}
         self.macro_consts: Dict[str, int] = {}
+        # 指针来源：名字 -> (基对象, 元素个数, 相对基对象的偏移)
+        self.prov: Dict[str, Tuple[str, int, int]] = {}
+        self.local_objects: Set[str] = set()
+        self.param_names: Set[str] = set()
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
         self.func_defined: Set[str] = set()
@@ -1245,6 +1249,13 @@ class Parser:
                 if isinstance(sub_t, PointerType):
                     if not self._is_complete_object_type(sub_t.pointee):
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference pointer to incomplete or void type")
+                    pv = self._prov_of(expr.operand)
+                    if pv is not None:
+                        b_name, b_len, b_off = pv
+                        if b_off < 0 or b_off >= b_len:
+                            raise SemanticError(
+                                f"{self.filename}:{expr.line}:{expr.col}: Dereferencing a pointer into '{b_name}' at "
+                                f"element {b_off}, outside {b_len} element(s)")
                     return sub_t.pointee
                 if isinstance(sub_t, ArrayType):
                     return sub_t.element_type
@@ -1280,6 +1291,18 @@ class Parser:
                     raise SemanticError(
                         f"{self.filename}:{expr.line}:{expr.col}: Cannot subscript pointer to incomplete or void type"
                     )
+                pv = self._prov_of(expr.base)
+                if pv is not None:
+                    b_name, b_len, b_off = pv
+                    c_idx = self._try_const(expr.index)
+                    if c_idx is not None:
+                        pos = b_off + c_idx
+                        if pos < 0 or pos >= b_len:
+                            raise SemanticError(
+                                f"{self.filename}:{expr.line}:{expr.col}: Index {c_idx} through a pointer into "
+                                f"'{b_name}' reaches element {pos}, outside {b_len} element(s)")
+                    elif 0 <= b_off < b_len:
+                        expr.bound = b_len - b_off
                 return base_t.pointee
             if isinstance(base_t, ArrayType):
                 if base_t.size_val is not None:
@@ -1456,6 +1479,68 @@ class Parser:
         if isinstance(t, ArrayType):
             return PointerType(line=t.line, col=t.col, pointee=t.element_type, is_const=False)
         return t
+
+    def _try_const(self, expr: ExprNode) -> Optional[int]:
+        try:
+            return self._eval_const_int_expr(expr)
+        except SemanticError:
+            return None
+
+    def _prov_of(self, expr: Optional[ExprNode]) -> Optional[Tuple[str, int, int]]:
+        """指针来源：(基对象, 元素个数, 相对基对象的偏移)。推不出来就返回 None。"""
+        if expr is None:
+            return None
+        if isinstance(expr, IdentExpr):
+            return self.prov.get(expr.name)
+        if isinstance(expr, CastExpr):
+            return None
+        if isinstance(expr, UnaryExpr) and expr.op == '&':
+            inner = expr.operand
+            if isinstance(inner, IdentExpr):
+                return self.prov.get(inner.name)
+            if isinstance(inner, IndexExpr):
+                base = self._prov_of(inner.base)
+                idx = self._try_const(inner.index)
+                if base is not None and idx is not None:
+                    b, n, off = base
+                    return (b, n, off + idx)
+            return None
+        if isinstance(expr, BinaryExpr) and expr.op in ('+', '-'):
+            left = self._prov_of(expr.left)
+            if left is not None:
+                k = self._try_const(expr.right)
+                if k is not None:
+                    b, n, off = left
+                    return (b, n, off + k if expr.op == '+' else off - k)
+            if expr.op == '+':
+                right = self._prov_of(expr.right)
+                if right is not None:
+                    k = self._try_const(expr.left)
+                    if k is not None:
+                        b, n, off = right
+                        return (b, n, off + k)
+        return None
+
+    def _address_of_local(self, expr: Optional[ExprNode]) -> Optional[str]:
+        if isinstance(expr, UnaryExpr) and expr.op == '&':
+            inner = expr.operand
+            if isinstance(inner, IdentExpr) and inner.name in self.local_objects:
+                return inner.name
+            if isinstance(inner, MemberExpr) and isinstance(inner.base, IdentExpr) \
+                    and inner.base.name in self.local_objects:
+                return inner.base.name
+        return None
+
+    def _note_prov(self, name: str, decl_type: TypeNode, init_expr: Optional[ExprNode]) -> None:
+        if isinstance(decl_type, ArrayType) and decl_type.size_val is not None:
+            self.prov[name] = (name, decl_type.size_val, 0)
+            return
+        if isinstance(strip_top_qualifiers(decl_type), PointerType):
+            p = self._prov_of(init_expr)
+            if p is not None:
+                self.prov[name] = p
+            else:
+                self.prov.pop(name, None)
 
     def _member_is_bitfield(self, me: MemberExpr) -> bool:
         try:
@@ -2172,6 +2257,9 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Global initializer for '{name_tok.value}' is not a compile-time constant")
         if consume_semi:
             self._eat('SEMI')
+        if not global_scope:
+            self.local_objects.add(name_tok.value)
+        self._note_prov(name_tok.value, decl_type, init_expr)
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
                            name=name_tok.value, init_expr=init_expr, is_static=is_static, attrs=attrs)
 
@@ -2379,15 +2467,28 @@ class Parser:
             prev_variadic = self.current_func_variadic
             prev_labels = self.func_labels
             prev_gotos = self.func_gotos
+            prev_prov = self.prov
+            prev_locals = self.local_objects
+            prev_params = self.param_names
             self.current_func_ret = decl_type
             self.current_func_variadic = is_variadic
             self.func_labels = set()
             self.func_gotos = []
+            # 只保留文件作用域对象的来源，清掉上一个函数的局部
+            self.prov = {k: v for k, v in prev_prov.items() if k in self.scopes[0]}
+            self.local_objects = set()
+            self.param_names = set()
             self.scopes.append({pname: pt for pt, pname in params})
+            for _pt, pname in params:
+                self.local_objects.add(pname)
+                self.param_names.add(pname)
             body = self.parse_block(create_new_scope=False)
             self.scopes.pop()
             self.current_func_ret = prev_ret
             self.current_func_variadic = prev_variadic
+            self.prov = prev_prov
+            self.local_objects = prev_locals
+            self.param_names = prev_params
             for (lname, ltok) in self.func_gotos:
                 if lname not in self.func_labels:
                     raise SemanticError(
@@ -2493,6 +2594,11 @@ class Parser:
                 ret_expr_t = self._infer_expr_type(expr)
                 if not self._check_assign_compatible(self.current_func_ret, expr, ret_expr_t):
                     raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Incompatible return type")
+            bad = self._address_of_local(expr)
+            if bad is not None:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: Returning the address of local object '{bad}' would dangle "
+                    f"after return")
             return ReturnStmt(line=tok.line, col=tok.col, expr=expr)
 
         if tok.kind == 'KW_BREAK':
@@ -2754,8 +2860,28 @@ class Parser:
             if op_tok.kind == 'OP_ASSIGN':
                 if not self._check_assign_compatible(lhs_t, rhs, rhs_t):
                     raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Incompatible types in assignment 'm,'")
+                bad = self._address_of_local(rhs)
+                if bad is not None and isinstance(lhs, IdentExpr):
+                    escaping = lhs.name in self.param_names or (
+                        lhs.name in self.scopes[0] and lhs.name not in self.local_objects)
+                    if escaping:
+                        raise SemanticError(
+                            f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local object "
+                            f"'{bad}' into '{lhs.name}' would dangle after this function returns")
+                if isinstance(lhs, IdentExpr):
+                    self._note_prov(lhs.name, lhs_t, rhs)
             else:
                 self._check_compound_assign_types(op_tok.kind, lhs_t, rhs_t, op_tok)
+                if isinstance(lhs, IdentExpr) and op_tok.kind in ('OP_ADD_ASSIGN', 'OP_SUB_ASSIGN'):
+                    pv = self.prov.get(lhs.name)
+                    k = self._try_const(rhs)
+                    if pv is not None:
+                        if k is not None:
+                            b_name, b_len, b_off = pv
+                            self.prov[lhs.name] = (b_name, b_len,
+                                                   b_off + k if op_tok.kind == 'OP_ADD_ASSIGN' else b_off - k)
+                        else:
+                            self.prov.pop(lhs.name, None)
             return AssignStmt(line=op_tok.line, col=op_tok.col, op=ASSIGN_TOKENS[op_tok.kind], target=lhs, value=rhs)
         self._infer_expr_type(lhs)
         return ExprStmt(line=tok.line, col=tok.col, expr=lhs)

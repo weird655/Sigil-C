@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 from sigilc import (
-    Lexer, Parser, CodeGenerator, compile_source, compile_header,
+    Lexer, Parser, CodeGenerator, compile_source, compile_header, check_source,
     LexerError, ParseError, SemanticError, format_c_declarator
 )
 
@@ -1333,12 +1333,80 @@ int main(void) {
 
     assert_ok("14. v1.1 ext", "Compile errors print a source snippet with a caret", test_error_snippet)
 
+    # Layer 15: v1.1 pointer provenance (bounds through pointers / dangling)
+    def test_pointer_provenance_ok():
+        sigil = """
+        i4 main(v.) {
+            o! u4[3] a m, { 10, 20, 30 };
+            o! p* u4 p m, a& a[1];
+            r; (i4)p[0] + (i4)p[1];
+        }
+        """
+        with open("prov.c", "w") as f:
+            f.write(compile_source(sigil, "prov.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "prov.c", "-o", "prov_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./prov_bin"], check=False).returncode
+        assert rc == 50, rc   # 20 + 30
+
+    assert_ok("15. v1.1 ptr", "Provenance tracks a pointer into a[1] and allows p[0]..p[1]", test_pointer_provenance_ok)
+
+    assert_raises("15. v1.1 ptr", "Reject a constant index through a pointer past the base object",
+                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, a& a[1]; r; (i4)p[2]; }")
+    assert_raises("15. v1.1 ptr", "Reject dereferencing a pointer advanced past the base object",
+                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, a& a[0]; p m+ 3; r; (i4)p* p; }")
+
+    def test_pointer_dynamic_bound():
+        sigil = """
+        i4 main(v.) {
+            o! u4[3] a m, { 1, 2, 3 };
+            o! p* u4 p m, a& a[1];
+            o! u4 i m, 0;
+            r; (i4)p[i];
+        }
+        """
+        with open("pbound.c", "w") as f:
+            f.write(compile_source(sigil, "pbound.sigil"))
+        c_src = open("pbound.c").read()
+        assert "SIGIL_IDX(i, 2)" in c_src, c_src     # 3 元素、起点偏移 1 -> 只剩 2 个
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "pbound.c", "-o", "pbound_bin"],
+            check=True
+        )
+        assert subprocess.run(["./pbound_bin"], check=False).returncode == 2
+
+    assert_ok("15. v1.1 ptr", "A dynamic pointer index reuses SIGIL_IDX with the remaining length", test_pointer_dynamic_bound)
+
+    assert_raises("15. v1.1 ptr", "Reject returning the address of a local object",
+                  SemanticError, "p* u4 f(v.) { o! u4 x m, 1; r; a& x; }")
+    assert_raises("15. v1.1 ptr", "Reject storing the address of a local into a global",
+                  SemanticError, "o! p* u4 g; v. f(v.) { o! u4 x m, 1; g m, a& x; }")
+    assert_raises("15. v1.1 ptr", "Reject storing the address of a local into an out-parameter",
+                  SemanticError, "v. f(p* u4 out) { o! u4 x m, 1; out m, a& x; }")
+
+    def test_pointer_dangling_ok():
+        sigil = """
+        o! u4 g m, 5;
+        p* u4 addr_of_global(v.) { r; a& g; }
+        v. local_ptr(v.) {
+            o! u4 x m, 1;
+            o! p* u4 p m, a& x;
+            o! u4 y m, p* p;
+        }
+        i4 main(v.) { r; (i4)(p* addr_of_global()) + (i4)(z? p* u4) - 8; }
+        """
+        check_source(sigil, "dangle_ok.sigil")
+
+    assert_ok("15. v1.1 ptr", "Global addresses and locals pointing at locals stay legal", test_pointer_dangling_ok)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 14-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 15-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
