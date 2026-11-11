@@ -14,6 +14,60 @@ Sigil-C 是一种面向系统编程、游戏底层内核（ECS、网格平流、
 * **纯表达式与赋值语句分离**：语法层将赋值语句（`parse_assign_or_expr_no_semi`）与纯表达式（`parse_pure_expr`）拆分为独立入口，禁止在 `i?`、`w~`、`f~` 条件判断或算术子表达式中混入 `m,`、`m-` 等赋值副作用。
 * **受限子集静态检查**：内置针对当前语言子集的类型推导（涵盖一元/二元算子、指针加减与指针差 `ptrdiff_t`、三元 `const` 合并与常规算术提升）、深层左值 `const` 传播（含 `const` 结构体数组成员的只读元素传播）、完整对象类型（Complete Object Type）校验、C99 标准头文件内建函数签名识别、非 `void` 函数返回路径检查，以及带八进制/十六进制/除零/移位越界/64 位溢出检查的向零截断整数常量折叠。
 
+## 指针指南：从声明读到访问
+
+Sigil-C 把指针层级写在类型前缀里。下面用刻意完整的变量名，把“数组 → 指针 → 解引用/下标 → 写回”的关系逐步展开：
+
+```sigil
+u4 pointer_guide_demo(v.) {
+    /* 两个普通定长数组：每个数组包含三个 u4 元素。 */
+    u4[3] source_values;
+    u4[3] destination_values;
+    source_values[0] m, 17;
+    source_values[1] m, 23;
+    source_values[2] m, 41;
+
+    /* p* c@ u4：可改 source 指针本身，但不能经它写源元素。 */
+    /* p* u4：可读写目标元素。 */
+    p* c@ u4    read_only_source_buffer      m, source_values;
+    p*     u4   writable_destination_buffer m, destination_values;
+
+    /* 数组初始化指针时退化为首元素地址；[1] 表示向后偏移一个 u4。 */
+    u4 first_source_value  m, p* read_only_source_buffer;
+    u4 second_source_value m, read_only_source_buffer[1];
+    writable_destination_buffer[0] m, first_source_value;
+    writable_destination_buffer[1] m, second_source_value;
+
+    /* c@ 修饰指针自身：地址固定，指向的 u4 仍可写。 */
+    c@ p* u4 fixed_destination_pointer  m, a& destination_values[0];
+    fixed_destination_pointer[2] m, source_values[2];
+
+    /* p* p* u4 是 u4 **：先取回内层指针，再经双重解引用读值。 */
+    p* p* u4 destination_pointer_slot   m, a& writable_destination_buffer;
+    p* u4 recovered_destination_pointer m, p* destination_pointer_slot;
+    u4 first_written_value m, p* p* destination_pointer_slot;
+
+    r; first_source_value + second_source_value + first_written_value;
+}
+
+/* v@ 限定指向的硬件对象；读写都经过 volatile u4 左值。 */
+u4 read_hardware_register(p* v@ u4 mapped_register_address) {
+    r; p* mapped_register_address;
+}
+```
+
+逐层对照 C99 声明：
+
+| Sigil-C 类型 | C99 类型 | 含义 |
+| :--- | :--- | :--- |
+| `p* u4 value_pointer` | `uint32_t *value_pointer` | 指向可读写 `u4` 的可变指针 |
+| `p* c@ u4 source_pointer` | `const uint32_t *source_pointer` | 指向只读 `u4` 的可变指针 |
+| `c@ p* u4 fixed_pointer` | `uint32_t * const fixed_pointer` | 地址固定，目标 `u4` 可写 |
+| `p* v@ u4 register_pointer` | `volatile uint32_t *register_pointer` | 指向易变 `u4`，适用于寄存器访问 |
+| `p* p* u4 pointer_slot` | `uint32_t **pointer_slot` | 指向 `u4` 指针的指针 |
+
+阅读规则很直接：`p*` 每出现一次，就多一层指针；`c@` / `v@` 修饰紧随其后的那一层；`a&` 取左值地址，表达式位置的 `p*` 解引用。数组传给指针形参时会退化为首元素地址，原始指针本身不携带长度，因此下标范围仍由调用方负责。
+
 ### 完整平流更新示例
 
 下面给出一个完整的 Sigil-C 函数：从 `rd` 缓冲区读取每个单元，计算后写入 `wr`，同时累计输入值。
