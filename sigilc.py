@@ -34,7 +34,12 @@ SIGIL_KEYWORDS = {
     'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',
     'd~': 'KW_DO',       'g!': 'KW_GOTO',     'l!': 'KW_LABEL',
     'r@': 'KW_RESTRICT',  'g?': 'KW_GENERIC',
+    'x!': 'KW_EXTERNAL',
 }
+
+# x! 声明的外部类型：Sigil 侧名字 -> 生成 C 里的实际拼写
+# （例如 x! struct sockaddr_in { ... }; 这里记 sockaddr_in -> "struct sockaddr_in"）
+EXTERNAL_C_SPELLING: Dict[str, str] = {}
 
 SIGIL_OPERATORS = {
     'm,': 'OP_ASSIGN',      'm+': 'OP_ADD_ASSIGN',  'm-': 'OP_SUB_ASSIGN',
@@ -566,7 +571,8 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
         if isinstance(curr, BaseType):
             qualifiers = [q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled]
             prefix = " ".join(qualifiers) + (" " if qualifiers else "")
-            return f"{prefix}{curr.c_name}" + (f" {inner}" if inner else "")
+            c_name = EXTERNAL_C_SPELLING.get(curr.c_name, curr.c_name)
+            return f"{prefix}{c_name}" + (f" {inner}" if inner else "")
         elif isinstance(curr, PointerType):
             qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile"), (curr.is_restrict, "restrict")) if enabled)
             ptr_str = f"* {qualifiers} {inner}" if qualifiers and inner else (f"* {qualifiers}" if qualifiers else f"*{inner}")
@@ -760,6 +766,14 @@ class StructDefNode(StmtNode):
     attrs: List[Attribute] = field(default_factory=list)
 
 @dataclass
+class ExternalTypeNode(StmtNode):
+    """`x!` 外部类型：不生成定义，只登记字段供转译期检查。"""
+    name: str
+    c_spelling: str
+    opaque: bool
+    field_count: int = 0
+
+@dataclass
 class EnumDefNode(StmtNode):
     name: str
     items: List[Tuple[str, Optional[ExprNode]]]
@@ -875,7 +889,8 @@ ASSIGN_TOKENS = {
 }
 
 class Parser:
-    def __init__(self, tokens: List[Token], filename: str = "<input>"):
+    def __init__(self, tokens: List[Token], filename: str = "<input>",
+                 defines: Optional[Dict[str, str]] = None):
         self.tokens = tokens
         self.pos = 0
         self.filename = filename
@@ -895,6 +910,8 @@ class Parser:
         self.current_func_variadic: bool = False
         self.loop_depth: int = 0
         self.switch_depth: int = 0
+        for d_name, d_value in (defines or {}).items():
+            self._register_macro_constant(Token('PREPROC', f"#define {d_name} {d_value}", 1, 1, 0))
 
     def _cur(self) -> Token:
         return self.tokens[self.pos]
@@ -1867,6 +1884,8 @@ class Parser:
                 self._register_c99_header_builtins(ptok)
                 self._register_macro_constant(ptok)
                 top_nodes.append(PreprocNode(line=ptok.line, col=ptok.col, text=ptok.value))
+            elif self._cur().kind == 'KW_EXTERNAL':
+                top_nodes.append(self.parse_external())
             elif self._cur().kind in ('KW_STRUCT', 'KW_UNION'):
                 top_nodes.append(self.parse_struct_or_union(attrs=attrs))
             elif self._cur().kind == 'KW_ENUM':
@@ -1932,6 +1951,74 @@ class Parser:
             raise SemanticError(
                 f"{self.filename}:{tok.line}:{tok.col}: 'w!' bit-field requires an integer base type, "
                 f"got '{format_c_declarator(ft)}'")
+
+    def parse_external(self) -> ExternalTypeNode:
+        """`x!` 外部类型：不生成定义，只登记字段供转译期检查。
+
+        x! struct sockaddr_in { u2 sin_family; ... };   /* C 里写作 struct sockaddr_in */
+        x! pthread_t;                                   /* typedef 型不透明句柄 */
+        """
+        kw = self._eat('KW_EXTERNAL')
+        c_prefix = ''
+        if self._cur().kind == 'IDENT' and self._cur().value in ('struct', 'union', 'enum'):
+            c_prefix = self._eat('IDENT').value
+        name_tok = self._eat('IDENT')
+        sigil_name = name_tok.value
+        c_spelling = f"{c_prefix} {sigil_name}" if c_prefix else sigil_name
+        if sigil_name in self.user_types:
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: '{sigil_name}' is already declared")
+        if self._cur().kind == 'SEMI':
+            self._eat('SEMI')
+            if c_prefix == 'enum':
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: an external enum needs its constants declared separately")
+            self.user_types[sigil_name] = c_prefix or 'struct'
+            EXTERNAL_C_SPELLING[sigil_name] = c_spelling
+            return ExternalTypeNode(line=kw.line, col=kw.col, name=sigil_name,
+                                    c_spelling=c_spelling, opaque=True)
+        if c_prefix == 'enum':
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: external enums cannot carry a field list")
+        self._eat('LBRACE')
+        fields: Dict[str, TypeNode] = {}
+        count = 0
+        while self._cur().kind != 'RBRACE':
+            ft = self.parse_type()
+            fname_tok = self._eat('IDENT')
+            if self._cur().kind == 'KW_BITFIELD':
+                bf_tok = self._eat('KW_BITFIELD')
+                w_tok = self._eat('INT_NUM')
+                width = self._attr_int_value(w_tok, w_tok.value)
+                self._check_bitfield_base(bf_tok, ft)
+                limit = BITFIELD_WIDTH[ft.c_name]
+                if width < 1 or width > limit:
+                    raise SemanticError(
+                        f"{self.filename}:{bf_tok.line}:{bf_tok.col}: 'w!{width}' out of range for '{ft.c_name}': "
+                        f"width must be 1..{limit}")
+                self.struct_bitfields.setdefault(sigil_name, {})[fname_tok.value] = width
+            self._validate_non_void_var(ft, fname_tok)
+            if not self._is_complete_object_type(ft):
+                raise SemanticError(
+                    f"{self.filename}:{fname_tok.line}:{fname_tok.col}: Field '{fname_tok.value}' has incomplete type")
+            if fname_tok.value in fields:
+                raise SemanticError(
+                    f"{self.filename}:{fname_tok.line}:{fname_tok.col}: Duplicate field '{fname_tok.value}' "
+                    f"in external type '{sigil_name}'")
+            fields[fname_tok.value] = ft
+            self._eat('SEMI')
+            count += 1
+        if count == 0:
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: empty external type; write 'x! {sigil_name};' for an opaque handle")
+        self._eat('RBRACE')
+        self._eat('SEMI')
+        self.user_types[sigil_name] = c_prefix or 'struct'
+        self.struct_fields[sigil_name] = fields
+        self.complete_structs.add(sigil_name)
+        EXTERNAL_C_SPELLING[sigil_name] = c_spelling
+        return ExternalTypeNode(line=kw.line, col=kw.col, name=sigil_name,
+                                c_spelling=c_spelling, opaque=False, field_count=count)
 
     def parse_struct_or_union(self, attrs: Optional[List[Attribute]] = None) -> StructDefNode:
         attrs = attrs or []
@@ -2984,11 +3071,13 @@ C99_PRELUDE = ("/* Sigil-C shared prelude: generated by Sigil-C. Include this on
 
 class CodeGenerator:
     def __init__(self, filename: str = "input.sigil", header_mode: bool = False,
-                 prelude_include: Optional[str] = None, bounds_check: bool = False):
+                 prelude_include: Optional[str] = None, bounds_check: bool = False,
+                 cli_defines: Optional[Dict[str, str]] = None):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.header_mode = header_mode
         self.prelude_include = prelude_include
         self.bounds_check = bounds_check
+        self.cli_defines = cli_defines or {}
         self.lines: List[str] = []
 
     def _emit(self, code: str, line: int, indent: int = 0):
@@ -3009,6 +3098,10 @@ class CodeGenerator:
         """packed / aligned 会影响类型布局，后端不支持属性时不能静默丢弃。"""
         return any(a.name in ('packed', 'aligned') for a in attrs)
 
+    def _emit_cli_defines(self) -> None:
+        for name, value in self.cli_defines.items():
+            self.lines.append(f"#ifndef {name}\n#define {name} {value}\n#endif\n")
+
     def generate(self, nodes: List[StmtNode]) -> str:
         if self.bounds_check:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
@@ -3016,6 +3109,7 @@ class CodeGenerator:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
             self.lines.append(C99_HEADER)
+        self._emit_cli_defines()
         for node in nodes:
             self.gen_top(node)
         return "".join(self.lines)
@@ -3029,6 +3123,7 @@ class CodeGenerator:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
             self.lines.append(C99_HEADER_BODY)
+        self._emit_cli_defines()
         for node in nodes:
             self.gen_top(node)
         self.lines.append(f"\n#endif /* {guard} */\n")
@@ -3076,6 +3171,12 @@ class CodeGenerator:
                         node.line,
                     )
                     self._emit("#endif", node.line)
+        elif isinstance(node, ExternalTypeNode):
+            if node.opaque:
+                self._emit(f"/* x! {node.name} -> '{node.c_spelling}' (opaque, from a system header) */", node.line)
+            else:
+                self._emit(f"/* x! {node.name} -> '{node.c_spelling}' ({node.field_count} checked field(s), "
+                           f"definition comes from the system header) */", node.line)
         elif isinstance(node, EnumDefNode):
             self._emit(f"typedef enum {node.name} {{", node.line)
             for idx, (iname, ival) in enumerate(node.items):
@@ -3231,27 +3332,48 @@ class CodeGenerator:
         return isinstance(last, (ReturnStmt, GotoStmt))
 
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
-                   bounds_check: bool = False) -> str:
+                   bounds_check: bool = False, defines: Optional[Dict[str, str]] = None) -> str:
+    EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename).parse_program()
-    return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check).generate(ast)
+    ast = Parser(tokens, filename, defines).parse_program()
+    return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
+                         cli_defines=defines).generate(ast)
 
-def check_source(src: str, filename: str = "input.sigil") -> None:
+def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None) -> None:
     """词法 + 语法 + 静态语义检查，不产生任何输出。"""
+    EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    Parser(tokens, filename).parse_program()
+    Parser(tokens, filename, defines).parse_program()
 
 def _header_guard(header_name: str) -> str:
     base = os.path.basename(header_name).upper()
     return "SIGIL_" + "".join(ch if ch.isalnum() else "_" for ch in base)
 
 def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h",
-                   prelude: Optional[str] = None, bounds_check: bool = False) -> str:
+                   prelude: Optional[str] = None, bounds_check: bool = False,
+                   defines: Optional[Dict[str, str]] = None) -> str:
     """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
+    EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename).parse_program()
+    ast = Parser(tokens, filename, defines).parse_program()
     return CodeGenerator(filename, header_mode=True, prelude_include=prelude,
-                         bounds_check=bounds_check).generate_header(ast, _header_guard(header_name))
+                         bounds_check=bounds_check, cli_defines=defines).generate_header(ast, _header_guard(header_name))
+
+def _print_error(exc: Exception, fname: str, src: str) -> None:
+    """打印错误，并在能定位时给出源码片段与插入符。"""
+    msg = str(exc)
+    print(f"error: {msg}", file=sys.stderr)
+    m = re.match(rf"{re.escape(fname)}:(\d+):(\d+):", msg)
+    if not m:
+        return
+    line_no, col = int(m.group(1)), int(m.group(2))
+    lines = src.splitlines()
+    if line_no < 1 or line_no > len(lines):
+        return
+    text = lines[line_no - 1]
+    print(f"  --> {fname}:{line_no}:{col}", file=sys.stderr)
+    print(f"  {line_no:>4} | {text}", file=sys.stderr)
+    print(f"       | {' ' * max(0, col - 1)}^", file=sys.stderr)
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
@@ -3271,6 +3393,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="include NAME instead of inlining the prelude macro block in generated files")
     ap.add_argument("--bounds-check", action="store_true",
                     help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
+    ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
+                    help="predefine a macro constant (repeatable), like #define NAME VALUE")
     ap.add_argument("--version", action="version", version="Sigil-C 1.1")
     args = ap.parse_args(argv)
 
@@ -3280,28 +3404,40 @@ def main(argv: Optional[List[str]] = None) -> int:
         src = f.read()
     fname = os.path.basename(in_path)
 
+    defines: Dict[str, str] = {}
+    for item in args.define:
+        if "=" not in item:
+            print(f"error: --define expects NAME=VALUE, got '{item}'", file=sys.stderr)
+            return 2
+        d_name, d_value = item.split("=", 1)
+        defines[d_name.strip()] = d_value.strip()
+
     if args.emit_prelude:
         with open(args.emit_prelude, "w", encoding="utf-8") as f:
             f.write(C99_PRELUDE)
         print(f"Prelude  {args.emit_prelude}")
 
-    if args.check:
-        check_source(src, fname)
-        print(f"Checked {in_path}: OK")
-        return 0
+    try:
+        if args.check:
+            check_source(src, fname, defines=defines)
+            print(f"Checked {in_path}: OK")
+            return 0
 
-    c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(c_src)
-    print(f"Compiled {in_path} -> {out_path}")
+        c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check, defines=defines)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(c_src)
+        print(f"Compiled {in_path} -> {out_path}")
 
-    header_path = args.header or (os.path.splitext(out_path)[0] + ".h" if args.emit_header else None)
-    if header_path:
-        h_src = compile_header(src, fname, os.path.basename(header_path), prelude=args.prelude,
-                               bounds_check=args.bounds_check)
-        with open(header_path, "w", encoding="utf-8") as f:
-            f.write(h_src)
-        print(f"Header   {header_path}")
+        header_path = args.header or (os.path.splitext(out_path)[0] + ".h" if args.emit_header else None)
+        if header_path:
+            h_src = compile_header(src, fname, os.path.basename(header_path), prelude=args.prelude,
+                                   bounds_check=args.bounds_check, defines=defines)
+            with open(header_path, "w", encoding="utf-8") as f:
+                f.write(h_src)
+            print(f"Header   {header_path}")
+    except (LexerError, ParseError, SemanticError) as e:
+        _print_error(e, fname, src)
+        return 1
     return 0
 
 if __name__ == "__main__":

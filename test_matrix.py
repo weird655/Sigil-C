@@ -1250,12 +1250,95 @@ int main(void) {
 
     assert_ok("13. safety", "--bounds-check aborts on a runtime out-of-range subscript", test_runtime_bounds_check)
 
+    # Layer 14: x! external types / --define / error snippets
+    def test_external_type():
+        with open("sys_fake.h", "w") as f:
+            f.write(
+                "#include <stdint.h>\n"
+                "struct sockaddr_fake { uint16_t sin_family; uint16_t sin_port; uint32_t sin_addr; };\n"
+                "typedef struct pthread_fake { uint64_t opaque; } pthread_fake;\n"
+            )
+        sigil = """
+        #include "sys_fake.h"
+
+        x! struct sockaddr_fake {
+            u2 sin_family;
+            u2 sin_port;
+            u4 sin_addr;
+        };
+
+        x! pthread_fake;
+
+        u4 family_of(p* c@ sockaddr_fake sa) { r; (u4)sa->sin_family; }
+
+        i4 main(v.) {
+            t! (offsetof(sockaddr_fake, sin_addr) =? 4, "layout drift");
+            o! sockaddr_fake sa;
+            sa.sin_family m, 2;
+            sa.sin_port m, 80;
+            sa.sin_addr m, 0x7f000001;
+            o! p* pthread_fake h m, NULL;
+            i? (h =? NULL) { r; (i4)(family_of(a& sa) + (u4)(z? sockaddr_fake)); }
+            r; 1;
+        }
+        """
+        with open("ext.c", "w") as f:
+            f.write(compile_source(sigil, "ext.sigil"))
+        c_src = open("ext.c").read()
+        assert "struct sockaddr_fake {" not in c_src, c_src          # 定义来自系统头，不重复生成
+        assert "const struct sockaddr_fake *sa" in c_src, c_src    # 生成 C 用真实拼写
+        assert "offsetof(struct sockaddr_fake, sin_addr)" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "ext.c", "-o", "ext_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./ext_bin"], check=False).returncode
+        assert rc == 10, rc   # family 2 + sizeof 8
+
+    assert_ok("14. v1.1 ext", "x! registers external struct fields without emitting a definition", test_external_type)
+
+    assert_raises("14. v1.1 ext", "Reject member access on an opaque external handle",
+                  SemanticError, "x! pthread_fake; i4 main(v.) { o! p* pthread_fake h; h->opaque m, 1; r; 0; }")
+    assert_raises("14. v1.1 ext", "Reject a duplicate external type name",
+                  SemanticError, "x! pthread_t; x! pthread_t; i4 main(v.) { r; 0; }")
+    assert_raises("14. v1.1 ext", "Reject an external type with an empty field list",
+                  SemanticError, "x! struct empty { }; i4 main(v.) { r; 0; }")
+
+    def test_cli_defines():
+        sigil = "i4 main(v.) { o! u4[N] a; o! u4 i m, 0; w~ (i < N) { a[i] m, i; i m+ 1; } r; (i4)a[N - 1] - (N - 1); }"
+        with open("defs.c", "w") as f:
+            f.write(compile_source(sigil, "defs.sigil", defines={"N": "4"}))
+        c_src = open("defs.c").read()
+        assert "#define N 4" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "defs.c", "-o", "defs_bin"],
+            check=True
+        )
+        assert subprocess.run(["./defs_bin"], check=False).returncode == 0
+
+    assert_ok("14. v1.1 ext", "--define seeds a macro constant into both checking and generated C", test_cli_defines)
+
+    def test_error_snippet():
+        import sys as _sys
+        import sigilc as _sigilc
+        with open("snip.sigil", "w") as f:
+            f.write("i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[5]; }")
+        res = subprocess.run(
+            [_sys.executable, _sigilc.__file__, "snip.sigil", "--check"],
+            capture_output=True, text=True
+        )
+        assert res.returncode != 0, res.stdout
+        assert "-->" in res.stderr, res.stderr
+        assert "^" in res.stderr, res.stderr
+
+    assert_ok("14. v1.1 ext", "Compile errors print a source snippet with a caret", test_error_snippet)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 13-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 14-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
