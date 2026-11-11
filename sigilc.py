@@ -612,6 +612,7 @@ class StructDefNode(StmtNode):
     name: str
     alignment: Optional[int]
     fields: List[VarDeclStmt]
+    emit_typedef: bool = True
 
 @dataclass
 class EnumDefNode(StmtNode):
@@ -1399,15 +1400,20 @@ class Parser:
         kw_tok = self._eat()
         kind = "struct" if kw_tok.kind == 'KW_STRUCT' else "union"
         name_tok = self._eat('IDENT')
-        if name_tok.value in self.complete_structs:
-            raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Redefinition of type '{name_tok.value}'")
         if name_tok.value in self.user_types and self.user_types[name_tok.value] != kind:
             raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: '{name_tok.value}' defined as wrong kind of tag")
-        self.user_types[name_tok.value] = kind
+        tag_already_declared = name_tok.value in self.user_types
 
         if self._cur().kind == 'SEMI':
             self._eat('SEMI')
-            return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value, alignment=None, fields=[])
+            if not tag_already_declared:
+                self.user_types[name_tok.value] = kind
+            return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value,
+                                alignment=None, fields=[], emit_typedef=not tag_already_declared)
+
+        if name_tok.value in self.complete_structs:
+            raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Redefinition of type '{name_tok.value}'")
+        self.user_types[name_tok.value] = kind
 
         alignment = None
         if self._cur().kind == 'KW_ALIGN':
@@ -1436,7 +1442,8 @@ class Parser:
         self._eat('SEMI')
         self.struct_fields[name_tok.value] = field_map
         self.complete_structs.add(name_tok.value)
-        return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value, alignment=alignment, fields=fields)
+        return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value,
+                            alignment=alignment, fields=fields, emit_typedef=not tag_already_declared)
 
     def parse_enum(self) -> EnumDefNode:
         kw_tok = self._eat('KW_ENUM')
@@ -1985,7 +1992,8 @@ class CodeGenerator:
         if isinstance(node, PreprocNode):
             self._emit(node.text, node.line, indent=0)
         elif isinstance(node, StructDefNode):
-            self._emit(f"typedef {node.kind} {node.name} {node.name};", node.line)
+            if node.emit_typedef:
+                self._emit(f"typedef {node.kind} {node.name} {node.name};", node.line)
             if node.fields:
                 if node.alignment:
                     self._emit(f"SIGIL_ALIGNED_TAG({node.kind}, {node.name}, {node.alignment}) {{", node.line)

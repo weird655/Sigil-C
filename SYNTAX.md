@@ -18,8 +18,8 @@
 | `r;` | `KW_RETURN` | `return expr;` / `return;` | **r**eturn + `;`（函数返回），静态检查返回值类型与函数签名兼容；非 `void` 函数（除 `main`）要求每条能到达函数末尾的路径都已返回，并将可证明为真且没有 `break` 出口的整数常量循环视为不落到函数末尾；分析顺序执行和 `switch` 穿透 |
 | `b!` | `KW_BREAK` | `break;` | **b**reak + `!`（跳出中断），仅允许出现在 `w~`、`f~` 或 `s?` 内部 |
 | `c^` | `KW_CONTINUE` | `continue;` | **c**ontinue + `^`（继续下一轮），仅允许出现在 `w~` 或 `f~` 循环内部（仅在 `s?` 内而无外层循环时报错） |
-| `s{` | `KW_STRUCT` | `typedef struct Name Name; struct Name { ... };` | **s**truct + `{`（结构体声明/定义），支持 `s{ Forward;` 不完整前置声明与 `a!N` 对齐修饰 |
-| `u{` | `KW_UNION` | `typedef union Name Name; union Name { ... };` | **u**nion + `{`（联合体声明/定义），支持 `u{ Forward;` 前置声明、`a!N` 对齐修饰及 `.` / `->` 访问 |
+| `s{` | `KW_STRUCT` | `typedef struct Name Name; struct Name { ... };` | **s**truct + `{`（结构体声明/定义），支持重复的 `s{ Forward;` 前置声明、前置声明后再定义，以及 `a!N` 对齐修饰；每个标签只生成一次 typedef，且只允许一个定义 |
+| `u{` | `KW_UNION` | `typedef union Name Name; union Name { ... };` | **u**nion + `{`（联合体声明/定义），支持重复的 `u{ Forward;` 前置声明、前置声明后再定义、`a!N` 对齐修饰及 `.` / `->` 访问；每个标签只生成一次 typedef，且只允许一个定义 |
 | `e{` | `KW_ENUM` | `typedef enum Name { ... } Name;` | **e**num + `{`（枚举定义），枚举项支持 `ITEM m, CONST_EXPR` 显式常量赋值；枚举类型按 C99 整数类型规则参与算术和隐式转换 |
 | `a!N` | `KW_ALIGN` | `SIGIL_ALIGNED_TAG(kind, Name, N)` | **a**lign + `!` + 2 的幂 $N$：GCC/Clang 使用 `__attribute__((aligned(N)))` 扩展；其他 C99 编译器默认忽略该属性，实际对齐能力取决于平台实现 |
 
