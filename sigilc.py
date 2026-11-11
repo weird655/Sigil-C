@@ -391,11 +391,15 @@ def is_void_type(t: TypeNode) -> bool:
     return isinstance(t, BaseType) and t.c_name == "void"
 
 def is_const_qualified(t: TypeNode) -> bool:
+    if isinstance(t, ArrayType):
+        return is_const_qualified(t.element_type)
     if isinstance(t, (BaseType, PointerType, FunctionPointerType)):
         return t.is_const
     return False
 
 def is_volatile_qualified(t: TypeNode) -> bool:
+    if isinstance(t, ArrayType):
+        return is_volatile_qualified(t.element_type)
     if isinstance(t, (BaseType, PointerType, FunctionPointerType)):
         return t.is_volatile
     return False
@@ -407,6 +411,8 @@ def strip_top_qualifiers(t: TypeNode) -> TypeNode:
         return PointerType(line=t.line, col=t.col, pointee=t.pointee, is_const=False, is_volatile=False)
     if isinstance(t, FunctionPointerType):
         return FunctionPointerType(line=t.line, col=t.col, param_decls=t.param_decls, return_type=t.return_type, is_const=False, is_volatile=False, is_variadic=t.is_variadic)
+    if isinstance(t, ArrayType):
+        return ArrayType(line=t.line, col=t.col, element_type=strip_top_qualifiers(t.element_type), size_expr=t.size_expr, size_val=t.size_val)
     return t
 
 def with_const(t: TypeNode) -> TypeNode:
@@ -432,6 +438,8 @@ def with_volatile(t: TypeNode) -> TypeNode:
     return t
 
 def qualifiers_are_assignable(destination: TypeNode, source: TypeNode) -> bool:
+    if isinstance(destination, ArrayType) and isinstance(source, ArrayType):
+        return qualifiers_are_assignable(destination.element_type, source.element_type)
     return not (
         (is_const_qualified(source) and not is_const_qualified(destination))
         or (is_volatile_qualified(source) and not is_volatile_qualified(destination))
@@ -462,8 +470,8 @@ def types_equal(a: TypeNode, b: TypeNode) -> bool:
     return False
 
 def types_compatible_for_assign(expected: TypeNode, actual: TypeNode) -> bool:
-    exp_clean = strip_top_qualifiers(expected)
-    act_clean = strip_top_qualifiers(actual)
+    exp_clean = expected if isinstance(expected, ArrayType) else strip_top_qualifiers(expected)
+    act_clean = actual if isinstance(actual, ArrayType) else strip_top_qualifiers(actual)
     if types_equal(exp_clean, act_clean):
         return True
     if isinstance(exp_clean, BaseType) and isinstance(act_clean, BaseType):
