@@ -333,6 +333,25 @@ i4 sum_all(u4 count, ...) {
 
 `va_start` 只允许出现在变参函数体内；`va_arg` 的目标类型必须是完整对象类型。生成代码通过 `<stdarg.h>` 的原生机制读取参数。
 
+**填坑项：`offsetof` / `va_copy` / 宏常量 / `#pragma`**
+
+- `offsetof(Type, field)` 内建形式，结果 `size_t`；`Type` 必须是完整 struct/union，字段必须存在。
+- `va_copy(dst, src);` 复制一个已经 `va_start` 过的 `va_list`。
+- `#define NAME <整型/浮点/字符/字符串字面量>` 会把 `NAME` 登记为常量：可直接用于数组长度、`t!` 条件与普通表达式。函数式宏与复杂宏体只透传到生成代码，不登记为符号。
+- `#pragma ...` 原样透传到生成代码（`#pragma once` 只应在头文件里出现）。
+
+**越界防护**
+
+```sigil
+o! u4[3] a m, { 1, 2, 3 };
+o! u4 i m, 2;
+o! u4 x m, a[i];        /* 非常量下标 → 生成 a[SIGIL_IDX(i, 3)] */
+```
+
+- **编译期（始终开启）**：数组下标是常量时检查 `0 <= idx < N`，越界直接 `SemanticError`，不生成任何代码。
+- **运行期（可选）**：`--bounds-check` 会在生成文件顶部加 `#define SIGIL_BOUNDS_CHECK 1`，越界时经 `sigil_bounds_check()` 调用 `abort()`；不加该宏时 `SIGIL_IDX` 展开为 `(i)`，零开销。
+- **保护边界**：只有长度已知的静态数组受保护。指针下标（`p[i]`）、指针算术、`memcpy` 这类库调用都没有长度信息，不在保护范围内——这是 C 语义本身的限制，不是开关问题。
+
 **可变参**：函数与函数指针的参数表末位可写 `...`，生成 C 的变参签名：
 
 ```sigil

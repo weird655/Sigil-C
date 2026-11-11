@@ -1143,12 +1143,119 @@ int main(void) {
     assert_raises("12. v3.4 expr", "Reject duplicate g? associations for one type",
                   SemanticError, "i4 f(i4 x) { r; g? x { i4: 1; i4: 2; }; }")
 
+    # Layer 13: v3.5 填坑与越界防护（宏常量 / offsetof / va_copy / #pragma / bounds）
+    def test_macros_offsetof():
+        sigil = """
+        #define TABLE_N 3
+        #define SCALE 10
+
+        s{ Row { u1 tag; u4 value; };
+
+        i4 main(v.) {
+            o! u4[TABLE_N] t m, { 1, 2, 3 };
+            o! u4 sum m, 0;
+            o! u4 i m, 0;
+            w~ (i < TABLE_N) { sum m+ t[i]; i m+ 1; }
+            t! (offsetof(Row, value) =? 4, "value offset");
+            r; (i4)(sum * SCALE) + (i4)offsetof(Row, value);
+        }
+        """
+        with open("moff.c", "w") as f:
+            f.write(compile_source(sigil, "moff.sigil"))
+        c_src = open("moff.c").read()
+        assert "#define TABLE_N 3" in c_src, c_src
+        assert "offsetof(Row, value)" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "moff.c", "-o", "moff_bin"],
+            check=True
+        )
+        rc = subprocess.run(["./moff_bin"], check=False).returncode
+        assert rc == 64, rc   # 6 * 10 + offsetof(value) == 4
+
+    assert_ok("13. v3.5 safety", "#define literals usable as constants; offsetof() builtin", test_macros_offsetof)
+
+    def test_va_copy():
+        sigil = """
+        i4 sum_two(u4 count, ...) {
+            o! va_list a;
+            o! va_list b;
+            va_start(a, count);
+            va_copy(b, a);
+            o! i4 s m, 0;
+            o! u4 i m, 0;
+            w~ (i < count) { s m+ va_arg(a, i4); i m+ 1; }
+            va_end(a);
+            va_end(b);
+            r; s;
+        }
+        i4 main(v.) { r; sum_two(2, 4, 5) - 9; }
+        """
+        with open("vacopy.c", "w") as f:
+            f.write(compile_source(sigil, "vacopy.sigil"))
+        c_src = open("vacopy.c").read()
+        assert "va_copy(b, a);" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "vacopy.c", "-o", "vacopy_bin"],
+            check=True
+        )
+        assert subprocess.run(["./vacopy_bin"], check=False).returncode == 0
+
+    assert_ok("13. v3.5 safety", "va_copy duplicates a va_list that has already been started", test_va_copy)
+
+    def test_pragma_passthrough():
+        sigil = """
+        #pragma GCC diagnostic ignored "-Wunused-parameter"
+        i4 id(i4 x) { r; x; }
+        i4 main(v.) { r; id(0); }
+        """
+        with open("prag.c", "w") as f:
+            f.write(compile_source(sigil, "prag.sigil"))
+        c_src = open("prag.c").read()
+        assert "#pragma GCC diagnostic ignored" in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "prag.c", "-o", "prag_bin"],
+            check=True
+        )
+        assert subprocess.run(["./prag_bin"], check=False).returncode == 0
+
+    assert_ok("13. v3.5 safety", "#pragma lines pass through to the generated C", test_pragma_passthrough)
+
+    assert_raises("13. v3.5 safety", "Reject a constant array index past the bound at transpile time",
+                  SemanticError, "i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[5]; }")
+    assert_raises("13. v3.5 safety", "Reject a negative constant array index at transpile time",
+                  SemanticError, "i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[-1]; }")
+
+    def test_runtime_bounds_check():
+        good = """
+        i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; o! u4 i m, 2; r; (i4)a[i]; }
+        """
+        bad = """
+        i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; o! u4 i m, 5; r; (i4)a[i]; }
+        """
+        with open("bc_ok.c", "w") as f:
+            f.write(compile_source(good, "bc_ok.sigil", bounds_check=True))
+        with open("bc_bad.c", "w") as f:
+            f.write(compile_source(bad, "bc_bad.sigil", bounds_check=True))
+        for name in ("bc_ok", "bc_bad"):
+            subprocess.run(
+                ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", name + ".c", "-o", name + "_bin"],
+                check=True
+            )
+        assert "#define SIGIL_BOUNDS_CHECK 1" in open("bc_ok.c").read()
+        assert "SIGIL_IDX(i, 3)" in open("bc_ok.c").read()
+        ok_rc = subprocess.run(["./bc_ok_bin"], check=False).returncode
+        bad_rc = subprocess.run(["./bc_bad_bin"], check=False).returncode
+        assert ok_rc == 3, ok_rc          # a[2] == 3, no abort
+        assert bad_rc != 0, bad_rc        # out-of-range aborts
+
+    assert_ok("13. v3.5 safety", "--bounds-check aborts on a runtime out-of-range subscript", test_runtime_bounds_check)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 12-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 13-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

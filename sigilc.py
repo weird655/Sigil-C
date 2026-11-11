@@ -6,6 +6,7 @@ Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer 
 
 import sys
 import os
+import re
 import argparse
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict, Set
@@ -646,6 +647,7 @@ class CallExpr(ExprNode):
 class IndexExpr(ExprNode):
     base: ExprNode
     index: ExprNode
+    bound: Optional[int] = None
 
 @dataclass
 class MemberExpr(ExprNode):
@@ -742,10 +744,11 @@ class LabelStmt(StmtNode):
 
 @dataclass
 class VaStmt(StmtNode):
-    """`va_start(ap, last);` / `va_end(ap);`"""
+    """`va_start(ap, last);` / `va_end(ap);` / `va_copy(dst, src);`"""
     kind: str
     ap: ExprNode
     last_name: Optional[str] = None
+    ap2: Optional[ExprNode] = None
 
 @dataclass
 class StructDefNode(StmtNode):
@@ -807,6 +810,12 @@ class VaArgExpr(ExprNode):
     ap: ExprNode
     target_type: TypeNode
 
+@dataclass
+class OffsetofExpr(ExprNode):
+    """`offsetof(Type, field)` 内建形式。"""
+    target_type: TypeNode
+    field: str
+
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
         return e.code
@@ -820,6 +829,8 @@ def emit_expr(e: ExprNode) -> str:
         return f"(({format_c_declarator(e.target_type)}){emit_expr(e.init)})"
     if isinstance(e, VaArgExpr):
         return f"va_arg({emit_expr(e.ap)}, {format_c_declarator(e.target_type)})"
+    if isinstance(e, OffsetofExpr):
+        return f"offsetof({format_c_declarator(e.target_type)}, {e.field})"
     if isinstance(e, IdentExpr):
         return e.name
     if isinstance(e, CastExpr):
@@ -837,6 +848,8 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, CallExpr):
         return f"{emit_expr(e.callee)}({', '.join(emit_expr(a) for a in e.args)})"
     if isinstance(e, IndexExpr):
+        if e.bound is not None:
+            return f"{emit_expr(e.base)}[SIGIL_IDX({emit_expr(e.index)}, {e.bound})]"
         return f"{emit_expr(e.base)}[{emit_expr(e.index)}]"
     if isinstance(e, MemberExpr):
         return f"{emit_expr(e.base)}{'->' if e.is_arrow else '.'}{e.field}"
@@ -870,6 +883,7 @@ class Parser:
         self.struct_fields: Dict[str, Dict[str, TypeNode]] = {}
         self.complete_structs: Set[str] = set()
         self.enum_constants: Dict[str, int] = {}
+        self.macro_consts: Dict[str, int] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
         self.func_defined: Set[str] = set()
@@ -1079,7 +1093,9 @@ class Parser:
                         return int(rest, 8)
             return None
         if isinstance(expr, IdentExpr):
-            return self.enum_constants.get(expr.name, None)
+            if expr.name in self.enum_constants:
+                return self.enum_constants[expr.name]
+            return self.macro_consts.get(expr.name)
         if isinstance(expr, CastExpr):
             if isinstance(expr.target_type, BaseType) and expr.target_type.c_name in INT_C_TYPES:
                 return self._eval_const_int_expr(expr.operand)
@@ -1160,6 +1176,8 @@ class Parser:
             return expr.target_type
         if isinstance(expr, VaArgExpr):
             return expr.target_type
+        if isinstance(expr, OffsetofExpr):
+            return BaseType(line=expr.line, col=expr.col, c_name='size_t')
         if isinstance(expr, (AggregateInit, DesignatedInit, DesignatedIndex)):
             raise SemanticError(
                 f"{self.filename}:{expr.line}:{expr.col}: Aggregate initializer '{{ ... }}' is only allowed as a declaration initializer or a compound literal")
@@ -1247,6 +1265,15 @@ class Parser:
                     )
                 return base_t.pointee
             if isinstance(base_t, ArrayType):
+                if base_t.size_val is not None:
+                    c_idx = self._eval_const_int_expr(expr.index)
+                    if c_idx is not None and (c_idx < 0 or c_idx >= base_t.size_val):
+                        raise SemanticError(
+                            f"{self.filename}:{expr.line}:{expr.col}: Index {c_idx} is out of bounds for an array of "
+                            f"{base_t.size_val} element(s)")
+                    # 常量下标已在转译期校验，只有运行期才知道的才包边界检查
+                    if c_idx is None:
+                        expr.bound = base_t.size_val
                 return base_t.element_type
             raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Subscripted value is neither array nor pointer")
 
@@ -1468,6 +1495,41 @@ class Parser:
         ct = self._infer_expr_type(cond)
         if not self._is_scalar_type(ct):
             raise SemanticError(f"{self.filename}:{cond.line}:{cond.col}: Controlling expression of '{kw_name}' must have scalar type")
+
+    def _register_macro_constant(self, ptok: Token):
+        """把 `#define NAME <字面量>` 里的名字登记成常量，使 `.sigil` 表达式可以直接用它。
+        函数式宏与复杂宏体只透传到生成代码，不在此登记。"""
+        m = re.match(r'#\s*define\s+([A-Za-z_]\w*)\s+(.+?)\s*$', ptok.value.strip())
+        if not m:
+            return
+        name, body = m.group(1), m.group(2)
+        if name in self.scopes[0]:
+            return
+        ln, cl = ptok.line, ptok.col
+        if body.startswith('"'):
+            self.scopes[0][name] = PointerType(ln, cl, BaseType(ln, cl, 'char', is_const=True))
+            return
+        if body.startswith("'"):
+            self.scopes[0][name] = BaseType(ln, cl, 'char')
+            return
+        raw = body.rstrip('uUlL')
+        try:
+            if body.startswith(('0x', '0X', '0b', '0B')):
+                val = int(raw, 0)
+            elif body.startswith('0') and len(body) > 1 and body.isdigit():
+                val = int(body, 8)
+            else:
+                val = int(raw, 10)
+            self.macro_consts[name] = val
+            self.scopes[0][name] = BaseType(ln, cl, 'uint32_t' if body.lower().endswith('u') else 'int32_t')
+            return
+        except ValueError:
+            pass
+        try:
+            float(body.rstrip('fFlL'))
+            self.scopes[0][name] = BaseType(ln, cl, 'float' if body.lower().endswith('f') else 'double')
+        except ValueError:
+            pass
 
     def _register_c99_header_builtins(self, ptok: Token):
         txt = ptok.value.replace(" ", "")
@@ -1800,6 +1862,7 @@ class Parser:
                     raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 'a@' attributes cannot precede a preprocessor directive")
                 ptok = self._eat('PREPROC')
                 self._register_c99_header_builtins(ptok)
+                self._register_macro_constant(ptok)
                 top_nodes.append(PreprocNode(line=ptok.line, col=ptok.col, text=ptok.value))
             elif self._cur().kind in ('KW_STRUCT', 'KW_UNION'):
                 top_nodes.append(self.parse_struct_or_union(attrs=attrs))
@@ -2388,7 +2451,7 @@ class Parser:
             self.func_labels.add(ltok.value)
             return LabelStmt(line=tok.line, col=tok.col, name=ltok.value)
 
-        if tok.kind == 'IDENT' and tok.value in ('va_start', 'va_end') and self.tokens[self.pos + 1].kind == 'LPAREN':
+        if tok.kind == 'IDENT' and tok.value in ('va_start', 'va_end', 'va_copy') and self.tokens[self.pos + 1].kind == 'LPAREN':
             return self.parse_va_stmt()
 
         if tok.kind == 'KW_ATTR':
@@ -2445,6 +2508,16 @@ class Parser:
             self._eat('RPAREN')
             self._eat('SEMI')
             return VaStmt(line=name_tok.line, col=name_tok.col, kind='start', ap=ap, last_name=last_tok.value)
+        if name_tok.value == 'va_copy':
+            self._eat('COMMA')
+            src = self.parse_pure_expr()
+            src_t = self._infer_expr_type(src)
+            if not (isinstance(src_t, BaseType) and src_t.c_name == 'va_list'):
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: 'va_copy' source must be a 'va_list' object")
+            self._eat('RPAREN')
+            self._eat('SEMI')
+            return VaStmt(line=name_tok.line, col=name_tok.col, kind='copy', ap=ap, ap2=src)
         self._eat('RPAREN')
         self._eat('SEMI')
         return VaStmt(line=name_tok.line, col=name_tok.col, kind='end', ap=ap)
@@ -2464,6 +2537,24 @@ class Parser:
             raise SemanticError(
                 f"{self.filename}:{name_tok.line}:{name_tok.col}: 'va_arg' type must be a complete object type")
         return VaArgExpr(line=name_tok.line, col=name_tok.col, ap=ap, target_type=target_t)
+
+    def parse_offsetof(self) -> OffsetofExpr:
+        name_tok = self._eat('IDENT')
+        self._eat('LPAREN')
+        target_t = self.parse_type()
+        self._eat('COMMA')
+        fld_tok = self._eat('IDENT')
+        self._eat('RPAREN')
+        if not (isinstance(target_t, BaseType)
+                and self.user_types.get(target_t.c_name) in ('struct', 'union')
+                and target_t.c_name in self.struct_fields):
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: 'offsetof' requires a complete struct/union type, "
+                f"got '{format_c_declarator(target_t)}'")
+        if fld_tok.value not in self.struct_fields[target_t.c_name]:
+            raise SemanticError(
+                f"{self.filename}:{fld_tok.line}:{fld_tok.col}: '{target_t.c_name}' has no member named '{fld_tok.value}'")
+        return OffsetofExpr(line=name_tok.line, col=name_tok.col, target_type=target_t, field=fld_tok.value)
 
     def parse_generic(self) -> ExprNode:
         """`g? expr { T: e; ...; d: e }` —— 按控制表达式的静态类型选一条分支，转译期解析掉。"""
@@ -2799,6 +2890,8 @@ class Parser:
                                lit_kind='BOOL' if tok.kind == 'BOOL_LIT' else 'NULL')
         if tok.kind == 'IDENT' and tok.value == 'va_arg' and self.tokens[self.pos + 1].kind == 'LPAREN':
             return self.parse_va_arg()
+        if tok.kind == 'IDENT' and tok.value == 'offsetof' and self.tokens[self.pos + 1].kind == 'LPAREN':
+            return self.parse_offsetof()
         if tok.kind == 'IDENT':
             self._eat('IDENT')
             self._lookup_symbol(tok.value, tok)
@@ -2819,6 +2912,17 @@ C99_HEADER_BODY = """#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdlib.h>
+
+#ifdef SIGIL_BOUNDS_CHECK
+  #ifndef SIGIL_BOUNDS_HELPER_DEFINED
+    #define SIGIL_BOUNDS_HELPER_DEFINED
+    static inline uint64_t sigil_bounds_check(uint64_t i, uint64_t n) { if (i >= n) abort(); return i; }
+  #endif
+  #define SIGIL_IDX(i, n) ((ptrdiff_t)sigil_bounds_check((uint64_t)(i), (uint64_t)(n)))
+#else
+  #define SIGIL_IDX(i, n) (i)
+#endif
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_ALIGNAS__)
   #define SIGIL_HAS_ALIGNMENT 1
@@ -2877,10 +2981,11 @@ C99_PRELUDE = ("/* Sigil-C shared prelude: generated by Sigil-C. Include this on
 
 class CodeGenerator:
     def __init__(self, filename: str = "input.sigil", header_mode: bool = False,
-                 prelude_include: Optional[str] = None):
+                 prelude_include: Optional[str] = None, bounds_check: bool = False):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.header_mode = header_mode
         self.prelude_include = prelude_include
+        self.bounds_check = bounds_check
         self.lines: List[str] = []
 
     def _emit(self, code: str, line: int, indent: int = 0):
@@ -2902,6 +3007,8 @@ class CodeGenerator:
         return any(a.name in ('packed', 'aligned') for a in attrs)
 
     def generate(self, nodes: List[StmtNode]) -> str:
+        if self.bounds_check:
+            self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
         if self.prelude_include:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
@@ -2913,6 +3020,8 @@ class CodeGenerator:
     def generate_header(self, nodes: List[StmtNode], guard: str) -> str:
         self.lines.append(f"/* Public interface generated by Sigil-C from {self.safe_filename}. DO NOT EDIT. */\n")
         self.lines.append(f"#ifndef {guard}\n#define {guard}\n\n")
+        if self.bounds_check:
+            self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
         if self.prelude_include:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
@@ -3057,6 +3166,8 @@ class CodeGenerator:
         elif isinstance(s, VaStmt):
             if s.kind == 'start':
                 self._emit(f"va_start({emit_expr(s.ap)}, {s.last_name});", s.line, indent)
+            elif s.kind == 'copy':
+                self._emit(f"va_copy({emit_expr(s.ap)}, {emit_expr(s.ap2)});", s.line, indent)
             else:
                 self._emit(f"va_end({emit_expr(s.ap)});", s.line, indent)
         elif isinstance(s, BlockStmt):
@@ -3116,10 +3227,11 @@ class CodeGenerator:
             return True
         return isinstance(last, (ReturnStmt, GotoStmt))
 
-def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None) -> str:
+def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
+                   bounds_check: bool = False) -> str:
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename).parse_program()
-    return CodeGenerator(filename, prelude_include=prelude).generate(ast)
+    return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil") -> None:
     """词法 + 语法 + 静态语义检查，不产生任何输出。"""
@@ -3131,11 +3243,12 @@ def _header_guard(header_name: str) -> str:
     return "SIGIL_" + "".join(ch if ch.isalnum() else "_" for ch in base)
 
 def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h",
-                   prelude: Optional[str] = None) -> str:
+                   prelude: Optional[str] = None, bounds_check: bool = False) -> str:
     """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename).parse_program()
-    return CodeGenerator(filename, header_mode=True, prelude_include=prelude).generate_header(ast, _header_guard(header_name))
+    return CodeGenerator(filename, header_mode=True, prelude_include=prelude,
+                         bounds_check=bounds_check).generate_header(ast, _header_guard(header_name))
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
@@ -3153,6 +3266,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="write the shared Sigil-C C prelude (macros) to PATH")
     ap.add_argument("--prelude", metavar="NAME",
                     help="include NAME instead of inlining the prelude macro block in generated files")
+    ap.add_argument("--bounds-check", action="store_true",
+                    help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
     ap.add_argument("--version", action="version", version="Sigil-C 3.1.0")
     args = ap.parse_args(argv)
 
@@ -3172,14 +3287,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Checked {in_path}: OK")
         return 0
 
-    c_src = compile_source(src, fname, prelude=args.prelude)
+    c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(c_src)
     print(f"Compiled {in_path} -> {out_path}")
 
     header_path = args.header or (os.path.splitext(out_path)[0] + ".h" if args.emit_header else None)
     if header_path:
-        h_src = compile_header(src, fname, os.path.basename(header_path), prelude=args.prelude)
+        h_src = compile_header(src, fname, os.path.basename(header_path), prelude=args.prelude,
+                               bounds_check=args.bounds_check)
         with open(header_path, "w", encoding="utf-8") as f:
             f.write(h_src)
         print(f"Header   {header_path}")
