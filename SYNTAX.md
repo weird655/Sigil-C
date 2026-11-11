@@ -119,10 +119,10 @@ Sigil-C 的记号分成两个互不重叠的集合：
 s{ SG { p* c@ u4 buffer_read; p* u4 buffer_write; };
 
 u4 demo(p* SG ctx) {
-    o!  p*    c@    u4     src       m,   ctx->buffer_read;
-    o!  p*          u4     dst       m,   ctx->buffer_write;
-    o!  p*    c@    SG     ro_ctx    m,   ctx;
-    o!              u4     h         m,   2;
+    o!  p*  c@   u4     src      m,   ctx->buffer_read;
+    o!  p*       u4     dst      m,   ctx->buffer_write;
+    o!  p*  c@   SG     ro_ctx   m,   ctx;
+    o!           u4     h        m,   2;
     r; h + (u4)p* src + (u4)p* dst + (u4)(ro_ctx->buffer_read =? src);
 }
 ```
