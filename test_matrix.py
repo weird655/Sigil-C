@@ -533,12 +533,141 @@ int main(void) {
 
     assert_ok("7. v3.1", "Differential: Sigil-C output vs hand-written C, 257 elements, bit-identical", test_differential_vs_c)
 
+    # Layer 8: v3.2 GNU 属性 a@(...)
+    def test_attr_packed_abi():
+        sigil = """
+        a@(packed) s{ Packet { u1 kind; u4 id; };
+        """
+        with open("attr_packed.sigil", "w") as f:
+            f.write(sigil)
+        with open("attr_packed.c", "w") as f:
+            f.write(compile_source(sigil, "attr_packed.sigil"))
+        with open("attr_packed.h", "w") as f:
+            f.write(compile_header(sigil, "attr_packed.sigil", "attr_packed.h"))
+        with open("attr_packed_use.c", "w") as f:
+            f.write(
+                '#include <stdio.h>\n'
+                '#include "attr_packed.h"\n'
+                'int main(void) { printf("%zu\\n", sizeof(Packet)); return 0; }\n'
+            )
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+             "attr_packed.c", "attr_packed_use.c", "-o", "attr_packed_bin"],
+            check=True
+        )
+        out = subprocess.run(["./attr_packed_bin"], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == "5", out
+
+    assert_ok("8. v3.2 attr", "a@(packed) changes the ABI: header-aware consumer sees sizeof == 5", test_attr_packed_abi)
+
+    def test_attr_aligned_type():
+        sigil = "a@(aligned(16)) s{ Small { u4 x; };"
+        with open("attr_aligned.c", "w") as f:
+            f.write(compile_source(sigil, "attr_aligned.sigil"))
+        with open("attr_aligned.h", "w") as f:
+            f.write(compile_header(sigil, "attr_aligned.sigil", "attr_aligned.h"))
+        with open("attr_aligned_use.c", "w") as f:
+            f.write(
+                '#include <stdio.h>\n'
+                '#include "attr_aligned.h"\n'
+                'int main(void) { printf("%zu\\n", sizeof(Small)); return 0; }\n'
+            )
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+             "attr_aligned.c", "attr_aligned_use.c", "-o", "attr_aligned_bin"],
+            check=True
+        )
+        out = subprocess.run(["./attr_aligned_bin"], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == "16", out
+
+    assert_ok("8. v3.2 attr", "a@(aligned(16)) on a type forces 16-byte granularity (sizeof 4 -> 16)", test_attr_aligned_type)
+
+    def test_attr_field_alignment():
+        sigil = """
+        s{ Node { u1 tag; a@(aligned(8)) u4 seq; };
+        """
+        with open("attr_field.c", "w") as f:
+            f.write(compile_source(sigil, "attr_field.sigil"))
+        with open("attr_field.h", "w") as f:
+            f.write(compile_header(sigil, "attr_field.sigil", "attr_field.h"))
+        with open("attr_field_use.c", "w") as f:
+            f.write(
+                '#include <stdio.h>\n'
+                '#include <stddef.h>\n'
+                '#include "attr_field.h"\n'
+                'int main(void) { printf("%zu\\n", offsetof(Node, seq)); return 0; }\n'
+            )
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+             "attr_field.c", "attr_field_use.c", "-o", "attr_field_bin"],
+            check=True
+        )
+        out = subprocess.run(["./attr_field_bin"], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == "8", out
+
+    assert_ok("8. v3.2 attr", "Field-level a@(aligned(8)) moves the member to offset 8", test_attr_field_alignment)
+
+    def test_attr_function_placement():
+        sigil = """
+        a@(noreturn) v. die_now(v.) { w~ (1) { } }
+        a@(unused) s@ i4 helper(v.) { r; 1; }
+        a@(deprecated("use fast_path")) i4 slow_path(v.) { r; 2; }
+        a@(section(".data.fast")) o! u4 counter m, 0;
+        """
+        c_src = compile_source(sigil, "attr_fn.sigil")
+        with open("attr_fn.c", "w") as f:
+            f.write(c_src)
+        # 定义处属性必须在声明符之前，否则 GCC 报错
+        assert "SIGIL_ATTR(noreturn) void die_now(void) {" in c_src, c_src
+        assert "static SIGIL_ATTR(unused) int32_t helper(void) {" in c_src, c_src
+        assert 'SIGIL_ATTR(deprecated("use fast_path")) int32_t slow_path(void) {' in c_src, c_src
+        assert 'uint32_t counter SIGIL_ATTR(section(".data.fast")) = 0;' in c_src, c_src
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-c", "attr_fn.c"],
+            check=True
+        )
+
+    assert_ok("8. v3.2 attr", "Function/object attributes emit before the declarator and compile clean under -Werror", test_attr_function_placement)
+
+    def test_attr_header_and_guards():
+        sigil = """
+        a@(packed) s{ Wire { u1 kind; u8 payload; };
+        a@(noreturn) v. halt_all(v.) { w~ (1) { } }
+        u4 wire_size(v.) { r; (u4)z? Wire; }
+        """
+        h_src = compile_header(sigil, "attr_h.sigil", "attr_h.h")
+        c_src = compile_source(sigil, "attr_h.sigil")
+        assert "} SIGIL_ATTR(packed);" in h_src, h_src
+        assert "SIGIL_ATTR(noreturn) void halt_all(void);" in h_src, h_src
+        # 属性宏在 .c 与 .h 中都可用，且 ABI 属性带有后端能力门
+        assert "#define SIGIL_HAS_ATTR 1" in h_src and "#define SIGIL_HAS_ATTR 1" in c_src
+        assert "#if !SIGIL_HAS_ATTR" in h_src and "#if !SIGIL_HAS_ATTR" in c_src
+        # 生成的 C 里不应残留 sigil 写法（只在 #error 文案里提到 a@）
+        assert all(not line.lstrip().startswith("a@") for line in h_src.splitlines()), h_src
+
+    assert_ok("8. v3.2 attr", "Public header carries attributes and the SIGIL_HAS_ATTR capability gate", test_attr_header_and_guards)
+
+    assert_raises("8. v3.2 attr", "Reject unknown attribute name",
+                  SemanticError, "a@(no_such_attr) o! u4 x m, 0;")
+    assert_raises("8. v3.2 attr", "Reject a@(packed) on a function",
+                  SemanticError, "a@(packed) i4 f(v.) { r; 0; }")
+    assert_raises("8. v3.2 attr", "Reject non-power-of-2 a@(aligned(3))",
+                  SemanticError, "a@(aligned(3)) o! u4 x m, 0;")
+    assert_raises("8. v3.2 attr", "Reject attributes on a forward declaration",
+                  SemanticError, "a@(packed) s{ Foo;")
+    assert_raises("8. v3.2 attr", "Reject file-scope-only attribute on a block-scope object",
+                  SemanticError, "i4 f(v.) { a@(section(\".x\")) o! u4 t m, 0; r; 0; }")
+    assert_raises("8. v3.2 attr", "Reject duplicate attributes on one declaration",
+                  SemanticError, "a@(unused, unused) s@ i4 f(v.) { r; 0; }")
+    assert_raises("8. v3.2 attr", "Reject wrong argument kind for a string attribute",
+                  SemanticError, "a@(section(1)) o! u4 x m, 0;")
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 7-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 8-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

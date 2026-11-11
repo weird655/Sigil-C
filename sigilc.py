@@ -7,7 +7,7 @@ Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer 
 import sys
 import os
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict, Set
 
 # ============================================================================
@@ -29,7 +29,7 @@ SIGIL_KEYWORDS = {
     'e{': 'KW_ENUM',     'o!': 'KW_OBJECT',   'f^': 'KW_FNPTR',    'p*': 'KW_PTR',
     'a&': 'KW_ADDR',
     'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
-    'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',
+    'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',   'a@': 'KW_ATTR',
 }
 
 SIGIL_OPERATORS = {
@@ -67,6 +67,48 @@ VALID_INTEGER_SUFFIXES = {
     'ul', 'uL', 'Ul', 'UL', 'lu', 'lU', 'Lu', 'LU',
     'ull', 'uLL', 'Ull', 'ULL', 'llu', 'llU', 'LLu', 'LLU',
 }
+
+# ----------------------------------------------------------------------------
+# a@(...) 属性白名单：词法记号 KW_ATTR 之后是括号内的 GNU 属性列表。
+# 白名单同时充当"参数形状"与"允许的放置位置"两张表——未知属性、参数个数或
+# 类型不符、放错声明种类，都在转译期报错，而不是留给后端 C 编译器去猜。
+# ----------------------------------------------------------------------------
+ATTR_NOARGS = {
+    'unused', 'noreturn', 'packed', 'always_inline', 'noinline',
+    'warn_unused_result', 'weak', 'malloc', 'pure', 'const', 'hot', 'cold',
+    'returns_nonnull', 'constructor', 'destructor',
+}
+ATTR_ONE_INT = {'aligned'}                      # aligned(N)：N 为 2 的幂
+ATTR_ONE_STRING = {'section', 'visibility', 'alias'}
+ATTR_OPTIONAL_STRING = {'deprecated'}           # deprecated 或 deprecated("msg")
+ATTR_INT_LIST = {'nonnull'}                     # nonnull(1) / nonnull(1, 2)
+
+ATTR_TARGETS = {
+    'packed': {'type'},
+    'aligned': {'type', 'object', 'field'},
+    'noreturn': {'function'},
+    'always_inline': {'function'},
+    'noinline': {'function'},
+    'warn_unused_result': {'function'},
+    'malloc': {'function'},
+    'pure': {'function'},
+    'const': {'function'},
+    'hot': {'function'},
+    'cold': {'function'},
+    'returns_nonnull': {'function'},
+    'constructor': {'function'},
+    'destructor': {'function'},
+    'alias': {'function'},
+    'nonnull': {'function'},
+    'unused': {'function', 'object', 'field', 'type'},
+    'deprecated': {'function', 'object', 'field', 'type'},
+    'weak': {'function', 'object'},
+    'section': {'function', 'object'},
+    'visibility': {'function', 'object'},
+}
+
+# 这些属性只对具有静态存储期的实体有意义，块作用域对象上出现即报错。
+ATTR_FILE_SCOPE_ONLY = {'weak', 'section', 'visibility', 'alias'}
 
 class LexerError(Exception):
     pass
@@ -523,6 +565,17 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
             raise TypeError(f"Unknown TypeNode: {curr}")
 
 @dataclass
+class Attribute:
+    """a@(...) 里的一个属性：名字 + 已校验的实参文本。"""
+    name: str
+    args: List[str] = field(default_factory=list)
+
+    def render(self) -> str:
+        if not self.args:
+            return self.name
+        return f"{self.name}({', '.join(self.args)})"
+
+@dataclass
 class ExprNode:
     line: int
     col: int
@@ -589,6 +642,7 @@ class VarDeclStmt(StmtNode):
     name: str
     init_expr: Optional[ExprNode] = None
     is_static: bool = False
+    attrs: List[Attribute] = field(default_factory=list)
 
 @dataclass
 class AssignStmt(StmtNode):
@@ -648,6 +702,7 @@ class StructDefNode(StmtNode):
     alignment: Optional[int]
     fields: List[VarDeclStmt]
     emit_typedef: bool = True
+    attrs: List[Attribute] = field(default_factory=list)
 
 @dataclass
 class EnumDefNode(StmtNode):
@@ -661,6 +716,7 @@ class FuncDefNode(StmtNode):
     params: List[Tuple[TypeNode, str]]
     body: Optional[BlockStmt]
     is_static: bool = False
+    attrs: List[Attribute] = field(default_factory=list)
 
 @dataclass
 class SizeofExpr(ExprNode):
@@ -752,6 +808,118 @@ class Parser:
 
     def _is_type_start(self, tok: Token) -> bool:
         return self._is_type_start_at(self.pos)
+
+    # ------------------------------------------------------------------
+    # a@(...) 属性：解析、参数形状校验、放置位置校验
+    # ------------------------------------------------------------------
+    def _attr_int_value(self, tok: Token, raw: str) -> int:
+        s = raw.rstrip('uUlL')
+        try:
+            if s.startswith(('0x', '0X')):
+                return int(s, 16)
+            if s.startswith(('0b', '0B')):
+                return int(s, 2)
+            if s.startswith('0') and len(s) > 1 and s.isdigit():
+                return int(s, 8)
+            return int(s, 10)
+        except ValueError:
+            raise SemanticError(
+                f"{self.filename}:{tok.line}:{tok.col}: Attribute argument '{raw}' is not an integer constant")
+
+    def _validate_attribute(self, name_tok: Token, name: str, args: List[str]):
+        if name not in ATTR_TARGETS:
+            known = ', '.join(sorted(ATTR_TARGETS))
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: Unknown attribute '{name}'. "
+                f"Supported attributes: {known}")
+        if name in ATTR_NOARGS:
+            if args:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' takes no arguments")
+            return
+        if name in ATTR_ONE_INT:
+            if len(args) != 1:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' takes exactly 1 integer argument")
+            value = self._attr_int_value(name_tok, args[0])
+            if value <= 0 or (value & (value - 1)) != 0:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' requires a positive power-of-2 argument, got {value}")
+            return
+        if name in ATTR_ONE_STRING:
+            if len(args) != 1 or not args[0].startswith('"'):
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' takes exactly 1 string literal argument")
+            return
+        if name in ATTR_OPTIONAL_STRING:
+            if len(args) > 1 or (args and not args[0].startswith('"')):
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' takes an optional string literal argument")
+            return
+        if name in ATTR_INT_LIST:
+            if not args:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' requires at least 1 integer argument")
+            for arg in args:
+                if self._attr_int_value(name_tok, arg) <= 0:
+                    raise SemanticError(
+                        f"{self.filename}:{name_tok.line}:{name_tok.col}: Attribute '{name}' argument indices are 1-based and positive")
+            return
+
+    def parse_attrs(self) -> List[Attribute]:
+        """解析一个或多个 a@(...) 组，返回已校验参数形状的属性列表。"""
+        attrs: List[Attribute] = []
+        while self._cur().kind == 'KW_ATTR':
+            at_tok = self._eat('KW_ATTR')
+            self._eat('LPAREN')
+            if self._cur().kind == 'RPAREN':
+                raise ParseError(
+                    f"{self.filename}:{at_tok.line}:{at_tok.col}: 'a@' requires at least one attribute name")
+            while True:
+                name_tok = self._eat('IDENT')
+                args: List[str] = []
+                if self._cur().kind == 'LPAREN':
+                    self._eat('LPAREN')
+                    if self._cur().kind == 'RPAREN':
+                        raise ParseError(
+                            f"{self.filename}:{name_tok.line}:{name_tok.col}: Empty argument list for attribute '{name_tok.value}'")
+                    while True:
+                        tok = self._cur()
+                        if tok.kind in ('INT_NUM', 'FLOAT_NUM', 'STRING', 'CHAR', 'IDENT'):
+                            args.append(tok.value)
+                            self._eat()
+                        else:
+                            raise ParseError(
+                                f"{self.filename}:{tok.line}:{tok.col}: Expected attribute argument, got '{tok.value}'")
+                        if self._cur().kind == 'COMMA':
+                            self._eat('COMMA')
+                        else:
+                            break
+                    self._eat('RPAREN')
+                self._validate_attribute(name_tok, name_tok.value, args)
+                attrs.append(Attribute(name=name_tok.value, args=args))
+                if self._cur().kind == 'COMMA':
+                    self._eat('COMMA')
+                else:
+                    break
+            self._eat('RPAREN')
+        return attrs
+
+    def _check_attr_placement(self, attrs: List[Attribute], place: str, tok: Token,
+                              file_scope: bool = True):
+        seen: Set[str] = set()
+        for attr in attrs:
+            if place not in ATTR_TARGETS[attr.name]:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: Attribute '{attr.name}' cannot be applied to this "
+                    f"{place} declaration")
+            if attr.name in seen:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: Duplicate attribute '{attr.name}'")
+            if not file_scope and attr.name in ATTR_FILE_SCOPE_ONLY:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: Attribute '{attr.name}' is only valid at file scope")
+            seen.add(attr.name)
 
     def _sizeof_takes_type(self) -> bool:
         """z? 后面接的是类型还是表达式。
@@ -1463,48 +1631,63 @@ class Parser:
     def parse_program(self) -> List[StmtNode]:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
+            attrs: List[Attribute] = []
+            if self._cur().kind == 'KW_ATTR':
+                attrs = self.parse_attrs()
             if self._cur().kind == 'PREPROC':
+                if attrs:
+                    tok = self._cur()
+                    raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 'a@' attributes cannot precede a preprocessor directive")
                 ptok = self._eat('PREPROC')
                 self._register_c99_header_builtins(ptok)
                 top_nodes.append(PreprocNode(line=ptok.line, col=ptok.col, text=ptok.value))
             elif self._cur().kind in ('KW_STRUCT', 'KW_UNION'):
-                top_nodes.append(self.parse_struct_or_union())
+                top_nodes.append(self.parse_struct_or_union(attrs=attrs))
             elif self._cur().kind == 'KW_ENUM':
+                if attrs:
+                    tok = self._cur()
+                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'a@' attributes are not supported on 'e{{' enum definitions")
                 top_nodes.append(self.parse_enum())
             elif self._cur().kind == 'KW_OBJECT':
                 object_tok = self._eat('KW_OBJECT')
-                top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok))
+                top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, attrs=attrs))
             elif self._cur().kind == 'KW_STATIC':
                 self._eat('KW_STATIC')
                 if self._cur().kind == 'KW_OBJECT':
                     object_tok = self._eat('KW_OBJECT')
-                    top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, is_static=True))
+                    top_nodes.append(self.parse_top_decl_or_func(object_marker=object_tok, is_static=True, attrs=attrs))
                 elif self._is_type_start(self._cur()):
-                    top_nodes.append(self.parse_top_decl_or_func(is_static=True))
+                    top_nodes.append(self.parse_top_decl_or_func(is_static=True, attrs=attrs))
                 else:
                     tok = self._cur()
                     raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: 's@' must be followed by a type, got '{tok.value}'")
             elif self._is_type_start(self._cur()):
-                top_nodes.append(self.parse_top_decl_or_func())
+                top_nodes.append(self.parse_top_decl_or_func(attrs=attrs))
             else:
                 tok = self._cur()
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'")
         return top_nodes
 
-    def parse_struct_or_union(self) -> StructDefNode:
+    def parse_struct_or_union(self, attrs: Optional[List[Attribute]] = None) -> StructDefNode:
+        attrs = attrs or []
         kw_tok = self._eat()
         kind = "struct" if kw_tok.kind == 'KW_STRUCT' else "union"
         name_tok = self._eat('IDENT')
+        self._check_attr_placement(attrs, 'type', name_tok)
         if name_tok.value in self.user_types and self.user_types[name_tok.value] != kind:
             raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: '{name_tok.value}' defined as wrong kind of tag")
         tag_already_declared = name_tok.value in self.user_types
 
         if self._cur().kind == 'SEMI':
+            if attrs:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: 'a@' attributes require a {kind} definition, "
+                    f"not a forward declaration of '{name_tok.value}'")
             self._eat('SEMI')
             if not tag_already_declared:
                 self.user_types[name_tok.value] = kind
             return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value,
-                                alignment=None, fields=[], emit_typedef=not tag_already_declared)
+                                alignment=None, fields=[], emit_typedef=not tag_already_declared, attrs=attrs)
 
         if name_tok.value in self.complete_structs:
             raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Redefinition of type '{name_tok.value}'")
@@ -1517,12 +1700,21 @@ class Parser:
             if alignment <= 0 or (alignment & (alignment - 1)) != 0:
                 raise SemanticError(f"{self.filename}:{align_tok.line}:{align_tok.col}: Alignment '{alignment}' must be a power of 2")
 
+        if alignment is not None and any(a.name in ('packed', 'aligned') for a in attrs):
+            raise SemanticError(
+                f"{self.filename}:{name_tok.line}:{name_tok.col}: 'a!{alignment}' cannot be combined with "
+                f"'a@(packed/aligned(...))' on the same type; use one alignment mechanism")
+
         self._eat('LBRACE')
         fields: List[VarDeclStmt] = []
         field_map: Dict[str, TypeNode] = {}
         while self._cur().kind != 'RBRACE':
+            field_attrs: List[Attribute] = []
+            if self._cur().kind == 'KW_ATTR':
+                field_attrs = self.parse_attrs()
             ft = self.parse_type()
             fname_tok = self._eat('IDENT')
+            self._check_attr_placement(field_attrs, 'field', fname_tok)
             self._validate_non_void_var(ft, fname_tok)
             if not self._is_complete_object_type(ft):
                 raise SemanticError(f"{self.filename}:{fname_tok.line}:{fname_tok.col}: Field '{fname_tok.value}' has incomplete type")
@@ -1530,7 +1722,8 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{fname_tok.line}:{fname_tok.col}: Duplicate field '{fname_tok.value}' in {kind} '{name_tok.value}'")
             field_map[fname_tok.value] = ft
             self._eat('SEMI')
-            fields.append(VarDeclStmt(line=fname_tok.line, col=fname_tok.col, var_type=ft, name=fname_tok.value))
+            fields.append(VarDeclStmt(line=fname_tok.line, col=fname_tok.col, var_type=ft,
+                                      name=fname_tok.value, attrs=field_attrs))
         if not fields:
             raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Empty {kind} '{name_tok.value}' is forbidden in ISO C99")
         self._eat('RBRACE')
@@ -1538,7 +1731,8 @@ class Parser:
         self.struct_fields[name_tok.value] = field_map
         self.complete_structs.add(name_tok.value)
         return StructDefNode(line=kw_tok.line, col=kw_tok.col, kind=kind, name=name_tok.value,
-                            alignment=alignment, fields=fields, emit_typedef=not tag_already_declared)
+                            alignment=alignment, fields=fields, emit_typedef=not tag_already_declared,
+                            attrs=attrs)
 
     def parse_enum(self) -> EnumDefNode:
         kw_tok = self._eat('KW_ENUM')
@@ -1575,7 +1769,9 @@ class Parser:
 
     def _parse_object_decl_after_name(self, decl_type: TypeNode, name_tok: Token,
                                       global_scope: bool = False, consume_semi: bool = True,
-                                      is_static: bool = False) -> VarDeclStmt:
+                                      is_static: bool = False,
+                                      attrs: Optional[List[Attribute]] = None) -> VarDeclStmt:
+        attrs = attrs or []
         self._validate_non_void_var(decl_type, name_tok)
         self._register_symbol(name_tok.value, decl_type, name_tok)
         init_expr = None
@@ -1590,13 +1786,16 @@ class Parser:
         if consume_semi:
             self._eat('SEMI')
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
-                           name=name_tok.value, init_expr=init_expr, is_static=is_static)
+                           name=name_tok.value, init_expr=init_expr, is_static=is_static, attrs=attrs)
 
-    def parse_top_decl_or_func(self, object_marker: Optional[Token] = None, is_static: bool = False) -> StmtNode:
+    def parse_top_decl_or_func(self, object_marker: Optional[Token] = None, is_static: bool = False,
+                               attrs: Optional[List[Attribute]] = None) -> StmtNode:
+        attrs = attrs or []
         decl_type = self.parse_type()
         name_tok = self._eat('IDENT')
 
         if self._cur().kind == 'LPAREN':
+            self._check_attr_placement(attrs, 'function', name_tok)
             if object_marker is not None:
                 raise ParseError(f"{self.filename}:{object_marker.line}:{object_marker.col}: 'o!' introduces an object declaration, not a function")
             if isinstance(decl_type, ArrayType):
@@ -1642,7 +1841,7 @@ class Parser:
 
             if self._cur().kind == 'SEMI':
                 self._eat('SEMI')
-                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None, is_static=is_static)
+                return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None, is_static=is_static, attrs=attrs)
 
             if any(not pname for _, pname in params):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function definition parameters must have names")
@@ -1658,11 +1857,12 @@ class Parser:
             self.current_func_ret = prev_ret
             if not is_void_type(decl_type) and name_tok.value != 'main' and self._can_fall_through(body):
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Control reaches end of non-void function '{name_tok.value}' without returning a value")
-            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static)
+            return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static, attrs=attrs)
 
         if object_marker is None:
             raise ParseError(f"{self.filename}:{name_tok.line}:{name_tok.col}: File-scope object declarations must begin with 'o!'")
-        return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True, is_static=is_static)
+        self._check_attr_placement(attrs, 'object', name_tok, file_scope=True)
+        return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True, is_static=is_static, attrs=attrs)
 
     def parse_block(self, create_new_scope: bool = True) -> BlockStmt:
         lb = self._eat('LBRACE')
@@ -1768,6 +1968,18 @@ class Parser:
             if self.loop_depth == 0:
                 raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'c^' (continue) statement not within a loop")
             return JumpStmt(line=tok.line, col=tok.col, keyword="continue")
+
+        if tok.kind == 'KW_ATTR':
+            attrs = self.parse_attrs()
+            if self._cur().kind != 'KW_OBJECT':
+                nxt = self._cur()
+                raise ParseError(
+                    f"{self.filename}:{nxt.line}:{nxt.col}: Block-scope 'a@' attributes must be followed by 'o!'")
+            self._eat('KW_OBJECT')
+            vt = self.parse_type()
+            vname = self._eat('IDENT')
+            self._check_attr_placement(attrs, 'object', vname, file_scope=False)
+            return self._parse_object_decl_after_name(vt, vname, attrs=attrs)
 
         if tok.kind == 'KW_OBJECT':
             self._eat('KW_OBJECT')
@@ -2094,6 +2306,14 @@ C99_HEADER_BODY = """#include <stdint.h>
   #define SIGIL_ALIGN_MEMBER(n)
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+  #define SIGIL_HAS_ATTR 1
+  #define SIGIL_ATTR(...) __attribute__((__VA_ARGS__))
+#else
+  #define SIGIL_HAS_ATTR 0
+  #define SIGIL_ATTR(...)
+#endif
+
 """
 
 C99_HEADER = "/* Generated by Sigil-C v3.1.0 AST Compiler. DO NOT EDIT. */\n" + C99_HEADER_BODY
@@ -2110,6 +2330,17 @@ class CodeGenerator:
             self.lines.append(f"{pad}{code}\n")
         else:
             self.lines.append(f'#line {line} "{self.safe_filename}"\n{pad}{code}\n')
+
+    def _attrs_c(self, attrs: List[Attribute]) -> str:
+        """属性列表 → 'SIGIL_ATTR(a, b(...))'；无属性时返回空串。"""
+        if not attrs:
+            return ""
+        return "SIGIL_ATTR(" + ", ".join(a.render() for a in attrs) + ")"
+
+    @staticmethod
+    def _has_abi_attrs(attrs: List[Attribute]) -> bool:
+        """packed / aligned 会影响类型布局，后端不支持属性时不能静默丢弃。"""
+        return any(a.name in ('packed', 'aligned') for a in attrs)
 
     def generate(self, nodes: List[StmtNode]) -> str:
         self.lines.append(C99_HEADER)
@@ -2135,14 +2366,26 @@ class CodeGenerator:
             if node.fields:
                 if node.alignment:
                     self._emit("#if SIGIL_HAS_ALIGNMENT", node.line)
+                if self._has_abi_attrs(node.attrs):
+                    self._emit("#if !SIGIL_HAS_ATTR", node.line)
+                    self._emit(
+                        f'#error "Sigil-C a@(packed/aligned) on type {node.name} requires a GNU-compatible compiler"',
+                        node.line,
+                    )
+                    self._emit("#endif", node.line)
                 if node.alignment:
                     self._emit(f"SIGIL_ALIGNED_TAG({node.kind}, {node.name}, {node.alignment}) {{", node.line)
                 else:
                     self._emit(f"{node.kind} {node.name} {{", node.line)
                 for index, f in enumerate(node.fields):
                     align_member = f"SIGIL_ALIGN_MEMBER({node.alignment}) " if index == 0 and node.alignment else ""
-                    self._emit(f"{align_member}{format_c_declarator(f.var_type, f.name)};", f.line, indent=1)
-                self._emit("};", node.line)
+                    field_decl = format_c_declarator(f.var_type, f.name)
+                    field_attr = self._attrs_c(f.attrs)
+                    if field_attr:
+                        field_decl = f"{field_decl} {field_attr}"
+                    self._emit(f"{align_member}{field_decl};", f.line, indent=1)
+                type_attr = self._attrs_c(node.attrs)
+                self._emit(f"}} {type_attr};" if type_attr else "};", node.line)
                 if node.alignment:
                     self._emit(
                         f"typedef char SIGIL_ALIGN_CHECK_{node.name}[(SIGIL_ALIGNOF({node.name}) >= {node.alignment}) ? 1 : -1];",
@@ -2163,25 +2406,30 @@ class CodeGenerator:
         elif isinstance(node, FuncDefNode):
             params_c = [format_c_declarator(pt, pname) for pt, pname in node.params]
             fn_sig = format_c_declarator(node.return_type, f"{node.name}({', '.join(params_c) if params_c else 'void'})")
+            attr = self._attrs_c(node.attrs)
+            attr_prefix = f"{attr} " if attr else ""
             if self.header_mode:
                 if node.body is not None and not node.is_static:
-                    self._emit(f"{fn_sig};", node.line)
+                    self._emit(f"{attr_prefix}{fn_sig};", node.line)
                 return
             prefix = "static " if node.is_static else ""
             if node.body is None:
-                self._emit(f"{prefix}{fn_sig};", node.line)
+                self._emit(f"{prefix}{attr_prefix}{fn_sig};", node.line)
             else:
-                self._emit(f"{prefix}{fn_sig} {{", node.line)
+                self._emit(f"{prefix}{attr_prefix}{fn_sig} {{", node.line)
                 for s in node.body.stmts:
                     self.gen_stmt(s, indent=1)
                 self._emit("}", node.line)
         elif isinstance(node, VarDeclStmt):
+            decl = format_c_declarator(node.var_type, node.name)
+            attr = self._attrs_c(node.attrs)
+            if attr:
+                decl = f"{decl} {attr}"
             if self.header_mode:
                 if not node.is_static:
-                    self._emit(f"extern {format_c_declarator(node.var_type, node.name)};", node.line)
+                    self._emit(f"extern {decl};", node.line)
                 return
             if node.is_static:
-                decl = format_c_declarator(node.var_type, node.name)
                 self._emit(f"static {decl}{f' = {emit_expr(node.init_expr)}' if node.init_expr else ''};", node.line, indent=0)
             else:
                 self.gen_stmt(node, indent=0)
@@ -2203,6 +2451,9 @@ class CodeGenerator:
             self._emit(s.text, s.line, indent=0)
         elif isinstance(s, VarDeclStmt):
             decl = format_c_declarator(s.var_type, s.name)
+            attr = self._attrs_c(s.attrs)
+            if attr:
+                decl = f"{decl} {attr}"
             self._emit(f"{decl}{f' = {emit_expr(s.init_expr)}' if s.init_expr else ''};", s.line, indent)
         elif isinstance(s, AssignStmt):
             self._emit(f"{emit_expr(s.target)} {s.op} {emit_expr(s.value)};", s.line, indent)

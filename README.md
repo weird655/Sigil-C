@@ -19,6 +19,7 @@ Sigil-C 是一种面向系统编程、游戏底层内核（ECS、网格平流、
 * **受限子集静态检查**：内置针对当前语言子集的类型推导（涵盖一元/二元算子、指针加减与指针差 `ptrdiff_t`、三元 `const` 合并与常规算术提升）、深层左值 `const` 传播（含 `const` 结构体数组成员的只读元素传播）、完整对象类型（Complete Object Type）校验、C99 标准头文件内建函数签名识别、非 `void` 函数返回路径检查，以及带八进制/十六进制/除零/移位越界/64 位溢出检查的向零截断整数常量折叠。
 * **取大小与静态链接（v3.1.0）**：`z?` 查询类型或表达式的大小，结果类型 `size_t`；`s@` 标出文件作用域的内部链接。两者不是新语义类别，而是既有两条轴的自然延伸——`z?` 沿用 `?`（查询），`s@` 沿用 `@`（限定符，与 `c@` / `v@` 同族）。
 * **可链接模块输出（v3.1.0）**：`--emit-header` 生成公共接口头文件（include guard + 类型定义 + 非 `static` 函数原型 + 非 `static` 全局的 `extern` 声明），`s@` 修饰的符号被自动排除。生成的 `.c` 可被普通 C 代码 `#include` 并链接，转译产物从“能编译的代码”变成“能被别人链接的库”。
+* **编译器属性（Unreleased）**：`a@(...)` 是 GNU `__attribute__` 的受控封装，可修饰函数、对象、结构体/联合体定义与字段，例如 `a@(packed) s{ ... };`、`a@(noreturn) v. die(v.);`、`a@(aligned(16)) o! u4 buf;`。属性名、参数形状与放置位置都经白名单校验；生成代码走 `SIGIL_ATTR(...)` 宏，GCC/Clang 展开为 `__attribute__`，其他后端为空——但 `packed`/`aligned` 属于 ABI 属性，缺支持时报 `#error` 而非静默丢弃。
 
 ## 指针指南：从声明读到访问
 
@@ -170,7 +171,7 @@ python3 sigilc.py golden.sigil -o golden.c
 # 2. 使用 GCC C99 严格模式编译
 gcc -std=c99 -O2 -Wall -Wextra -Werror -pedantic golden.c -c
 
-# 3. 运行 7 层 71 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
+# 3. 运行 8 层 83 项自动化测试套件（含黄金平流内核与本页最小示例的 GCC 实测）
 python3 test_matrix.py
 ```
 
@@ -205,6 +206,33 @@ int main(void) {
 | `--header PATH` | 指定头文件路径（隐含 `--emit-header`） |
 | `--check` | 只做词法/语法/语义检查，不写任何文件 |
 | `--version` / `-h` | 版本与帮助 |
+
+### 编译器属性 `a@(...)`（Unreleased）
+
+`a@` 把 GNU `__attribute__` 收进 Sigil 的 `@` 限定符族，写法是声明前缀 `a@(name, name(args))`：
+
+```c
+a@(packed) s{ Wire { u1 kind; u8 payload; };      /* 取消填充，sizeof 从 16 变 9 */
+
+a@(aligned(16)) o! u8[2] ring;                     /* 对象按 16 字节对齐 */
+
+a@(noreturn) v. halt_all(v.) { w~ (1) { } }        /* 属性必须写在声明符之前 */
+
+a@(unused) s@ i4 helper(v.) { r; 1; }              /* 与 s@ 组合：内部链接 + 免未用告警 */
+
+s{ Node { u1 tag; a@(aligned(8)) u4 seq; };        /* 字段级对齐，offsetof 变 8 */
+```
+
+生成代码统一展开为 `SIGIL_ATTR(...)`：
+
+```c
+struct Wire { uint8_t kind; uint64_t payload; } SIGIL_ATTR(packed);
+static SIGIL_ATTR(unused) int32_t helper(void) { return 1; }
+```
+
+- 属性名与参数形状经白名单校验：未知属性、`aligned` 非 2 的幂、`section` 传入整数、`noreturn` 用在对象上、块作用域出现 `section`/`weak`，都会在**转译期**报错，而不是留给 GCC 去猜。
+- `packed` / `aligned` 会改变类型布局，属于 ABI 属性：后端不支持属性时生成 `#error`，不会静默退化。纯提示类属性（`unused`、`deprecated`、`noreturn` 等）在非 GNU 后端展开为空。
+- 与既有的 `a!N` 对齐印记是两套机制，不能写在同一类型上。
 
 ## 最小可运行示例
 
@@ -278,5 +306,5 @@ int32_t main(void) {
 
 * **`README.md`**：项目介绍、安装使用与原生 C 模板最小可运行示例。
 * **`SYNTAX.md`**：印记符号速查表、前缀类型绑定规则、运算符静态语义与语言子集边界。
-* **`CHANGELOG.md`**：版本演进记录、31→71 项测试覆盖增量明细与平流内核验证参数说明。
-* **`sigilc.py` / `test_matrix.py`**：转译器源码与 71 项自动化验证脚本。
+* **`CHANGELOG.md`**：版本演进记录、31→83 项测试覆盖增量明细与平流内核验证参数说明。
+* **`sigilc.py` / `test_matrix.py`**：转译器源码与 83 项自动化验证脚本。

@@ -31,6 +31,13 @@
 | `a!N` | `KW_ALIGN` | `SIGIL_ALIGNED_TAG(kind, Name, N)` | **a**lign + `!` + 2 的幂 $N$：GCC/Clang/MSVC 使用编译器对齐扩展；C11 使用首字段上的 `_Alignas(N)` 提升整个结构体/联合体对齐。生成代码会用静态断言核验实际类型对齐至少为 $N$。纯 C99 没有通用过对齐机制；不支持对齐原语的后端会在使用 `a!N` 时编译报错，不再静默退化。所请求的扩展对齐值仍须由目标实现支持 |
 | `z?` | `KW_SIZEOF` | `sizeof(Type)` / `sizeof(expr)` | **si**z**e** + `?`（问句 = 查询）。结果类型为 `size_t`。接类型时写作 `z? u4`、`z? p* u4`、`z? Vec2`；接表达式时写作 `z? x`、`z? (p* p)`。消歧规则：仅当后继 token 确定是类型前缀（内置类型、`p*`/`c@`/`v@`/`f^`、已定义用户类型）时按类型解析，其余一律按表达式解析——因此 `z? p* u4` 是"指针类型的大小"，`z? (p* p)` 是"解引用后对象的大小"。拒绝 `v.`（void）与不完整类型 |
 | `s@` | `KW_STATIC` | `static` | **s**tatic + `@`（与 `c@`/`v@` 同属限定符族）。文件作用域限定内部链接：`s@ i4 helper(...)`、`s@ o! u4 counter m, 0;`。被 `s@` 修饰的函数与对象不进入生成的头文件，因此不会污染模块的外部接口 |
+| `a@(...)` | `KW_ATTR` | `__attribute__((...))` | **a**ttribute + `@`（与 `c@`/`v@`/`s@` 同属限定符族）。声明前缀，写在类型或 `s{` / `s@` / `o!` 之前；组内逗号分隔多个属性，也可重复写多组：`a@(packed) s{ Header { ... };`、`a@(noreturn) v. die(v.);`、`a@(aligned(16)) o! u4 buf;`、`a@(unused, deprecated("old")) s@ i4 helper(v.);`；结构体字段写作 `a@(aligned(8)) u4 seq;`。属性名与参数形状经白名单校验，未知属性、参数个数/类型不符、放置位置不符均在转译期报错。生成代码统一展开为 `SIGIL_ATTR(...)`：GCC/Clang 展开成 `__attribute__((...))`，其他后端展开为空；`packed` 与 `aligned` 影响类型布局，在无属性支持的后端触发 `#error` 而不是静默丢弃 |
+
+**`a@` 的放置规则**：属性只能修饰**声明**，不能修饰表达式或语句。合法位置有四类——函数（定义与原型）、文件作用域或块作用域对象、结构体/联合体定义、结构体/联合体字段。白名单同时约束“能放哪”：`noreturn` / `always_inline` / `noinline` / `warn_unused_result` / `malloc` / `pure` / `const` / `hot` / `cold` / `returns_nonnull` / `constructor` / `destructor` / `alias` / `nonnull` 只允许函数；`packed` 只允许类型；`aligned` 允许类型、对象与字段；`unused` / `deprecated` 允许全部四类；`weak` / `section` / `visibility` 允许函数与对象，且只允许文件作用域（块作用域对象上出现即报错）。
+
+支持的属性集合：`packed`、`aligned(N)`、`unused`、`noreturn`、`deprecated[( "msg" )]`、`weak`、`section("name")`、`visibility("default"|"hidden")`、`always_inline`、`noinline`、`warn_unused_result`、`malloc`、`pure`、`const`、`hot`、`cold`、`returns_nonnull`、`constructor`、`destructor`、`alias("target")`、`nonnull(1, 2, ...)`。
+
+`a@(packed)` / `a@(aligned(...))` 与既有的 `a!N` 属两套对齐机制，写在同一个类型上会被拒绝；需要对齐时二选一。
 
 ## 2. 基础标量类型与前缀修饰符 (`BASIC_TYPES` & Qualifiers)
 
