@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <assert.h>
 
-/* 跨行注释包含伪印记 i? r; s- w~ */
-p* c$ c1 G_TAG m, "Sigil-C v0.5.2 Verified";
+/* 跨行注释包含伪印记 i? r; m- w~ */
+p* c$ c1 G_TAG m, "Sigil-C v1.0.0 Verified";
 
 e{ OpMode {
     MODE_IDLE m, 0,
@@ -59,12 +59,12 @@ i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
             r; 0;
         }
         k: MODE_ADVECT: {
-            f~ (u4 i m, 0; i < total; i a+ 1) {
+            f~ (u4 i m, 0; i < total; i m+ 1) {
                 dst[i] m, 0;
             }
-            f~ (u2 y m, 0; y < h; y a+ 1) {
+            f~ (u2 y m, 0; y < h; y m+ 1) {
                 u4 row_off m, (u4)y * (u4)w;
-                f~ (u2 x m, 0; x < w; x a+ 1) {
+                f~ (u2 x m, 0; x < w; x m+ 1) {
                     u4 idx m, row_off + (u4)x;
                     u4 scent m, src[idx];
                     i? (scent > 0) {
@@ -83,8 +83,8 @@ i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
                         u4 moved m, (scent * 192u) >> 8;
                         u4 rem   m, scent - moved;
 
-                        dst[target_idx] a+ moved;
-                        dst[idx]        a+ rem;
+                        dst[target_idx] m+ moved;
+                        dst[idx]        m+ rem;
                     }
                 }
             }

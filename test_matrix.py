@@ -28,7 +28,7 @@ def run_test_matrix():
 
     gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
     uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
-    print(f"=== SIGIL-C v0.5.2 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.0.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -57,8 +57,8 @@ def run_test_matrix():
             i4 x m, 0xFE;
             p* out_ptr m, (i4)x;
             s? (a) {
-                k: 0xFE: { x a+ 1; b!; }
-                k: (8 % 3): { x s- 1; b!; }
+                k: 0xFE: { x m+ 1; b!; }
+                k: (8 % 3): { x m- 1; b!; }
                 d: { x m, 0; b!; }
             }
             r; x;
@@ -123,10 +123,10 @@ def run_test_matrix():
     assert_ok("3. Type AST", "Compile-time array dimension equivalence (i4[8] == i4[4 + 4] == i4[0x08])", test_array_const_size_equivalence)
 
     # Layer 4: Static Semantic Checks (23 Negative Tests)
-    assert_raises("4. Semantic", "Reject side-effect 's-' inside loop condition y < (h s- 1)", SemanticError,
-                  "v. f(i4 h) { f~ (i4 y m, 0; y < (h s- 1); y a+ 1) { r;; } }")
-    assert_raises("4. Semantic", "Reject pointer += pointer (p a+ q)", SemanticError,
-                  "v. f(p* i4 p, p* i4 q) { p a+ q; }")
+    assert_raises("4. Semantic", "Reject side-effect 'm-' inside loop condition y < (h m- 1)", SemanticError,
+                  "v. f(i4 h) { f~ (i4 y m, 0; y < (h m- 1); y m+ 1) { r;; } }")
+    assert_raises("4. Semantic", "Reject pointer += pointer (p m+ q)", SemanticError,
+                  "v. f(p* i4 p, p* i4 q) { p m+ q; }")
     assert_raises("4. Semantic", "Reject pointer *= integer (p m* 2)", SemanticError,
                   "v. f(p* i4 p) { p m* 2; }")
     assert_raises("4. Semantic", "Reject incompatible ternary branches (pointer vs integer)", SemanticError,
@@ -169,10 +169,10 @@ def run_test_matrix():
                   "v. f(i4 x) { s? (x) { k: 2: { b!; } k: (8 % 3): { b!; } } }")
     assert_raises("4. Semantic", "Reject multiple d: (default) labels in one switch", SemanticError,
                   "v. f(i4 x) { s? (x) { d: { b!; } d: { b!; } } }")
-    assert_raises("4. Semantic", "Reject pointer arithmetic 'p a+ 1' on pointer to incomplete struct", SemanticError,
-                  "s{ Incomplete; v. f(p* Incomplete p) { p a+ 1; }")
-    assert_raises("4. Semantic", "Reject pointer arithmetic 'p s- 1' on void pointer (p* v.)", SemanticError,
-                  "v. f(p* v. p) { p s- 1; }")
+    assert_raises("4. Semantic", "Reject pointer arithmetic 'p m+ 1' on pointer to incomplete struct", SemanticError,
+                  "s{ Incomplete; v. f(p* Incomplete p) { p m+ 1; }")
+    assert_raises("4. Semantic", "Reject pointer arithmetic 'p m- 1' on void pointer (p* v.)", SemanticError,
+                  "v. f(p* v. p) { p m- 1; }")
     assert_raises("4. Semantic", "Reject nested function pointer assignment with mismatched inner callback parameter type", SemanticError,
                   "v. f(f^(i4 a, f^(f4 x) -> v. cb) -> i4 bad) { f^(i4 a, f^(u1 x) -> v. cb) -> i4 good m, bad; }")
     assert_raises("4. Semantic", "Reject dereference write on ternary (c ? pm : pc) due to const qualification propagation", SemanticError,
