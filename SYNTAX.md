@@ -39,6 +39,7 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 | `v.` | `void` | 空类型：用于函数返回类型、`(v.)` 空参列表（包括 `i4 main(v.)` 与 `f^(v.) -> i4`）、`(v.)expr` 显式丢弃求值或 `p* v.` 通用指针；禁止声明值变量 `v. x;`。**前瞻消歧**：当 `v.` 后紧跟标识符字符（如 `v.x`）时，自动拆分为结构体变量 `v` 的成员访问 `.x` |
 | `p*` | `*`（指针类型前缀 / 一元解引用算子） | 在类型位置表示“指向右侧完整类型的指针”；在表达式前缀位置表示一元解引用 `*expr`（禁止解引用 `p* v.` 或未完成结构体指针） |
 | `c@` | `const`（只读类型限定符） | **严格绑定紧随其后的那一层类型节点**（`c@ p* T` 修饰指针自身只读，`p* c@ T` 修饰指向物只读；对数组类型应用 `const` 时按 C99 6.7.3p8 自动向数组元素递归传播） |
+| `v@` | `volatile`（易变对象限定符） | **严格绑定紧随其后的那一层类型节点**；可与 `c@` 组合（如 `c@ v@ u4`）。`p* v@ u4` 是指向 `volatile u4` 的可变指针，`v@ p* u4` 是指向普通 `u4` 的 `volatile` 指针。它用于内存映射寄存器等外部可能改变的对象访问，不提供原子性或线程同步/内存屏障保证 |
 | `a&` | `&`（一元取址算子） | 仅用于表达式前缀位置：`a& lvalue` 展开为 `(&lvalue)`；静态检查强制要求操作数必须为左值（拒绝 `a& (x + 1)` 等右值取址） |
 | `f^` | 函数指针类型构造器 | 语法：`f^(ParamTypes...) -> RetType`（支持 `f^(v.) -> Ret` 空参），递归校验返回类型、参数类型及嵌套函数指针兼容性 |
 
@@ -49,6 +50,9 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 | 语义描述 | Sigil-C 写法（从左向右读） | AST 类型树结构 | 生成的 ISO C99 声明 |
 | :--- | :--- | :--- | :--- |
 | 指向只读 `u1` 的可变指针 | `p* c@ u1 ptr;` | `Pointer(Base(uint8_t, const))` | `const uint8_t *ptr;` |
+| 指向易变 `u4` 的可变指针 | `p* v@ u4 reg;` | `Pointer(Base(uint32_t, volatile))` | `volatile uint32_t *reg;` |
+| 指向普通 `u4` 的易变指针 | `v@ p* u4 reg;` | `Pointer(Base(uint32_t), volatile)` | `uint32_t * volatile reg;` |
+| 指向只读且易变 `u4` 的指针 | `p* c@ v@ u4 reg;` | `Pointer(Base(uint32_t, const volatile))` | `const volatile uint32_t *reg;` |
 | 指向可变 `u1` 的只读指针 | `c@ p* u1 ptr m, buf;` | `Pointer(Base(uint8_t), const)` | `uint8_t * const ptr = buf;` |
 | 指向只读 `u1` 的只读指针 | `c@ p* c@ u1 ptr m, buf;` | `Pointer(Base(uint8_t, const), const)` | `const uint8_t * const ptr = buf;` |
 | 指向只读一级指针的可变二级指针 | `p* c@ p* u1 pp;` | `Pointer(Pointer(Base(uint8_t), const))` | `uint8_t * const *pp;` |
@@ -61,6 +65,8 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 | 显式标量类型转换表达式 | `(u4)w * (u4)h` | `Binary('*', Cast(uint32_t, w), Cast(uint32_t, h))` | `((uint32_t)w * (uint32_t)h)` |
 
 函数原型允许省略形参名（例如 `i4 sum(i4, i4);`），函数定义仍须为每个形参命名。
+
+对内存映射寄存器，`p* v@ u4 timer_reg` 会生成 `volatile uint32_t *timer_reg`，经 `*timer_reg` 读取或写入时保留 `volatile` 限定。示例初始化可写为 `p* v@ u4 timer_reg m, (p* v@ u4)0x40000000;`；Sigil-C 要求显式指针类型转换，且整数地址转成指针属于目标平台相关的实现定义操作，需确认地址、位宽和访问方式符合目标 ABI。`volatile` 不等同于原子操作，也不代替平台所需的内存屏障。
 
 ## 4. Sigil-C 赋值印记、通用含义与 C99 对照 (`ASSIGN_TOKENS`)
 
