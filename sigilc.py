@@ -9,7 +9,7 @@ import os
 import re
 import argparse
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict, Set
+from typing import List, Optional, Tuple, Dict, Set, NamedTuple
 
 # ============================================================================
 # 1. DFA Lexer
@@ -888,6 +888,13 @@ ASSIGN_TOKENS = {
     'OP_DIV_ASSIGN': '/=',
 }
 
+class Prov(NamedTuple):
+    """指针来源：基对象、元素个数、相对基对象的元素偏移、基对象声明时的作用域深度。"""
+    base: str
+    size: int
+    offset: int
+    depth: int
+
 class Parser:
     def __init__(self, tokens: List[Token], filename: str = "<input>",
                  defines: Optional[Dict[str, str]] = None):
@@ -1249,13 +1256,12 @@ class Parser:
                 if isinstance(sub_t, PointerType):
                     if not self._is_complete_object_type(sub_t.pointee):
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference pointer to incomplete or void type")
-                    pv = self._prov_of(expr.operand)
+                    pv = self._prov_live(self._prov_of(expr.operand), expr)
                     if pv is not None:
-                        b_name, b_len, b_off = pv
-                        if b_off < 0 or b_off >= b_len:
+                        if pv.offset < 0 or pv.offset >= pv.size:
                             raise SemanticError(
-                                f"{self.filename}:{expr.line}:{expr.col}: Dereferencing a pointer into '{b_name}' at "
-                                f"element {b_off}, outside {b_len} element(s)")
+                                f"{self.filename}:{expr.line}:{expr.col}: Dereferencing a pointer into '{pv.base}' at "
+                                f"element {pv.offset}, outside {pv.size} element(s)")
                     return sub_t.pointee
                 if isinstance(sub_t, ArrayType):
                     return sub_t.element_type
@@ -1291,18 +1297,17 @@ class Parser:
                     raise SemanticError(
                         f"{self.filename}:{expr.line}:{expr.col}: Cannot subscript pointer to incomplete or void type"
                     )
-                pv = self._prov_of(expr.base)
+                pv = self._prov_live(self._prov_of(expr.base), expr)
                 if pv is not None:
-                    b_name, b_len, b_off = pv
                     c_idx = self._try_const(expr.index)
                     if c_idx is not None:
-                        pos = b_off + c_idx
-                        if pos < 0 or pos >= b_len:
+                        pos = pv.offset + c_idx
+                        if pos < 0 or pos >= pv.size:
                             raise SemanticError(
                                 f"{self.filename}:{expr.line}:{expr.col}: Index {c_idx} through a pointer into "
-                                f"'{b_name}' reaches element {pos}, outside {b_len} element(s)")
-                    elif 0 <= b_off < b_len:
-                        expr.bound = b_len - b_off
+                                f"'{pv.base}' reaches element {pos}, outside {pv.size} element(s)")
+                    elif 0 <= pv.offset < pv.size:
+                        expr.bound = pv.size - pv.offset
                 return base_t.pointee
             if isinstance(base_t, ArrayType):
                 if base_t.size_val is not None:
@@ -1486,8 +1491,8 @@ class Parser:
         except SemanticError:
             return None
 
-    def _prov_of(self, expr: Optional[ExprNode]) -> Optional[Tuple[str, int, int]]:
-        """指针来源：(基对象, 元素个数, 相对基对象的偏移)。推不出来就返回 None。"""
+    def _prov_of(self, expr: Optional[ExprNode]) -> Optional[Prov]:
+        """指针来源：(基对象, 元素个数, 相对基对象的偏移, 基对象作用域深度)。推不出来返回 None。"""
         if expr is None:
             return None
         if isinstance(expr, IdentExpr):
@@ -1502,24 +1507,31 @@ class Parser:
                 base = self._prov_of(inner.base)
                 idx = self._try_const(inner.index)
                 if base is not None and idx is not None:
-                    b, n, off = base
-                    return (b, n, off + idx)
+                    return Prov(base.base, base.size, base.offset + idx, base.depth)
             return None
         if isinstance(expr, BinaryExpr) and expr.op in ('+', '-'):
             left = self._prov_of(expr.left)
             if left is not None:
                 k = self._try_const(expr.right)
                 if k is not None:
-                    b, n, off = left
-                    return (b, n, off + k if expr.op == '+' else off - k)
+                    return Prov(left.base, left.size,
+                                left.offset + k if expr.op == '+' else left.offset - k, left.depth)
             if expr.op == '+':
                 right = self._prov_of(expr.right)
                 if right is not None:
                     k = self._try_const(expr.left)
                     if k is not None:
-                        b, n, off = right
-                        return (b, n, off + k)
+                        return Prov(right.base, right.size, right.offset + k, right.depth)
         return None
+
+    def _prov_live(self, prov: Optional[Prov], expr: ExprNode) -> Optional[Prov]:
+        """来源的基对象必须还在作用域内；否则指针已经悬垂。"""
+        if prov is None:
+            return None
+        if prov.depth >= len(self.scopes):
+            raise SemanticError(
+                f"{self.filename}:{expr.line}:{expr.col}: Pointer refers to '{prov.base}', which is out of scope here")
+        return prov
 
     def _address_of_local(self, expr: Optional[ExprNode]) -> Optional[str]:
         if isinstance(expr, UnaryExpr) and expr.op == '&':
@@ -1532,15 +1544,21 @@ class Parser:
         return None
 
     def _note_prov(self, name: str, decl_type: TypeNode, init_expr: Optional[ExprNode]) -> None:
+        depth = len(self.scopes) - 1
         if isinstance(decl_type, ArrayType) and decl_type.size_val is not None:
-            self.prov[name] = (name, decl_type.size_val, 0)
+            self.prov[name] = Prov(name, decl_type.size_val, 0, depth)
             return
         if isinstance(strip_top_qualifiers(decl_type), PointerType):
             p = self._prov_of(init_expr)
+            if p is not None and init_expr is not None:
+                p = self._prov_live(p, init_expr)
             if p is not None:
                 self.prov[name] = p
             else:
                 self.prov.pop(name, None)
+            return
+        # 标量/结构体对象本身：把它的地址当作一个元素的来源
+        self.prov[name] = Prov(name, 1, 0, depth)
 
     def _member_is_bitfield(self, me: MemberExpr) -> bool:
         try:
@@ -2594,6 +2612,8 @@ class Parser:
                 ret_expr_t = self._infer_expr_type(expr)
                 if not self._check_assign_compatible(self.current_func_ret, expr, ret_expr_t):
                     raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Incompatible return type")
+            if expr is not None:
+                self._prov_live(self._prov_of(expr), expr)
             bad = self._address_of_local(expr)
             if bad is not None:
                 raise SemanticError(
@@ -2868,7 +2888,7 @@ class Parser:
                         raise SemanticError(
                             f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local object "
                             f"'{bad}' into '{lhs.name}' would dangle after this function returns")
-                if isinstance(lhs, IdentExpr):
+                if isinstance(lhs, IdentExpr) and isinstance(strip_top_qualifiers(lhs_t), PointerType):
                     self._note_prov(lhs.name, lhs_t, rhs)
             else:
                 self._check_compound_assign_types(op_tok.kind, lhs_t, rhs_t, op_tok)
@@ -2877,9 +2897,10 @@ class Parser:
                     k = self._try_const(rhs)
                     if pv is not None:
                         if k is not None:
-                            b_name, b_len, b_off = pv
-                            self.prov[lhs.name] = (b_name, b_len,
-                                                   b_off + k if op_tok.kind == 'OP_ADD_ASSIGN' else b_off - k)
+                            self.prov[lhs.name] = Prov(
+                                pv.base, pv.size,
+                                pv.offset + k if op_tok.kind == 'OP_ADD_ASSIGN' else pv.offset - k,
+                                pv.depth)
                         else:
                             self.prov.pop(lhs.name, None)
             return AssignStmt(line=op_tok.line, col=op_tok.col, op=ASSIGN_TOKENS[op_tok.kind], target=lhs, value=rhs)
@@ -3079,6 +3100,7 @@ class Parser:
                         )
                     for idx, arg_e in enumerate(args, 1):
                         act_t = self._infer_expr_type(arg_e)
+                        self._prov_live(self._prov_of(arg_e), arg_e)
                         if is_void_type(act_t):
                             raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Argument {idx} cannot have 'v.' (void) type")
                         if idx <= len(expected_params):

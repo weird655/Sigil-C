@@ -1401,6 +1401,33 @@ int main(void) {
 
     assert_ok("15. v1.1 ptr", "Global addresses and locals pointing at locals stay legal", test_pointer_dangling_ok)
 
+    assert_raises("15. v1.1 ptr", "Reject using a pointer whose base object has left scope",
+                  SemanticError, "i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } r; (i4)p* p; }")
+    assert_raises("15. v1.1 ptr", "Reject copying a pointer whose base object has left scope",
+                  SemanticError, "v. f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } o! p* u4 q m, p; }")
+    assert_raises("15. v1.1 ptr", "Reject passing a pointer whose base object has left scope",
+                  SemanticError,
+                  "u4 rd(p* u4 p) { r; p* p; } i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } r; (i4)rd(p); }")
+
+    def test_pointer_scope_ok():
+        sigil = """
+        o! u4 g m, 1;
+        i4 keep(p* u4 p) { r; (i4)p* p; }
+        i4 f(i4 a) {
+            o! i4 x m, 1;
+            s? (a) { k: 1: { x m+ 1; b!; } d: { x m, 0; } }
+            o! u4 base m, 7;
+            o! p* u4 p m, a& base;
+            i? (1) { o! u4 y m, keep(p) + (i4)p* p; }
+            o! p* u4 gp m, a& g;
+            r; x + (i4)p* gp;
+        }
+        i4 main(v.) { r; f(1) - 8; }
+        """
+        check_source(sigil, "scope_ok.sigil")
+
+    assert_ok("15. v1.1 ptr", "In-scope pointers, globals and switch-local assignments stay legal", test_pointer_scope_ok)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
