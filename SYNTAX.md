@@ -58,6 +58,8 @@ Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 
 | 含嵌套回调参数的函数指针 | `f^(u4 id, f^(i4 e) -> v. cb) -> i4 hook;` | `FnPtr([uint32_t, FnPtr] -> int32_t)` | `int32_t (*hook)(uint32_t id, void (*cb)(int32_t e));` |
 | 显式标量类型转换表达式 | `(u4)w * (u4)h` | `Binary('*', Cast(uint32_t, w), Cast(uint32_t, h))` | `((uint32_t)w * (uint32_t)h)` |
 
+函数原型允许省略形参名（例如 `i4 sum(i4, i4);`），函数定义仍须为每个形参命名。
+
 ## 4. 赋值印记与复合赋值类型规则 (`ASSIGN_TOKENS`)
 
 裸 `=` 在词法阶段被拒绝，所有赋值与初始化统一使用双字符印记，且仅允许作为独立语句、`f~` 初始化子句或 `f~` 步进子句出现：

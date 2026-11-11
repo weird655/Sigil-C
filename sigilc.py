@@ -1487,12 +1487,17 @@ class Parser:
                 while True:
                     raw_pt = self.parse_type()
                     pt = decay_parameter_type(raw_pt)
-                    p_tok = self._eat('IDENT')
-                    self._validate_non_void_var(pt, p_tok)
-                    if p_tok.value in seen_params:
-                        raise SemanticError(f"{self.filename}:{p_tok.line}:{p_tok.col}: Duplicate parameter '{p_tok.value}'")
-                    seen_params.add(p_tok.value)
-                    params.append((pt, p_tok.value))
+                    pname = ''
+                    if self._cur().kind == 'IDENT':
+                        p_tok = self._eat('IDENT')
+                        self._validate_non_void_var(pt, p_tok)
+                        if p_tok.value in seen_params:
+                            raise SemanticError(f"{self.filename}:{p_tok.line}:{p_tok.col}: Duplicate parameter '{p_tok.value}'")
+                        seen_params.add(p_tok.value)
+                        pname = p_tok.value
+                    else:
+                        self._validate_non_void_var(pt, name_tok)
+                    params.append((pt, pname))
                     if self._cur().kind == 'COMMA':
                         self._eat('COMMA')
                     else:
@@ -1516,6 +1521,8 @@ class Parser:
                 self._eat('SEMI')
                 return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=None)
 
+            if any(not pname for _, pname in params):
+                raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Function definition parameters must have names")
             if name_tok.value in self.func_defined:
                 raise SemanticError(f"{self.filename}:{name_tok.line}:{name_tok.col}: Redefinition of function '{name_tok.value}'")
             self.func_defined.add(name_tok.value)
