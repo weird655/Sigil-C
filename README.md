@@ -160,18 +160,47 @@ VS Code 需要额外的客户端扩展；本仓库的 `editors/vscode/` 只含�
 
 ### 四个实测
 
-| 场景 | 例子 | 转译器 | 实际结果 |
+| 场景 | 例子 | 转译器 | 实际结果（Windows 示例） |
 |---|---|---|---|
 | 指针参数长度 | `read(a& a[0], 100)` 里 `p[i]` | 接受，生成 `p[i]`（**不**加 `SIGIL_IDX`） | 不崩，读到越界内存（UB） |
-| 空指针 | `f(0)` 里 `p* p` | 接受 | 0xC0000005 访问违规 |
+| 空指针 | `f(0)` 后 `p* p` | 接受 | `0xC0000005` 访问违规 |
 | 未初始化 | `o! i4 x; r; x;` | 接受 | 随机返回值；`gcc -Wall` 会警告 |
-| 堆 | `free(p); free(p);` | 接受（`malloc`/`free` 需手写原型） | 0xC0000374 堆损坏 |
+| 堆 | `free(p); free(p);` | 接受（`malloc` / `free` 需手写原型） | `0xC0000374` 堆损坏 |
+
+> 错误码是 Windows 平台的示例：Linux 上分别是 `Segmentation fault` 与 `free(): double free detected` + abort，macOS 上是 `EXC_BAD_ACCESS`。
 
 指针参数那条尤其要说明：`--bounds-check` 也救不了——参数进来时来源未知，函数内 `p[i]` 不会生成 `SIGIL_IDX`，只能在调用方保证长度。
 
 ```sigil
-i4 read(p* u4 p, u4 i) { r; (i4)p[i]; }   /* 生成 int32_t read(uint32_t *p, uint32_t i) { return p[i]; } */
+i4 read(p* u4 p, u4 i) { r; (i4)p[i]; }   /* → int32_t read(uint32_t *p, uint32_t i) { return p[i]; } */
 ```
+
+**空指针**：`0` 是空指针常量，按 C99 语义可隐式转任意指针，所以 `f(0)` 能过类型检查——Sigil-C 保留这条。
+
+```sigil
+i4 f(p* u4 p) { r; (i4)p* p; }
+i4 main(v.) { r; f(0); }
+```
+
+**未初始化**：`o! i4 x;`（裸声明）与 `o! i4 x m, 0;`（带初始化）都合法——`o!` 只标出声明，不强制初始化；转译器不查未初始化，所以裸声明放行。
+
+```sigil
+o! i4 x;      /* 裸声明合法，转译器不查未初始化 */
+r; x;
+```
+
+**堆**：`malloc` / `free` 不是内建，得手写原型；`p* i4` 传给 `p* v.` 参数是隐式转换（C 与 Sigil-C 都允许）；转译器没有堆模型，重复释放照单全收。
+
+```sigil
+p* v. malloc(u8 n);
+v. free(p* v. p);
+
+o! p* i4 p m, (p* i4)malloc(z? i4);
+free(p);   /* p* i4 → p* v. 隐式转换，合法 */
+free(p);   /* 重复释放，转译器照单全收 */
+```
+
+实际代码应检查 `malloc` 返回值：`i? (p =? NULL) { ... }`——Sigil-C 不替你检查。
 
 ## 适用与不适用
 
