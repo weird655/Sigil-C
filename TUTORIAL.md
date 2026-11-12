@@ -348,6 +348,129 @@ p* i4 bad(v.) {
 
 ---
 
+## 3.6 三级指针：一个内存池
+
+物理布局（8 个 u4，两个跨度 4 的块）：
+
+```text
+        ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+ index  │  0  │  1  │  2  │  3  │  4  │  5  │  6  │  7  │
+ value  │ 101 │ 202 │  ·  │  ·  │ 404 │  ·  │  ·  │  ·  │
+        └─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
+```
+
+指针链：
+
+```text
+slot_alpha  ──►  raw_storage[0]      Block 0 的句柄
+slot_beta   ──►  raw_storage[4]      Block 1 的句柄
+free_slot   ──►  slot_alpha 或 slot_beta
+                 (u4 **，指向某个槽位)
+cursor_hub  ──►  &free_slot
+                 (u4 ***，指向槽位指针本身)
+```
+
+完整源码（[`examples/pool.sigil`](examples/pool.sigil)，关键步骤有注释）：
+
+```sigil
+#include <stdio.h>
+
+/* 内存池：多重指针嵌套 + 读写权限分流
+   布局图与走读见 TUTORIAL §3.6「三级指针：一个内存池」 */
+
+s{ Pool {
+    p* c@ u4 arena_guard;     // 只读视图：审计探针
+    p* u4 arena_raw;          // 可写物理池
+    p* p* u4 free_slot;       // u4 **：当前空闲槽位
+    p* p* p* u4 cursor_hub;   // u4 ***：指向 free_slot 本身
+    u4 stride;                // 每块跨度
+    u4 allocated;             // 已分配块数
+};
+
+p* u4 pool_acquire_block(p* Pool pool_rw, u4 init_tag) {
+    o! p* p* u4 active_slot m, p* pool_rw->cursor_hub;   // u4 *** → u4 **
+    o! p* u4 block_ptr m, p* active_slot;                // u4 **  → u4 *
+
+    p* block_ptr m, init_tag;                            // 块首字写标记
+    pool_rw->allocated m, pool_rw->allocated + 1;
+    r; block_ptr;
+}
+
+v. pool_relocate_slot(p* p* u4 target_slot, p* u4 new_block, u4 payload) {
+    p* target_slot m, new_block;      // 换绑槽位
+    p* p* target_slot m, payload;     // 写新块首字
+}
+
+u4 memory_pool_demo(v.) {
+    o! u4[8] raw_storage;
+    raw_storage[0] m, 0;
+    raw_storage[4] m, 0;
+
+    o! p* u4 slot_alpha m, a& raw_storage[0];   // Block 0
+    o! p* u4 slot_beta  m, a& raw_storage[4];   // Block 1
+
+    o! Pool main_pool;
+    main_pool.arena_guard m, raw_storage;
+    main_pool.arena_raw   m, raw_storage;
+    main_pool.free_slot   m, a& slot_alpha;
+    main_pool.cursor_hub  m, a& main_pool.free_slot;
+    main_pool.stride      m, 4;
+    main_pool.allocated   m, 0;
+
+    o! p* c@ Pool ro_pool m, a& main_pool;   // 只读视图
+    o! p* Pool rw_pool    m, a& main_pool;   // 可写视图
+
+    o! p* u4 blk_first m, pool_acquire_block(rw_pool, 101);
+    blk_first[1] m, 202;
+
+    rw_pool->free_slot m, a& slot_beta;      // 推进游标
+
+    o! p* u4 blk_second m, pool_acquire_block(rw_pool, 303);
+
+    o! p* p* p* u4 hub_probe m, ro_pool->cursor_hub;
+    o! u4 deep_read_val m, p* p* p* hub_probe;   // 穿透三层
+
+    o! c@ p* p* u4 pinned_slot m, a& slot_alpha; // 槽位地址锁死
+    pool_relocate_slot(pinned_slot, blk_second, 404);
+
+    o! p* c@ u4 guard_view m, ro_pool->arena_guard;
+    o! u4 block0_head m, guard_view[0];
+    o! u4 block0_next m, guard_view[1];
+    o! u4 block1_head m, p* slot_alpha;
+    o! u4 total_used  m, ro_pool->allocated;
+
+    printf("block0: head=%u next=%u\n", block0_head, block0_next);
+    printf("block1: head=%u (via slot_alpha)\n", block1_head);
+    printf("deep_read=%u allocated=%u\n", deep_read_val, total_used);
+    r; block0_head + block0_next + deep_read_val + block1_head + total_used;   // 1012
+}
+
+i4 main(v.) {
+    u4 sum m, memory_pool_demo();
+    printf("checksum=%u\n", sum);
+    r; (i4)sum - 1012;
+}
+```
+
+```text
+block0: head=101 next=202
+block1: head=404 (via slot_alpha)
+deep_read=303 allocated=2
+checksum=1012
+```
+
+三种权限写法在同一个结构体里分工：
+
+| 写法 | 含义 | 用途 |
+|---|---|---|
+| `p* c@ u4` | 指向物只读 | 审计探针，禁止经它写入 |
+| `p* u4` | 可写指针 | 物理池操作 |
+| `c@ p* p* u4` | 指针自身只读 | 固定句柄，仍可改它指向的块 |
+
+换 C 写同样的东西，声明要从星号中间往外读；这里从上到下就是「指针 → 只读 / 只读指针 → 类型」。
+
+---
+
 # Part 4 · 系统
 
 ## 4.1 输入输出

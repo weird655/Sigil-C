@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 /* 内存池：多重指针嵌套 + 读写权限分流
-   布局图与走读见 README「三级指针：一个内存池」 */
+   布局图与走读见 TUTORIAL §3.6「三级指针：一个内存池」 */
 
 s{ Pool {
     p* c@ u4 arena_guard;     // 只读视图：审计探针
