@@ -1745,12 +1745,24 @@ int main(void) {
 
     assert_ok("25. init", "--check --json emits machine-readable diagnostics", test_check_json)
 
+    # Layer 26: LSP diagnostics and completion
+    def test_lsp_core():
+        import sigilc as _sigilc
+        diags = _sigilc._lsp_diagnostics("file:///tmp/buf.sigil", "i4 main(v.) { r; nope; }\n")
+        assert len(diags) == 1, diags
+        assert "nope" in diags[0]["message"], diags
+        assert diags[0]["range"]["start"]["line"] == 0, diags
+        labels = {item["label"] for item in _sigilc._lsp_completion_items()}
+        assert {"i?", "p*", "m,", "o!", "i4"} <= labels, sorted(labels)[:10]
+
+    assert_ok("26. lsp", "LSP diagnostics and completion are wired to the checker", test_lsp_core)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 25-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 26-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

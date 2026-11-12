@@ -3800,6 +3800,131 @@ python3 sigilc.py --build src -o app --run
 """
 
 
+_LSP_TYPES = ["i1", "i2", "i4", "i8", "u1", "u2", "u4", "u8", "f4", "f8",
+              "c1", "b.", "v.", "size_t", "ptrdiff_t", "va_list", "offsetof"]
+
+
+def _lsp_read(stream):
+    headers = {}
+    while True:
+        line = stream.readline()
+        if not line:
+            return None
+        if line in (b"\r\n", b"\n"):
+            break
+        key, _, value = line.decode("ascii", "replace").partition(":")
+        headers[key.strip().lower()] = value.strip()
+    length = int(headers.get("content-length", "0"))
+    body = stream.read(length)
+    if not body:
+        return None
+    return json.loads(body.decode("utf-8"))
+
+
+def _lsp_write(stream, payload) -> None:
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    stream.write(b"Content-Length: %d\r\n\r\n" % len(data))
+    stream.write(data)
+    stream.flush()
+
+
+def _lsp_uri_path(uri: str) -> str:
+    if uri.startswith("file://"):
+        return uri[7:]
+    return "buffer.sigil"
+
+
+def _lsp_diagnostics(uri: str, text: str):
+    try:
+        check_source(text, _lsp_uri_path(uri))
+        return []
+    except (LexerError, ParseError, SemanticError) as e:
+        msg = str(e)
+        m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
+        if m:
+            line = max(0, int(m.group(2)) - 1)
+            col = max(0, int(m.group(3)) - 1)
+            message = m.group(4)
+        else:
+            line, col, message = 0, 0, msg
+        return [{
+            "range": {
+                "start": {"line": line, "character": col},
+                "end": {"line": line, "character": col + 1},
+            },
+            "severity": 1,
+            "source": "sigil-c",
+            "message": message,
+        }]
+
+
+def _lsp_completion_items():
+    items = []
+    for name in sorted(set(SIGIL_KEYWORDS) | set(SIGIL_OPERATORS)):
+        items.append({"label": name, "kind": 14, "detail": "sigil"})
+    for name in _LSP_TYPES:
+        items.append({"label": name, "kind": 25, "detail": "type"})
+    for name in ("true", "false", "NULL"):
+        items.append({"label": name, "kind": 12, "detail": "literal"})
+    return items
+
+
+def _lsp_run() -> int:
+    stdin = sys.stdin.buffer
+    stdout = sys.stdout.buffer
+    while True:
+        msg = _lsp_read(stdin)
+        if msg is None:
+            return 0
+        method = msg.get("method")
+        msg_id = msg.get("id")
+        params = msg.get("params") or {}
+
+        if method == "initialize":
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "id": msg_id,
+                "result": {"capabilities": {
+                    "textDocumentSync": 1,
+                    "completionProvider": {"triggerCharacters": [" "]},
+                }},
+            })
+        elif method == "initialized":
+            pass
+        elif method == "textDocument/didOpen":
+            doc = params["textDocument"]
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
+                "params": {"uri": doc["uri"], "diagnostics": _lsp_diagnostics(doc["uri"], doc["text"])},
+            })
+        elif method == "textDocument/didChange":
+            uri = params["textDocument"]["uri"]
+            text = params["contentChanges"][-1]["text"]
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
+                "params": {"uri": uri, "diagnostics": _lsp_diagnostics(uri, text)},
+            })
+        elif method == "textDocument/didClose":
+            uri = params["textDocument"]["uri"]
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
+                "params": {"uri": uri, "diagnostics": []},
+            })
+        elif method == "textDocument/completion":
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "id": msg_id,
+                "result": {"isIncomplete": False, "items": _lsp_completion_items()},
+            })
+        elif method == "shutdown":
+            _lsp_write(stdout, {"jsonrpc": "2.0", "id": msg_id, "result": None})
+        elif method == "exit":
+            return 0
+        elif msg_id is not None:
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "id": msg_id,
+                "error": {"code": -32601, "message": f"method not found: {method}"},
+            })
+
+
 def _init_project(target: str, force: bool) -> int:
     """生成一个最小可运行工程：src/main.sigil + README + .gitignore。"""
     files = {
@@ -4005,6 +4130,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
+    ap.add_argument("--lsp", action="store_true", help="run a minimal LSP server on stdio")
     ap.add_argument("--init", metavar="DIR", nargs="?", const=".", default=None,
                     help="scaffold a minimal project in DIR")
     ap.add_argument("--force", action="store_true", help="with --init: overwrite existing files")
@@ -4026,6 +4152,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     defines = _parse_defines(args.define)
     if defines is None:
         return 2
+
+    if args.lsp:
+        return _lsp_run()
 
     if args.init is not None:
         return _init_project(args.init, args.force)

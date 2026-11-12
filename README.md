@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-181%20%2F%2025%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-182%20%2F%2026%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -95,6 +95,26 @@ python3 sigilc.py --fmt src --fmt-check    # 有未格式化文件时退出码�
 pip install -e .
 sigilc --build src -o app --run
 ```
+
+### 编辑器：LSP
+
+`sigilc.py --lsp` 是一个零依赖 LSP 服务（stdio JSON-RPC）：
+
+- 打开/修改文件时推送诊断（与 `--check` 同一套检查，带 range）
+- 补全 52 个印记、类型名与 `true` / `false` / `NULL`
+
+Neovim（内置 LSP）示例：
+
+```lua
+vim.lsp.start({
+  name = "sigil-c",
+  cmd = { "python3", "/path/to/sigilc.py", "--lsp" },
+  root_dir = vim.fn.getcwd(),
+})
+```
+
+Helix、Emacs（lsp-mode）、Sublime LSP 等通用客户端用同一行命令即可。
+VS Code 需要额外的客户端扩展；本仓库的 `editors/vscode/` 只含语法高亮。
 
 编辑器：`editors/vscode/` 是最小 VS Code 语法扩展（`.sigil` 高亮、注释与括号配置），
 把它复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.1.0` 后重启即可。
@@ -380,7 +400,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 181 项 / 25 层，需要 gcc
+python3 test_matrix.py        # 182 项 / 26 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。
