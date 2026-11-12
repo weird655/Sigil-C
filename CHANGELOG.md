@@ -23,6 +23,7 @@
 * **许可证**：仓库以 **CC BY 4.0** 发布，全文见 `LICENSE`；README 增加许可证与持续集成说明。
 * **持续集成**：`.github/workflows/ci.yml` 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑 159 项矩阵，并以 `-std=c99 -Wall -Wextra -Werror -pedantic` 编译运行 `examples/vm.sigil`。* **跨函数逃逸与 `r@` 承诺**：函数把形参存进全局时生成"逃逸摘要"，调用处传入局部对象地址即判悬垂；`r@`（restrict）做浅层承诺校验——同一对象同时喂给 `r@` 参数和另一个参数（`sum(arr, arr)`）、或局部 `r@` 指针声明后又从别的路径访问同一对象，都在转译期报错。
 * **三个场景示例**：`examples/regmap.sigil`（MMIO 寄存器映射：`a@(packed)` + 位域 + `offsetof`/`z?` 断言）、`examples/callbacks.sigil`（全局函数指针表 + `s@` 处理函数）、`examples/wire.sigil`（大端帧解析 + 位域头部 + 逐帧边界检查）。第 17 层测试在本地与 CI 上编译并运行三者。
+* **文档**：SYNTAX.md 新增 §0.7「已知弱点：p* 与乘法撞脸」，写明书写约定与不更换的理由；修正 §0.5 陈旧的印记计数（43 → 52）。README.md 增加同一弱点的指引。
 * **教程**：`TUTORIAL.md` 八章，按软件 / 嵌入 / 硬件三条线各给一个能跑的程序（`examples/tutorial/01..07`），另含发布成库、十个坑、让 AI 帮你写三章。第 18 层测试编译并运行全部教程程序。
 * 测试矩阵 **169 项 / 18 层**。
 

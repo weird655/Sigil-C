@@ -113,6 +113,8 @@ int32_t main(void) {
 
 52 个印记的完整定义在 [`SYNTAX.md`](SYNTAX.md)；逐步讲解见 [`TUTORIAL.md`](TUTORIAL.md) 第 3 章。
 
+> **已知弱点**：`p*` 与乘法在字形上撞脸。书写约定见 [`SYNTAX.md`](SYNTAX.md) §0.7。
+
 ---
 
 ## 命令行
