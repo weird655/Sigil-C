@@ -54,6 +54,7 @@
 | `const T * const p` | `c@ p* c@ T p` | |
 | `restrict T *p` | `r@ p* T p` | |
 | `T *p = &x;` | `o! p* T p m, a& x;` | |
+| `T x;`（T 为用户类型） | `o! T x;` | 内建基类型可省 `o!`：`u4 x;` |
 | `T a[N];` | `o! T[N] a;` | **维度在类型前缀里** |
 | `x = v;` | `x m, v;` | |
 | `x += v;` / `x -= v;` | `x m+ v;` / `x m- v;` | |

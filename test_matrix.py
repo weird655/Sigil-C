@@ -1566,12 +1566,36 @@ int main(void) {
 
     assert_ok("18. tutorial", "07 library: --emit-header keeps s@ symbols internal", test_tut_library)
 
+    # Layer 19: builtin-type objects may omit o!
+    def test_omit_marker_builtin():
+        sigil = "u4 g m, 7;\ni4 main(v.) { u4 x m, 3; r; (i4)(g + x) - 10; }"
+        with open("nomark.c", "w") as f:
+            f.write(compile_source(sigil, "nomark.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "nomark.c", "-o", "nomark_bin"],
+            check=True
+        )
+        assert subprocess.run(["./nomark_bin"], check=False).returncode == 0
+
+    assert_ok("19. marker", "Builtin-type objects may omit o! at file and block scope", test_omit_marker_builtin)
+
+    assert_raises("19. marker", "User-defined type objects still require o!",
+                  ParseError, "s{ SG { i4 x; }; i4 main(v.) { SG ctx; r; 0; }")
+    assert_raises("19. marker", "Pointer declarations still require o!",
+                  ParseError, "i4 main(v.) { p* u4 p; r; 0; }")
+
+    def test_omit_marker_for():
+        sigil = "i4 main(v.) { o! i4 s m, 0; f~ (u4 i m, 0; i < 3; i m+ 1) { s m+ (i4)i; } r; s - 3; }"
+        check_source(sigil, "for_nomark.sigil")
+
+    assert_ok("19. marker", "A f~ initializer may omit o! for builtin types", test_omit_marker_for)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 18-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 19-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

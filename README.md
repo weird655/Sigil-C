@@ -3,7 +3,7 @@
 把 C 写成**从左往右读**的样子。编译到 ISO C99，越界、悬垂、逃逸挡在编译前。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-169%20%2F%2018%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-173%20%2F%2019%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -97,6 +97,14 @@ int32_t main(void) {
     if ((dot((&u), (&v)) == 56)) { printf("ok\n"); }
     return 0;
 }
+```
+
+`o!` 是对象声明前缀；**基类型直接开头时可省**（`u4 x;`），用户定义类型与指针仍必须写：
+
+```sigil
+u4 counter m, 0;        /* 可省 */
+o! SG ctx;                /* 用户类型必须 */
+o! p* u4 slot;            /* 指针必须 */
 ```
 
 **指针怎么读**——从左往右，每层一个记号：
@@ -195,7 +203,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 169 项 / 18 层，需要 gcc
+python3 test_matrix.py        # 173 项 / 19 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。

@@ -958,6 +958,17 @@ class Parser:
     def _is_type_start(self, tok: Token) -> bool:
         return self._is_type_start_at(self.pos)
 
+    def _can_omit_object_marker(self, tok: Token) -> bool:
+        """基类型关键字开头的对象声明可以省略 `o!`：`u4 x;`、`b. flag;`。
+
+        指针（`p*`）、限定（`c@` / `v@` / `r@`）与用户定义类型仍然必须写 `o!`：
+        前者的字形与解引用表达式相同，后者是普通标识符，省掉就无法靠字面区分。
+        """
+        if tok.kind not in ('TYPE_INT', 'TYPE_BOOL'):
+            return False
+        nxt = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
+        return nxt is not None and nxt.kind in ('IDENT', 'LBRACK')
+
     # ------------------------------------------------------------------
     # a@(...) 属性：解析、参数形状校验、放置位置校验
     # ------------------------------------------------------------------
@@ -2484,6 +2495,7 @@ class Parser:
                                attrs: Optional[List[Attribute]] = None,
                                is_inline: bool = False) -> StmtNode:
         attrs = attrs or []
+        start_tok = self._cur()
         decl_type = self.parse_type()
         name_tok = self._eat('IDENT')
 
@@ -2602,6 +2614,10 @@ class Parser:
             return FuncDefNode(line=name_tok.line, col=name_tok.col, return_type=decl_type, name=name_tok.value, params=params, body=body, is_static=is_static, attrs=attrs, is_inline=is_inline, is_variadic=is_variadic)
 
         if object_marker is None:
+            if start_tok.kind in ('TYPE_INT', 'TYPE_BOOL'):
+                self._check_attr_placement(attrs, 'object', name_tok, file_scope=True)
+                return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True,
+                                                          is_static=is_static, attrs=attrs)
             raise ParseError(f"{self.filename}:{name_tok.line}:{name_tok.col}: File-scope object declarations must begin with 'o!'")
         self._check_attr_placement(attrs, 'object', name_tok, file_scope=True)
         return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True, is_static=is_static, attrs=attrs)
@@ -2662,7 +2678,11 @@ class Parser:
                     init_stmt = self._parse_object_decl_after_name(vt, vname, consume_semi=False)
                 elif self._is_type_start(self._cur()):
                     decl_tok = self._cur()
-                    raise ParseError(f"{self.filename}:{decl_tok.line}:{decl_tok.col}: Object declarations in a 'f~' initializer must begin with 'o!'")
+                    if not self._can_omit_object_marker(decl_tok):
+                        raise ParseError(f"{self.filename}:{decl_tok.line}:{decl_tok.col}: Object declarations in a 'f~' initializer must begin with 'o!'")
+                    vt = self.parse_type()
+                    vname = self._eat('IDENT')
+                    init_stmt = self._parse_object_decl_after_name(vt, vname, consume_semi=False)
                 else:
                     init_stmt = self.parse_assign_or_expr_no_semi()
             self._eat('SEMI')
@@ -2772,6 +2792,10 @@ class Parser:
             return self._parse_object_decl_after_name(vt, vname)
 
         if self._is_type_start(tok):
+            if self._can_omit_object_marker(tok):
+                vt = self.parse_type()
+                vname = self._eat('IDENT')
+                return self._parse_object_decl_after_name(vt, vname)
             raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Object declarations must begin with 'o!'")
 
         stmt = self.parse_assign_or_expr_no_semi()
