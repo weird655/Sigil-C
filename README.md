@@ -31,6 +31,39 @@
 - **写操作带牌**：所有状态修改都经 `m` 家族，且不能藏在表达式里——副作用可枚举。
 - **生成物可退出**：纯 C99 + `#line`，随时可以丢掉转译器只留生成代码。
 
+## Hello, World
+
+```sigil
+#include <stdio.h>
+
+i4 main(v.) {
+    printf("Hello, World\n");
+    r; 0;
+}
+```
+
+```bash
+python3 sigilc.py hello.sigil -o hello.c
+gcc -std=c99 -Wall -Wextra -Werror -pedantic hello.c -o hello
+./hello
+```
+
+```text
+Hello, World
+```
+
+生成的 C（节选；`#line` 让 gcc 报错指回 `.sigil`）：
+
+```c
+#line 3 "hello.sigil"
+int32_t main(void) {
+#line 4 "hello.sigil"
+    printf("Hello, World\n");
+#line 5 "hello.sigil"
+    return 0;
+}
+```
+
 ## 快速开始
 
 需要 Python 3.8+ 与 gcc（clang 亦可）。
