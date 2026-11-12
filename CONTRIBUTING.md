@@ -44,7 +44,7 @@ CI 在 Ubuntu（py3.10 / 3.12）与 Windows 上跑同样的步骤。提交前本
 - 中文注释，解释**为什么**，不复述代码
 - 空格即断句：`p* u4` 是指针，`p * q` 是乘法（见 SYNTAX §0.7）
 - 长行不强制换行（中文按显示宽度算），但一个函数超过 ~80 行要拆
-- 单文件 `sigilc.py` 是分发特性；超过 ~5k 行或出现第二个维护者再拆包
+- 实现在 `sigilc_core/`（lexer → type_system → nodes → parser → codegen → api → cli），依赖必须单向；`sigilc.py` 只是入口壳，不要往里加逻辑
 
 ## 提交与 PR
 

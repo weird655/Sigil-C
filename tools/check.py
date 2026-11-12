@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCES = ["sigilc.py", "test_matrix.py", "tools/check.py", "tools/fuzz.py", "tools/bench.py"]
+SOURCES = ["sigilc.py", "sigilc_core", "test_matrix.py", "tools/check.py", "tools/fuzz.py", "tools/bench.py"]
 
 
 def _run(title, cmd):
@@ -34,11 +34,11 @@ def main():
     args = ap.parse_args()
 
     py = sys.executable
-    steps = [("py_compile", [py, "-m", "py_compile", *SOURCES])]
+    steps = [("py_compile", [py, "-m", "compileall", "-q", *SOURCES])]
 
     if not args.skip_lint:
         steps.append(("ruff", [py, "-m", "ruff", "check", *SOURCES]))
-        steps.append(("mypy", [py, "-m", "mypy", "sigilc.py"]))
+        steps.append(("mypy", [py, "-m", "mypy", "sigilc_core", "sigilc.py"]))
 
     if not args.skip_tests:
         if args.coverage:

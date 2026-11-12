@@ -504,7 +504,7 @@ int main(void) {
 
 ## 内部结构
 
-`sigilc.py` 单文件约 4.3k 行，四段流水线：
+实现拆成 `sigilc_core/` 包，`sigilc.py` 只是入口壳（保留 `python sigilc.py` 与 `pip install` 的用法）：
 
 ```text
 .sigil → Lexer（DFA，双字符印记）
@@ -513,11 +513,17 @@ int main(void) {
        → CodeGenerator（C99 + #line）
 ```
 
-- 词法器：`SIGIL_KEYWORDS` / `SIGIL_OPERATORS` 两个闭集字典
-- 解析器：`Parser`，作用域、类型表、指针来源都在这里维护
-- 代码生成：`CodeGenerator`，只输出 C99 + 少量宏（`SIGIL_IDX` / `SIGIL_ATTR` / `SIGIL_TRAP` …）
-- 工具层：`--build` / `--fmt` / `--check` / `--lsp` 全部在同一个文件里
-- **单文件是分发特性**：一个 `sigilc.py` 拷走就能用；等它超过 ~5k 行或出现第二个维护者，再按 `lexer/parser/ast/semantic/codegen/lsp/cli` 拆包
+| 模块 | 内容 |
+|---|---|
+| `lexer.py` | `Token`、54 个印记表、DFA 词法器 |
+| `type_system.py` | `TypeNode` 家族、类型等价、C 声明符格式化 |
+| `nodes.py` | AST 节点、`emit_expr`、`Prov` |
+| `parser.py` | 递归下降 + 静态检查（类型 / 来源 / 逃逸） |
+| `codegen.py` | `CodeGenerator`（C99 + `#line`） |
+| `api.py` | `compile_source` / `check_source` / `compile_header` / 格式化 / LSP |
+| `cli.py` | `main` / `cli`（参数、`--build`、`--check`、`--init`） |
+
+依赖单向：`lexer → type_system → nodes → parser → codegen → api → cli`；`sigilc.py` 从 `sigilc_core` 转出全部公开名字。
 
 ## 测试矩阵
 

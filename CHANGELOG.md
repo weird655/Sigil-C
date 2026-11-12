@@ -47,6 +47,8 @@
 
 * **质量门**：`ruff`（E/F/W/I，忽略中文长行与解析器紧凑单行）+ `mypy` 零错误；覆盖率门槛 80%（`coverage report` 在 CI 里卡）；`python tools/check.py` 一条命令跑完 py_compile / lint / types / tests。新增 `quality` CI job、`CONTRIBUTING.md`、issue / PR 模板与 tag 触发的 `release.yml`；矩阵中途退出（`SystemExit`）按失败记录，CI 还检查 `MATRIX PASSED` 摘要，杜绝静默绿。
 
+* **拆包**：4.3k 行的 `sigilc.py` 拆成 `sigilc_core/` 七个模块（lexer / type_system / nodes / parser / codegen / api / cli），依赖单向，`sigilc.py` 保留为入口壳；测试、ruff、mypy、覆盖率全部不变。
+
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 
 * **破坏性语法变更**：复合赋值印记统一使用 `m` 词根：`m+` (`+=`)、`m-` (`-=`)、`m*` (`*=`)、`m/` (`/=`)；旧写法 `a+`、`s-`、`d/` 不再接受。迁移时分别替换为 `m+`、`m-`、`m/`，`m*` 保持不变。README 已加入迁移提示。
