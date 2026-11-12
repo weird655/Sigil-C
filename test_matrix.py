@@ -1825,7 +1825,6 @@ int main(void) {
 
     assert_ok("28. sigils", "d! emits SIGIL_TRAP and counts as terminating", test_trap_sigil)
 
-    os.chdir(orig_cwd)
     # Layer 29: LSP JSON-RPC framing
     def test_lsp_framing():
         import io as _io
@@ -2051,6 +2050,7 @@ i4 main(v.) {
 
     assert_ok("35. libc", "printf/strlen/strcpy/atoi/toupper/sqrt are typed from headers", test_libc_builtins)
 
+    os.chdir(orig_cwd)
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
