@@ -1,0 +1,84 @@
+#include <stdio.h>
+
+/* 通用内存池分配器：压测多重指针嵌套、读写权限分流与 o! 栈实体
+   - p* / p* p* / p* p* p*     三级指针逐层解包
+   - p* c@ 与 c@ p*            指向物只读 vs 指针自身只读
+   - o!                        标出每个栈实体 */
+
+s{ Pool {
+    p* c@ u4 arena_guard;     /* 只读基址视图：校验与只读探针，禁止经此写入 */
+    p* u4 arena_raw;          /* 可写物理内存池首地址 */
+    p* p* u4 free_slot;       /* 二级槽位指针（u4 **）：当前空闲块的句柄槽 */
+    p* p* p* u4 cursor_hub;   /* 三级游标中枢（u4 ***）：指向二级槽位指针本身 */
+    u4 stride;                /* 单个内存块的跨度（以 u4 计） */
+    u4 allocated;             /* 已分配块计数 */
+};
+
+/* 通过三级游标中枢逐层剥离出物理块地址，并初始化首字 */
+p* u4 pool_acquire_block(p* Pool pool_rw, u4 init_tag) {
+    o! p* p* u4 active_slot m, p* pool_rw->cursor_hub;   /* u4 ***  → u4 **  */
+    o! p* u4 block_ptr m, p* active_slot;                /* u4 **   → u4 *   */
+
+    p* block_ptr m, init_tag;                            /* 写块首字 */
+    pool_rw->allocated m, pool_rw->allocated + 1;
+    r; block_ptr;
+}
+
+/* 热迁移：直接改二级槽位，让外部句柄无缝指向新物理块 */
+v. pool_relocate_slot(p* p* u4 target_slot, p* u4 new_block, u4 payload) {
+    p* target_slot m, new_block;      /* 替换槽位里保存的物理块地址 */
+    p* p* target_slot m, payload;     /* 解引用两级，写入新块首字 */
+}
+
+u4 memory_pool_demo(v.) {
+    o! u4[8] raw_storage;             /* 8 个 u4，切两个跨度 4 的块 */
+    raw_storage[0] m, 0;
+    raw_storage[4] m, 0;
+
+    o! p* u4 slot_alpha m, a& raw_storage[0];   /* Block 0 */
+    o! p* u4 slot_beta  m, a& raw_storage[4];   /* Block 1 */
+
+    o! Pool main_pool;
+    main_pool.arena_guard m, raw_storage;
+    main_pool.arena_raw   m, raw_storage;
+    main_pool.free_slot   m, a& slot_alpha;
+    main_pool.cursor_hub  m, a& main_pool.free_slot;
+    main_pool.stride      m, 4;
+    main_pool.allocated   m, 0;
+
+    o! p* c@ Pool ro_pool m, a& main_pool;   /* 只读视图 */
+    o! p* Pool rw_pool    m, a& main_pool;   /* 可写视图 */
+
+    o! p* u4 blk_first m, pool_acquire_block(rw_pool, 101);
+    blk_first[1] m, 202;
+
+    rw_pool->free_slot m, a& slot_beta;      /* 游标推进，无分支 */
+
+    o! p* u4 blk_second m, pool_acquire_block(rw_pool, 303);
+
+    /* 三级解引用：***hub_probe */
+    o! p* p* p* u4 hub_probe m, ro_pool->cursor_hub;
+    o! u4 deep_read_val m, p* p* p* hub_probe;
+
+    /* 固定槽位指针：地址锁死，仍可改指向的物理块 */
+    o! c@ p* p* u4 pinned_slot m, a& slot_alpha;
+    pool_relocate_slot(pinned_slot, blk_second, 404);   /* 用第二次分配拿到的句柄 */
+
+    /* 只读锚点验证最终物理内存 */
+    o! p* c@ u4 guard_view m, ro_pool->arena_guard;
+    o! u4 block0_head m, guard_view[0];
+    o! u4 block0_next m, guard_view[1];
+    o! u4 block1_head m, p* slot_alpha;
+    o! u4 total_used m, ro_pool->allocated;
+
+    printf("block0: head=%u next=%u\n", block0_head, block0_next);
+    printf("block1: head=%u (via slot_alpha)\n", block1_head);
+    printf("deep_read=%u allocated=%u\n", deep_read_val, total_used);
+    r; block0_head + block0_next + deep_read_val + block1_head + total_used;
+}
+
+i4 main(v.) {
+    u4 sum m, memory_pool_demo();
+    printf("checksum=%u\n", sum);
+    r; (i4)sum - 1012;
+}

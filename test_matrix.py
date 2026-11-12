@@ -1590,12 +1590,22 @@ int main(void) {
 
     assert_ok("19. marker", "A f~ initializer may omit o! for builtin types", test_omit_marker_for)
 
+    # Layer 20: pool example - multi-level pointers and read/write split
+    def test_example_pool():
+        out = build_example("pool")
+        assert "block0: head=101 next=202" in out, out
+        assert "block1: head=404 (via slot_alpha)" in out, out
+        assert "deep_read=303 allocated=2" in out, out
+        assert "checksum=1012" in out, out
+
+    assert_ok("20. pool", "pool: p* chains, const split, c@ p* pinned slot, o! entities", test_example_pool)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 19-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 20-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

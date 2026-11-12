@@ -5,7 +5,7 @@
 52 个双字符记号，每个记号只说一件事：写操作带牌（`m`），指针带来源，越界与悬垂在编译前拦下。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-173%20%2F%2019%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-174%20%2F%2020%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -158,6 +158,7 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 | [`regmap.sigil`](examples/regmap.sigil) | MMIO：`packed` + 位域 + `offsetof` 断言 | `ctrl=0x005d` |
 | [`callbacks.sigil`](examples/callbacks.sigil) | 全局函数指针表 | `quit after 2 ticks` |
 | [`wire.sigil`](examples/wire.sigil) | 大端帧解析 | `frames=2 bytes=9` |
+| [`pool.sigil`](examples/pool.sigil) | 内存池：三级指针、读写视图分流 | `checksum=1012` |
 
 虚拟机那台机器的核心只有这几行（节选）：
 
@@ -168,6 +169,39 @@ DISPATCH[op](vm);
 ```
 
 C 里对应 `void (*DISPATCH[10])(VM *)`——名字埋在星号中间；这里从左往右读完。
+
+### 三级指针：一个内存池
+
+[`pool.sigil`](examples/pool.sigil) 把指针嵌套、权限分流和 `o!` 实体放在一个能跑的程序里：
+
+```sigil
+s{ Pool {
+    p* c@ u4 arena_guard;     /* 只读基址视图，禁止经此写入 */
+    p* u4 arena_raw;          /* 可写物理池首地址 */
+    p* p* u4 free_slot;       /* u4 **：当前空闲块的句柄槽 */
+    p* p* p* u4 cursor_hub;   /* u4 ***：指向二级槽位指针本身 */
+    u4 stride;
+    u4 allocated;
+};
+
+p* u4 pool_acquire_block(p* Pool pool_rw, u4 init_tag) {
+    o! p* p* u4 active_slot m, p* pool_rw->cursor_hub;   /* u4 *** → u4 ** */
+    o! p* u4 block_ptr m, p* active_slot;                /* u4 **  → u4 *  */
+    p* block_ptr m, init_tag;
+    pool_rw->allocated m, pool_rw->allocated + 1;
+    r; block_ptr;
+}
+```
+
+```text
+block0: head=101 next=202
+block1: head=404 (via slot_alpha)
+deep_read=303 allocated=2
+checksum=1012
+```
+
+三种权限写法在同一个结构体里分工：`p* c@ u4` 指向物只读（审计探针），`p* u4` 可写（物理池），
+`c@ p* p* u4` 指针自身只读但能改它指向的槽位（固定句柄做热迁移）。换 C 写同样的东西，声明要从星号中间往外读。
 
 ---
 
@@ -207,7 +241,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 173 项 / 19 层，需要 gcc
+python3 test_matrix.py        # 174 项 / 20 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。
