@@ -34,6 +34,7 @@
 * **目录构建出头文件**：`--build DIR --emit-header` 为每个 `.sigil` 在 `.sigil-build/` 下同时生成 `.h`，`s@` 符号照旧被排除；`--header` 与 `--build` 同用会明确报错。第 24 层测试。
 * **脚手架与结构化诊断**：`--init DIR` 生成最小工程（`src/main.sigil` + README + `.gitignore`，`--force` 可覆盖）；`--check --json` 输出 `{ok, checked, diagnostics:[{file,line,column,severity,message}]}`，供编辑器与 CI 消费。第 25 层测试。
 * **LSP**：`--lsp` 提供零依赖 stdio JSON-RPC 服务——打开/修改时推送诊断（与 `--check` 同一套检查，带 range），补全 52 个印记、类型名与字面量；Neovim / Helix / Emacs 等通用客户端可直接接入。第 26 层测试。
+* **LSP 补全改为片段、默认关闭**：补全项从"单词"改为结构片段（`insertTextFormat` 2），`i?`、`s?`、`s{`、`o!` 等直接展开骨架；`completionProvider` 默认不宣告，启动加 `--lsp-completion` 才开启，关闭时补全请求返回空列表。`documentSymbol` 保持默认开启。
 * **LSP 大纲**：`--lsp` 增加 `textDocument/documentSymbol`（函数 / 结构体 / 联合体 / 枚举 / 全局变量，枚举成员作为子项）；补全改为按光标前缀过滤，不再返回全量列表。第 27 层测试。
 * **两个低频印记**：`a?`（`_Alignof`，结果 `size_t`，只接受完整对象类型，与 `a!N` 互为读写）与 `d!`（trap：GCC/Clang 用 `__builtin_trap()`，其他后端 `abort()`；在 `s?` 中视为终止，不再补 fallthrough）。闭集从 52 增至 54。第 28 层测试。
 * 测试矩阵 **185 项 / 28 层**。

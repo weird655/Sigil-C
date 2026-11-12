@@ -1752,8 +1752,12 @@ int main(void) {
         assert len(diags) == 1, diags
         assert "nope" in diags[0]["message"], diags
         assert diags[0]["range"]["start"]["line"] == 0, diags
-        labels = {item["label"] for item in _sigilc._lsp_completion_items()}
-        assert {"i?", "p*", "m,", "o!", "i4"} <= labels, sorted(labels)[:10]
+        items = {item["label"]: item for item in _sigilc._lsp_completion_items()}
+        assert {"i?", "p*", "m,", "o!", "i4"} <= set(items), sorted(items)[:10]
+        assert items["i?"]["insertTextFormat"] == 2, items["i?"]
+        assert "{" in items["i?"]["insertText"], items["i?"]
+        assert "completionProvider" not in _sigilc._lsp_capabilities(False)
+        assert "completionProvider" in _sigilc._lsp_capabilities(True)
 
     assert_ok("26. lsp", "LSP diagnostics and completion are wired to the checker", test_lsp_core)
 

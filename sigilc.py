@@ -3897,10 +3897,47 @@ def _lsp_diagnostics(uri: str, text: str):
         }]
 
 
+_LSP_SNIPPETS = {
+    "i?": ("i? (${1:cond}) {\n\t$0\n}", "if"),
+    "e:": ("e: {\n\t$0\n}", "else"),
+    "w~": ("w~ (${1:cond}) {\n\t$0\n}", "while"),
+    "f~": ("f~ (${1:init}; ${2:cond}; ${3:step}) {\n\t$0\n}", "for"),
+    "d~": ("d~ {\n\t$0\n} w~ (${1:cond});", "do-while"),
+    "s?": ("s? (${1:value}) {\n\tk: ${2:0}: {\n\t\t$0\n\t}\n}", "switch"),
+    "o!": ("o! ${1:i4} ${2:name};", "object"),
+    "m,": ("m, ${1:value};", "assign"),
+    "m+": ("m+ ${1:value};", "add-assign"),
+    "m-": ("m- ${1:value};", "sub-assign"),
+    "p*": ("p* ${1:u4}", "pointer"),
+    "r;": ("r; ${1:value};", "return"),
+    "a?": ("a? ${1:u4}", "alignof"),
+    "t!": ("t! (${1:cond}, \"${2:message}\");", "static assert"),
+    "d!": ("d!;", "trap"),
+    "s{": ("s{ ${1:Name} {\n\t$0\n};", "struct"),
+    "u{": ("u{ ${1:Name} {\n\t$0\n};", "union"),
+    "e{": ("e{ ${1:Name} {\n\t${2:A} m, 0,\n};", "enum"),
+    "x!": ("x! struct ${1:Name} {\n\t$0\n};", "external type"),
+    "g!": ("g! ${1:label};", "goto"),
+    "l!": ("l! ${1:label};", "label"),
+    "w!": (" w! ${1:1};", "bitfield"),
+    "f^": ("f^(${1:i4}) -> ${2:v.}", "function pointer"),
+}
+
+
+def _lsp_capabilities(completion_enabled: bool):
+    caps = {"textDocumentSync": 1, "documentSymbolProvider": True}
+    if completion_enabled:
+        caps["completionProvider"] = {"triggerCharacters": [" "]}
+    return caps
+
+
 def _lsp_completion_items(prefix: str = ""):
+    """结构片段补全：补的是印记后面的形状，不是单个单词。"""
     items = []
-    for name in sorted(set(SIGIL_KEYWORDS) | set(SIGIL_OPERATORS)):
-        items.append({"label": name, "kind": 14, "detail": "sigil"})
+    for label in sorted(_LSP_SNIPPETS):
+        insert, detail = _LSP_SNIPPETS[label]
+        items.append({"label": label, "kind": 14, "detail": detail,
+                      "insertText": insert, "insertTextFormat": 2})
     for name in _LSP_TYPES:
         items.append({"label": name, "kind": 25, "detail": "type"})
     for name in ("true", "false", "NULL"):
@@ -3952,7 +3989,7 @@ def _lsp_document_symbols(text: str):
     return out
 
 
-def _lsp_run() -> int:
+def _lsp_run(completion_enabled: bool = False) -> int:
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
     docs = {}
@@ -3967,11 +4004,7 @@ def _lsp_run() -> int:
         if method == "initialize":
             _lsp_write(stdout, {
                 "jsonrpc": "2.0", "id": msg_id,
-                "result": {"capabilities": {
-                    "textDocumentSync": 1,
-                    "completionProvider": {"triggerCharacters": [" "]},
-                    "documentSymbolProvider": True,
-                }},
+                "result": {"capabilities": _lsp_capabilities(completion_enabled)},
             })
         elif method == "initialized":
             pass
@@ -3998,13 +4031,19 @@ def _lsp_run() -> int:
                 "params": {"uri": uri, "diagnostics": []},
             })
         elif method == "textDocument/completion":
-            uri = params["textDocument"]["uri"]
-            pos = params.get("position") or {}
-            prefix = _lsp_word_prefix(docs.get(uri, ""), pos.get("line", 0), pos.get("character", 0))
-            _lsp_write(stdout, {
-                "jsonrpc": "2.0", "id": msg_id,
-                "result": {"isIncomplete": False, "items": _lsp_completion_items(prefix)},
-            })
+            if not completion_enabled:
+                _lsp_write(stdout, {
+                    "jsonrpc": "2.0", "id": msg_id,
+                    "result": {"isIncomplete": False, "items": []},
+                })
+            else:
+                uri = params["textDocument"]["uri"]
+                pos = params.get("position") or {}
+                prefix = _lsp_word_prefix(docs.get(uri, ""), pos.get("line", 0), pos.get("character", 0))
+                _lsp_write(stdout, {
+                    "jsonrpc": "2.0", "id": msg_id,
+                    "result": {"isIncomplete": False, "items": _lsp_completion_items(prefix)},
+                })
         elif method == "textDocument/documentSymbol":
             uri = params["textDocument"]["uri"]
             _lsp_write(stdout, {
@@ -4228,6 +4267,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
     ap.add_argument("--lsp", action="store_true", help="run a minimal LSP server on stdio")
+    ap.add_argument("--lsp-completion", action="store_true",
+                    help="with --lsp: enable snippet completion (off by default)")
     ap.add_argument("--init", metavar="DIR", nargs="?", const=".", default=None,
                     help="scaffold a minimal project in DIR")
     ap.add_argument("--force", action="store_true", help="with --init: overwrite existing files")
@@ -4251,7 +4292,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     if args.lsp:
-        return _lsp_run()
+        return _lsp_run(args.lsp_completion)
 
     if args.init is not None:
         return _init_project(args.init, args.force)

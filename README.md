@@ -101,7 +101,7 @@ sigilc --build src -o app --run
 `sigilc.py --lsp` 是一个零依赖 LSP 服务（stdio JSON-RPC）：
 
 - 打开/修改文件时推送诊断（与 `--check` 同一套检查，带 range）
-- 补全：按光标前的词前缀过滤 54 个印记、类型名与 `true` / `false` / `NULL`
+- 补全（**默认关闭**，启动加 `--lsp-completion`）：补的是**结构片段**而不是单词——`i?` 展开为 `i? (cond) { ... }`，`s?` 展开为 case 骨架，`s{` 展开为结构体桩，`o!` 展开为 `o! type name;`
 - 文档大纲：函数、结构体 / 联合体、枚举（成员作子项）、全局变量
 
 Neovim（内置 LSP）示例：
