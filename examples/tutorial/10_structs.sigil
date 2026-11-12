@@ -1,0 +1,20 @@
+#include <stdio.h>
+
+/* 第 10 章：结构体传值、传指针、成员修改 */
+
+s{ Vec2 { i4 x; i4 y; };
+
+i4 dot(Vec2 a, Vec2 b) { r; a.x * b.x + a.y * b.y; }
+
+v. scale(p* Vec2 v, i4 k) {
+    v->x m* k;
+    v->y m* k;
+}
+
+i4 main(v.) {
+    o! Vec2 p m, { 3, 4 };
+    o! Vec2 q m, { 1, 2 };
+    scale(a& p, 2);
+    printf("dot=%d len2=%d\n", dot(p, q), p.x * p.x + p.y * p.y);
+    r; 0;
+}

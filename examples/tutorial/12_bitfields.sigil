@@ -1,0 +1,20 @@
+#include <stdio.h>
+
+/* 第 12 章：位域；t! 断言布局 */
+
+s{ Flags {
+    u4 a w! 3;
+    u4 b w! 2;
+    u4 c w! 5;
+};
+
+t! (z? Flags =? 4, "Flags must fit in one u4");
+
+i4 main(v.) {
+    o! Flags f;
+    f.a m, 5;
+    f.b m, 3;
+    f.c m, 10;
+    printf("a=%u b=%u c=%u\n", f.a, f.b, f.c);
+    r; 0;
+}

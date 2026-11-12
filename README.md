@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-196%20%2F%2039%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-197%20%2F%2039%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -554,7 +554,7 @@ int main(void) {
 
 | 中文名 | 文件 | 内容 |
 |---|---|---|
-| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | 软件 / 嵌入 / 硬件三个方向，每章一个可运行程序 |
+| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/可变参数，17 个可运行示例 |
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 54 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
@@ -592,7 +592,7 @@ int main(void) {
 
 ## 测试矩阵
 
-196 项 / 39 层，每层一个主题：
+197 项 / 39 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -616,7 +616,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 196 项 / 39 层，需要 gcc
+python3 test_matrix.py        # 197 项 / 39 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -624,7 +624,7 @@ python3 test_matrix.py        # 196 项 / 39 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 196 项测试
+python tools/check.py            # py_compile → ruff → mypy → 197 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -662,7 +662,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - 版本 **1.1**，已打 tag `v1.1`；语法冻结（v1.x 只加不改）。
-- 196 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 197 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（推 tag 会自动建；已有 tag 可在 Actions 里手动运行 `release` workflow）。
 

@@ -1,0 +1,26 @@
+#include <stdio.h>
+
+/* 第 11 章：共用体 + tag = 手工和类型 */
+
+e{ Kind { K_INT m, 0, K_UINT m, 1, K_FLOAT m, 2 };
+
+u{ Payload { i4 i; u4 u; f8 f; };
+
+s{ Value { Kind kind; Payload data; };
+
+i4 main(v.) {
+    o! Value v;
+
+    v.kind m, K_INT;
+    v.data.i m, 42;
+    o! i4 a m, v.data.i;
+
+    v.kind m, K_UINT;
+    v.data.u m, 7;
+    o! i4 b m, (i4)v.data.u;
+
+    v.kind m, K_FLOAT;
+    v.data.f m, 3.5;
+    printf("i=%d u=%d f=%.1f\n", a, b, v.data.f);
+    r; 0;
+}

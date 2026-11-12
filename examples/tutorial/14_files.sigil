@@ -1,0 +1,18 @@
+#include <stdio.h>
+
+/* 第 14 章：文件 I/O，FILE 是不透明句柄 */
+
+i4 main(v.) {
+    o! p* FILE f m, fopen("tut14.txt", "w");
+    i? (f =? NULL) { printf("open failed\n"); r; 1; }
+    fprintf(f, "hello %d\n", 42);
+    fclose(f);
+
+    o! p* FILE g m, fopen("tut14.txt", "r");
+    o! c1[32] buf;
+    fgets(a& buf[0], 32, g);
+    fclose(g);
+
+    printf("read=%s", buf);
+    r; 0;
+}

@@ -1,0 +1,15 @@
+#include <stdio.h>
+
+/* 第 8 章：指针基础、指针算术、解引用 */
+
+i4 main(v.) {
+    o! i4[5] a m, { 1, 2, 3, 4, 5 };
+    o! p* i4 p m, a& a[0];
+    o! i4 sum m, 0;
+    o! i4 i m, 0;
+    w~ (i < 5) { sum m+ p[i]; i m+ 1; }
+
+    o! p* i4 last m, p + 4;
+    printf("sum=%d first=%d last=%d\n", sum, p* p, p* last);
+    r; 0;
+}

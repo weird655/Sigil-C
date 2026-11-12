@@ -1,0 +1,18 @@
+#include <stdio.h>
+
+/* 第 15 章：可变参数 */
+
+i4 sum_all(u4 count, ...) {
+    o! va_list ap;
+    va_start(ap, count);
+    o! i4 acc m, 0;
+    o! u4 i m, 0;
+    w~ (i < count) { acc m+ va_arg(ap, i4); i m+ 1; }
+    va_end(ap);
+    r; acc;
+}
+
+i4 main(v.) {
+    printf("sum=%d\n", sum_all(3, 1, 2, 3));
+    r; 0;
+}

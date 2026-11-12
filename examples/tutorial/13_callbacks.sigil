@@ -1,0 +1,20 @@
+#include <stdio.h>
+
+/* 第 13 章：函数指针表 = 手写分派 */
+
+e{ Op { OP_ADD m, 0, OP_SUB m, 1, OP_MUL m, 2 };
+
+i4 add(i4 a, i4 b) { r; a + b; }
+i4 sub(i4 a, i4 b) { r; a - b; }
+i4 mul(i4 a, i4 b) { r; a * b; }
+
+o! (f^(i4, i4) -> i4)[3] TABLE m, { add, sub, mul };
+
+i4 main(v.) {
+    o! i4 a m, 10;
+    o! i4 b m, 5;
+    o! i4 i m, 0;
+    w~ (i < 3) { printf("%d ", TABLE[i](a, b)); i m+ 1; }
+    printf("\n");
+    r; 0;
+}

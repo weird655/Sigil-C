@@ -1594,6 +1594,35 @@ int main(void) {
 
     assert_ok("18. tutorial", "07 library: --emit-header keeps s@ symbols internal", test_tut_library)
 
+    # Layer 18b: the extended tutorial examples (08-17)
+    def test_tut_extra():
+        cases = {
+            "08_pointers": "sum=15 first=1 last=5",
+            "09_strings": "len=5 before=1 first=h",
+            "10_structs": "dot=22 len2=100",
+            "11_unions": "i=42 u=7 f=3.5",
+            "12_bitfields": "a=5 b=3 c=10",
+            "13_callbacks": "15 5 50",
+            "14_files": "read=hello 42",
+            "15_varargs": "sum=6",
+            "16_recursion": "fib=55 moves=AB AC BC",
+            "17_sort": "0 1 2 3 5 5 6 9",
+        }
+        tut = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
+        for name, expect in cases.items():
+            with open(os.path.join(tut, name + ".sigil"), encoding="utf-8") as f:
+                src = f.read()
+            c_name = name + ".c"
+            with open(c_name, "w") as f:
+                f.write(compile_source(src, name + ".sigil"))
+            subprocess.run(
+                ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", c_name, "-o", name],
+                check=True)
+            out = subprocess.run([os.path.join(".", name)], capture_output=True, text=True).stdout
+            assert expect in out, (name, out)
+
+    assert_ok("18. tutorial", "08-17: pointers/strings/structs/unions/bitfields/callbacks/files/varargs/recursion/sort", test_tut_extra)
+
     # Layer 19: builtin-type objects may omit o!
     def test_omit_marker_builtin():
         sigil = "u4 g m, 7;\ni4 main(v.) { u4 x m, 3; r; (i4)(g + x) - 10; }"

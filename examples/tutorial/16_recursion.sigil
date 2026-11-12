@@ -1,0 +1,20 @@
+#include <stdio.h>
+
+/* 第 16 章：递归与回溯 */
+
+i4 fib(i4 n) { r; (n <= 1) ? n : fib(n - 1) + fib(n - 2); }
+
+v. hanoi(i4 n, c1 from, c1 to, c1 via) {
+    i? (n > 0) {
+        hanoi(n - 1, from, via, to);
+        printf("%c%c ", from, to);
+        hanoi(n - 1, via, to, from);
+    }
+}
+
+i4 main(v.) {
+    printf("fib=%d moves=", fib(10));
+    hanoi(2, 'A', 'C', 'B');
+    printf("\n");
+    r; 0;
+}
