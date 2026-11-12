@@ -1689,12 +1689,34 @@ int main(void) {
 
     assert_ok("23. check", "--check over a directory reports per-file diagnostics", test_check_dir)
 
+    # Layer 24: --build --emit-header writes one header per source
+    def test_build_headers():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py")
+        work = tempfile.mkdtemp(prefix="sigil-hdr-")
+        src_dir = os.path.join(work, "src")
+        os.makedirs(src_dir)
+        with open(os.path.join(src_dir, "lib.sigil"), "w") as f:
+            f.write("s@ i4 helper(i4 x) { r; x + 1; }\ni4 api(i4 x) { r; helper(x) * 2; }\n")
+        with open(os.path.join(src_dir, "main.sigil"), "w") as f:
+            f.write('#include <stdio.h>\ni4 api(i4 x);\ni4 main(v.) { printf("%d\\n", api(3)); r; 0; }\n')
+        exe = os.path.join(work, "app")
+        r = subprocess.run(
+            [sys.executable, script, "--build", src_dir, "-o", exe, "--emit-header", "--run"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "8" in r.stdout, r.stdout
+        header = open(os.path.join(src_dir, ".sigil-build", "lib.h"), encoding="utf-8").read()
+        assert "int32_t api(int32_t x);" in header, header
+        assert "helper" not in header, header
+
+    assert_ok("24. build", "--build --emit-header writes headers and keeps s@ internal", test_build_headers)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 23-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 24-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

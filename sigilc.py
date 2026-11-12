@@ -3892,6 +3892,17 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             f.write(c_src)
         print(f"Transpile {src_path} -> {c_path}")
         c_paths.append(c_path)
+        if args.emit_header:
+            h_path = os.path.splitext(c_path)[0] + ".h"
+            try:
+                h_src = compile_header(src, rel, os.path.basename(h_path), prelude=args.prelude,
+                                       bounds_check=args.bounds_check, defines=defines)
+            except (LexerError, ParseError, SemanticError) as e:
+                _print_error(e, rel, src)
+                return 1
+            with open(h_path, "w", encoding="utf-8") as f:
+                f.write(h_src)
+            print(f"Header    {h_path}")
 
     exe = args.output_opt or args.output or "a.out"
     if os.name == "nt" and not exe.lower().endswith(".exe"):
@@ -3946,6 +3957,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
 
     if args.build is not None:
+        if args.header:
+            print("error: --header is not supported with --build; use --emit-header", file=sys.stderr)
+            return 2
         return _build_project(args, defines)
 
     if args.fmt is not None:
