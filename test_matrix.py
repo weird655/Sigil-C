@@ -2081,10 +2081,6 @@ i4 main(v.) {
 
     assert_ok("36. fileio", "fopen/fprintf/fgets work through an opaque FILE handle", test_file_io)
 
-    os.chdir(orig_cwd)
-    leaked = sorted(set(os.listdir(orig_cwd)) - root_before)
-    if leaked:
-        failures.append(("99. hygiene", "test leaked files into the repo root", ", ".join(leaked)))
 
     # Layer 37: differential C vs Sigil-C execution
     def test_difftest():
@@ -2142,12 +2138,18 @@ i4 main(v.) {
 
     assert_ok("39. stdin", "fgets/isspace over piped stdin counts five words", test_stdin_words)
 
+    os.chdir(orig_cwd)
+    leaked = sorted(set(os.listdir(orig_cwd)) - root_before)
+    if leaked:
+        failures.append(("99. hygiene", "test leaked files into the repo root", ", ".join(leaked)))
+
+    # === end of tests: new layers go above this line ===
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    os.chdir(orig_cwd)
     print(f"=== ALL {passed}/{total} TESTS IN 39-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
