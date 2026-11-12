@@ -1607,6 +1607,9 @@ int main(void) {
             "15_varargs": "sum=6",
             "16_recursion": "fib=55 moves=AB AC BC",
             "17_sort": "0 1 2 3 5 5 6 9",
+            "18_stack_sbo": "first=3.0 heap=0",
+            "19_arena": "x=42 off=4",
+            "20_soa": "sum=3.0 last_next=4",
         }
         tut = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
         for name, expect in cases.items():
@@ -2188,12 +2191,12 @@ i4 main(v.) {
         with open(tut, encoding="utf-8") as f:
             text = f.read()
         assert "}; }" not in text, "stray extra brace in a tutorial snippet"
-        for i in range(1, 18):
+        for i in range(1, 21):
             assert f"{i:02d}_" in text, f"tutorial does not reference example {i:02d}"
         for part in ("Part 0", "Part 1", "Part 2", "Part 3", "Part 4", "Part 5", "Part 6", "Part 7"):
             assert part in text, part
 
-    assert_ok("40. scope", "tutorial references 01-17 and has no broken snippet braces", tutorial_doc_consistency)
+    assert_ok("40. scope", "tutorial references 01-20 and has no broken snippet braces", tutorial_doc_consistency)
 
     # === end of tests: new layers go above this line ===
 

@@ -16,7 +16,7 @@ python3 sigilc.py --build examples/tutorial -o app --run
 
 约定：
 
-- 示例编号 `01`–`17`，都在 `examples/tutorial/`
+- 示例编号 `01`–`20`，都在 `examples/tutorial/`
 - 生成的 C 默认带 `#line`（报错指回 `.sigil`）；给 C 用户看时加 `--no-line`
 - 所有示例都跑在 `-std=c99 -Wall -Wextra -Werror -pedantic` 下
 
@@ -454,20 +454,64 @@ i4 sum_all(u4 count, ...) {
 
 `va_start` / `va_arg` / `va_end` / `va_copy` 都是内建。例子：`15_varargs.sigil`。
 
-## 5.3 内存管理边界
+## 5.3 栈与堆：三种标准写法
 
-没有堆模型。`malloc` / `free` 只是登记了原型的外部函数：
+没有堆模型，但栈和堆都能用 C 的方式写对。三条法则各有一个可运行示例。
+
+### 5.3.1 栈 + SBO：调用方分配
+
+`18_stack_sbo.sigil`：小数组留在栈上，超过阈值才 `malloc`；被调函数只写区间，不分配。
 
 ```sigil
-#include <stdlib.h>
+v. kernel(r@ p* c@ f4 in, r@ p* f4 out, u4 n) {
+    o! u4 i m, 0;
+    w~ (i < n) { out[i] m, in[i] * 2.0f + 1.0f; i m+ 1; }
+}
 
-o! p* i4 p m, (p* i4)malloc(z? i4);
-i? (p =? NULL) { r; 1; }
-p* p m, 42;
-free(p);
+o! f4[256] stack_buf;
+o! p* f4 target m, a& stack_buf[0];
+i? (n > STACK_THRESHOLD) { target m, (p* f4)malloc(n * (z? f4)); }
 ```
 
-重复释放、泄漏、悬空**不查**——这是 C 的活，它不抢。
+- `r@` = `restrict`：两个区间不重叠，编译器才敢向量化
+- 数组在栈上，函数返回随 `rsp` 回退，零 `free`
+- 只有落进堆的那条路需要 `free`
+
+### 5.3.2 Arena：把堆退化成栈
+
+`19_arena.sigil`：一次请求 / 一帧里的对象都从一个线性池里切，`reset` 一次归零。
+
+```sigil
+p* u1 arena_alloc(p* Arena a, u4 size, u4 align) {
+    o! u4 aligned m, (a->off + align - 1) &^ ~^(align - 1);
+    o! u4 next m, aligned + size;
+    i? (next > a->cap) { r; NULL; }
+    a->off m, next;
+    r; a->base + aligned;
+}
+```
+
+- 分配 = 对齐 + 一次加法，O(1)
+- 回收 = `off m, 0`，O(1)，不分片
+- 适合"批量同生命周期"的对象：请求、帧、关卡
+
+### 5.3.3 SoA：消灭指针图
+
+`20_soa.sigil`：不建 `Node* next` 的堆图，用连续数组 + 下标。
+
+```sigil
+s{ Graph { p* u4 ids; p* f8 w; p* u4 next; u4 n; };
+
+g.next[i] m, i + 1;      /* 32 位下标，不是 64 位指针 */
+```
+
+- 同字段连续排列，缓存行全是有效载荷
+- 硬件预取器只认等差数列
+- 代价：插入/删除要搬数组
+
+### 边界
+
+重复释放、泄漏、悬空**不查**——这是 C 的活，它不抢。上面三种写法是"写对"，不是"被检查"。
 
 ## 5.4 未定义行为
 
@@ -583,6 +627,9 @@ sigilc --build src -o app --emit-header
 | 15 可变参数 | `15_varargs.sigil` |
 | 16 递归 | `16_recursion.sigil` |
 | 17 排序 | `17_sort.sigil` |
+| 18 栈+SBO | `18_stack_sbo.sigil` |
+| 19 Arena | `19_arena.sigil` |
+| 20 SoA | `20_soa.sigil` |
 
 ## C 对照速查
 

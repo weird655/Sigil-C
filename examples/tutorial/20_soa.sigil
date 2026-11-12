@@ -1,0 +1,36 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+/* 第 20 章：SoA —— 用连续数组 + 下标替代指针图
+   - 同字段连续排列，缓存行全是有效载荷
+   - 32 位下标代替 64 位指针
+   - 代价：插入/删除要搬数组 */
+
+s{ Graph { p* u4 ids; p* f8 w; p* u4 next; u4 n; };
+
+i4 main(v.) {
+    o! Graph g;
+    o! u4 n m, 4;
+    g.n m, n;
+    g.ids m, (p* u4)malloc(n * (z? u4));
+    g.w m, (p* f8)malloc(n * (z? f8));
+    g.next m, (p* u4)malloc(n * (z? u4));
+
+    o! u4 i m, 0;
+    w~ (i < n) {
+        g.ids[i] m, 10 + i;
+        g.w[i] m, (f8)i * 0.5;
+        g.next[i] m, i + 1;
+        i m+ 1;
+    }
+
+    o! f8 sum m, 0.0;
+    i m, 0;
+    w~ (i < n) { sum m+ g.w[i]; i m+ 1; }
+    printf("sum=%.1f last_next=%u\n", sum, g.next[n - 1]);
+
+    free((p* v.)g.ids);
+    free((p* v.)g.w);
+    free((p* v.)g.next);
+    r; 0;
+}

@@ -1,0 +1,37 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+/* 第 18 章：栈 + SBO（Small Buffer Optimization）
+   - 被调函数只写区间，不分配
+   - 小数组留栈，超阈值才 malloc
+   - r@ = restrict：两个区间不重叠，编译器敢向量化 */
+
+#define STACK_THRESHOLD 256
+
+v. kernel(r@ p* c@ f4 in, r@ p* f4 out, u4 n) {
+    o! u4 i m, 0;
+    w~ (i < n) { out[i] m, in[i] * 2.0f + 1.0f; i m+ 1; }
+}
+
+v. execute(p* c@ f4 input, u4 n) {
+    o! f4[256] stack_buf;
+    o! i4 on_heap m, 0;
+    o! p* f4 target m, a& stack_buf[0];
+
+    i? (n > STACK_THRESHOLD) {
+        target m, (p* f4)malloc(n * (z? f4));
+        on_heap m, 1;
+    }
+    i? (target =? NULL) { printf("oom\n"); r; ; }
+
+    kernel(input, target, n);
+    printf("first=%.1f heap=%d\n", (f8)target[0], on_heap);
+
+    i? (on_heap =? 1) { free((p* v.)target); }
+}
+
+i4 main(v.) {
+    o! f4[4] small m, { 1.0f, 2.0f, 3.0f, 4.0f };
+    execute(a& small[0], 4);
+    r; 0;
+}
