@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-175%20%2F%2021%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-177%20%2F%2022%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -59,6 +59,13 @@ gcc -std=c99 -Wall -Wextra -Werror -pedantic app.c -o app
 python3 sigilc.py --build src -o app --run
 #   src/a.sigil -> src/.sigil-build/a.c
 #   gcc -std=c99 ... a.c b.c -o app
+```
+
+格式化：按空格纪律重排（`--write` 就地写回，`--fmt-check` 只检查、CI 用）：
+
+```bash
+python3 sigilc.py --fmt src --write
+python3 sigilc.py --fmt src --fmt-check    # 有未格式化文件时退出码为 1
 ```
 
 `--build` 的其他开关：`--cc clang` 换编译器、`--cflags "-std=c99 -O2"` 换旗标、
@@ -355,7 +362,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 175 项 / 21 层，需要 gcc
+python3 test_matrix.py        # 177 项 / 22 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。

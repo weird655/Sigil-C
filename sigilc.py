@@ -3639,6 +3639,182 @@ def _print_error(exc: Exception, fname: str, src: str) -> None:
     print(f"  {line_no:>4} | {text}", file=sys.stderr)
     print(f"       | {' ' * max(0, col - 1)}^", file=sys.stderr)
 
+_FMT_SIGILS = set(SIGIL_KEYWORDS) | set(SIGIL_OPERATORS)
+
+
+def _split_code_comment(text: str) -> Tuple[str, str]:
+    """把一行拆成 (代码, 注释)。跳过字符串/字符里的 // 和 /*。"""
+    i = 0
+    n = len(text)
+    in_str = in_chr = False
+    while i < n:
+        c = text[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+        elif in_chr:
+            if c == "\\":
+                i += 2
+                continue
+            if c == "'":
+                in_chr = False
+        else:
+            if c == '"':
+                in_str = True
+            elif c == "'":
+                in_chr = True
+            elif c == "/" and i + 1 < n and text[i + 1] in "/*":
+                return text[:i], text[i:]
+        i += 1
+    return text, ""
+
+
+def _normalize_code(code: str) -> str:
+    """按空格纪律重排一行代码；只做安全操作，不合并会形成印记的相邻字符。"""
+    out: List[str] = []
+    i = 0
+    n = len(code)
+    in_str = in_chr = False
+    while i < n:
+        c = code[i]
+        if in_str or in_chr:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(code[i + 1])
+                i += 2
+                continue
+            if in_str and c == '"':
+                in_str = False
+            elif in_chr and c == "'":
+                in_chr = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c == "'":
+            in_chr = True
+            out.append(c)
+            i += 1
+            continue
+        if c in " \t":
+            j = i
+            while j < n and code[j] in " \t":
+                j += 1
+            nxt = code[j] if j < n else ""
+            if nxt:
+                if nxt in ",;)]:":
+                    prev_char = out[-1] if out else ""
+                    if prev_char and (prev_char.isalnum() or prev_char == "_") and (prev_char + nxt) in _FMT_SIGILS:
+                        if out[-1] != " ":
+                            out.append(" ")
+                elif out and out[-1] not in "([ ":
+                    out.append(" ")
+            i = j
+            continue
+        if c in ",;)]:":
+            if out and out[-1] == " " and len(out) >= 2:
+                prev_char = out[-2]
+                if (prev_char.isalnum() or prev_char == "_") and (prev_char + c) in _FMT_SIGILS:
+                    out.append(c)
+                    i += 1
+                    continue
+                out.pop()
+            out.append(c)
+            i += 1
+            if c in ",;:" and i < n and code[i] not in " \t)]}":
+                out.append(" ")
+            continue
+        if c in "([":
+            out.append(c)
+            i += 1
+            while i < n and code[i] in " \t":
+                i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out).rstrip()
+
+
+def format_source(src: str) -> str:
+    """规范空格与注释列；保留行结构与缩进，不改语义。"""
+    out_lines: List[str] = []
+    in_preproc = False
+    in_block = False
+    for raw in src.splitlines():
+        if not raw.strip():
+            out_lines.append("")
+            in_preproc = False
+            continue
+        stripped = raw.lstrip(" \t")
+        indent = raw[: len(raw) - len(stripped)]
+        if in_block:
+            out_lines.append(raw.rstrip())
+            if "*/" in stripped:
+                in_block = False
+            continue
+        if in_preproc or stripped.startswith("#"):
+            out_lines.append(raw.rstrip())
+            in_preproc = stripped.endswith("\\")
+            continue
+        code, comment = _split_code_comment(stripped)
+        if not code.strip():
+            out_lines.append(raw.rstrip())
+            if comment.startswith("/*") and "*/" not in comment:
+                in_block = True
+            continue
+        if comment.startswith("/*") and "*/" not in comment:
+            in_block = True
+        body = _normalize_code(code)
+        line = indent + body
+        if comment:
+            line = line + "  " + comment if body else indent + comment
+        out_lines.append(line.rstrip())
+    text = "\n".join(out_lines)
+    return text + ("\n" if src.endswith("\n") else "")
+
+
+def _format_targets(target: str, write: bool, check_only: bool) -> int:
+    if os.path.isdir(target):
+        files = _collect_sources(target)
+    elif os.path.isfile(target):
+        files = [target]
+    else:
+        print(f"error: '{target}' is not a file or directory", file=sys.stderr)
+        return 1
+    if not files:
+        print(f"error: no .sigil files under '{target}'", file=sys.stderr)
+        return 1
+    if not write and not check_only and len(files) > 1:
+        print("error: formatting to stdout needs a single file; add --write for directories", file=sys.stderr)
+        return 1
+
+    changed = 0
+    for path in files:
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+        fmt = format_source(src)
+        if fmt == src:
+            continue
+        changed += 1
+        if check_only:
+            print(f"needs format: {path}")
+        elif write:
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(fmt)
+            print(f"Formatted {path}")
+        else:
+            sys.stdout.write(fmt)
+    if check_only:
+        return 1 if changed else 0
+    return 0
+
+
 def _parse_defines(items: List[str]) -> Optional[Dict[str, str]]:
     defines: Dict[str, str] = {}
     for item in items:
@@ -3721,6 +3897,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
+    ap.add_argument("--fmt", metavar="PATH", nargs="?", const=".", default=None,
+                    help="format a .sigil file (stdout) or every .sigil under PATH with --write")
+    ap.add_argument("--write", action="store_true", help="with --fmt: rewrite files in place")
+    ap.add_argument("--fmt-check", action="store_true",
+                    help="with --fmt: only report files that need formatting (exit 1 if any)")
     ap.add_argument("--build", metavar="DIR", nargs="?", const=".", default=None,
                     help="transpile every .sigil under DIR and link them into one executable")
     ap.add_argument("--run", action="store_true", help="with --build: run the executable afterwards")
@@ -3736,6 +3917,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.build is not None:
         return _build_project(args, defines)
+
+    if args.fmt is not None:
+        return _format_targets(args.fmt, args.write, args.fmt_check)
 
     if not args.input:
         ap.error("input is required unless --build DIR is given")

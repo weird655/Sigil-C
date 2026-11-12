@@ -1630,12 +1630,47 @@ int main(void) {
 
     assert_ok("21. build", "--build transpiles a directory and links the results", test_build_mode)
 
+    # Layer 22: --fmt enforces spacing without changing semantics
+    def test_fmt_roundtrip():
+        work = tempfile.mkdtemp(prefix="sigil-fmt-")
+        path = os.path.join(work, "m.sigil")
+        with open(path, "w") as f:
+            f.write("i4 main(v.) {   o!   i4 x m,7 ;   r; x - 7; }\n")
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py")
+
+        r = subprocess.run([sys.executable, script, "--fmt", path, "--fmt-check"], capture_output=True, text=True)
+        assert r.returncode == 1, (r.returncode, r.stdout, r.stderr)
+
+        r = subprocess.run([sys.executable, script, "--fmt", path, "--write"], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        formatted = open(path, encoding="utf-8").read()
+        assert "m, 7;" in formatted, formatted
+
+        r = subprocess.run([sys.executable, script, "--fmt", path, "--fmt-check"], capture_output=True, text=True)
+        assert r.returncode == 0, (r.returncode, r.stdout, r.stderr)
+
+        c = os.path.join(work, "m.c")
+        r = subprocess.run([sys.executable, script, path, "-o", c], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        exe = os.path.join(work, "m.exe")
+        subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", c, "-o", exe], check=True)
+        assert subprocess.run([exe]).returncode == 0
+
+    assert_ok("22. fmt", "--fmt --write normalizes spacing and the result still compiles", test_fmt_roundtrip)
+
+    def test_fmt_adjacency():
+        import sigilc as _sigilc
+        assert _sigilc.format_source("o! i4 r ;\n") == "o! i4 r ;\n"
+        assert _sigilc.format_source('v. f(v.) { printf("a,  b"); }\n') == 'v. f(v.) { printf("a,  b"); }\n'
+
+    assert_ok("22. fmt", "formatter keeps sigil adjacency and string literals intact", test_fmt_adjacency)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 21-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 22-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
