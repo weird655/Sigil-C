@@ -2037,8 +2037,9 @@ i4 main(v.) {
     o! i4 n m, (i4)strlen(a& buf[0]);
     o! i4 c m, toupper('a');
     o! i4 v m, atoi("42");
-    o! f8 s m, sqrt(9.0);
-    printf("%d %d %d %d %s\\n", n, c, v, (i4)s, buf);
+    o! f8 s m, sqrt(9.0) + fabs(-2.0);
+    o! i4 trig m, (i4)(sin(0.0) + cos(0.0));
+    printf("%d %d %d %d %d %s\\n", n, c, v, (i4)s, trig, buf);
     r; 0;
 }
 """

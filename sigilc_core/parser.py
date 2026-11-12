@@ -1010,9 +1010,10 @@ class Parser:
             reg_fn('tolower', [t_int], t_int)
             reg_fn('toupper', [t_int], t_int)
         if '<math.h>' in txt:
-            reg_fn('sqrt', [t_double], t_double)
-            reg_fn('fabs', [t_double], t_double)
+            for name in ('sqrt', 'fabs', 'sin', 'cos', 'tan', 'exp', 'log', 'floor', 'ceil'):
+                reg_fn(name, [t_double], t_double)
             reg_fn('pow', [t_double, t_double], t_double)
+            reg_fn('fmod', [t_double, t_double], t_double)
         if '<assert.h>' in txt:
             reg_fn('assert', [t_int], t_void)
 
