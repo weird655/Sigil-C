@@ -27,6 +27,7 @@ def run_test_matrix():
 
     # 每个 case 的文件都写进独立临时目录，互不覆盖、不污染仓库
     orig_cwd = os.getcwd()
+    root_before = set(os.listdir(orig_cwd))
     work_dir = tempfile.mkdtemp(prefix="sigil-tests-")
     shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden.sigil"), work_dir)
     os.chdir(work_dir)
@@ -2050,7 +2051,6 @@ i4 main(v.) {
 
     assert_ok("35. libc", "printf/strlen/strcpy/atoi/toupper/sqrt are typed from headers", test_libc_builtins)
 
-    os.chdir(orig_cwd)
     # Layer 36: FILE* as an opaque libc handle
     def test_file_io():
         src = """#include <stdio.h>
@@ -2081,11 +2081,17 @@ i4 main(v.) {
 
     assert_ok("36. fileio", "fopen/fprintf/fgets work through an opaque FILE handle", test_file_io)
 
+    os.chdir(orig_cwd)
+    leaked = sorted(set(os.listdir(orig_cwd)) - root_before)
+    if leaked:
+        failures.append(("99. hygiene", "test leaked files into the repo root", ", ".join(leaked)))
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
+    os.chdir(orig_cwd)
     print(f"=== ALL {passed}/{total} TESTS IN 36-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
