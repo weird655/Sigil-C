@@ -98,6 +98,7 @@ class Parser:
         self.macro_consts: Dict[str, int] = {}
         # 指针来源：名字 -> (基对象, 元素个数, 相对基对象的偏移)
         self.prov: Dict[str, Prov] = {}
+        self._prov_saved: List[Dict[str, Optional[Prov]]] = []
         self.local_objects: Set[str] = set()
         self.param_names: Set[str] = set()
         # 跨函数逃逸：函数名 -> 被写进全局的参数名
@@ -820,6 +821,10 @@ class Parser:
                             f"argument {j + 1} aliases the same object '{base_i}'")
 
     def _note_prov(self, name: str, decl_type: TypeNode, init_expr: Optional[ExprNode]) -> None:
+        if self._prov_saved:
+            frame = self._prov_saved[-1]
+            if name not in frame:
+                frame[name] = self.prov.get(name)
         depth = len(self.scopes) - 1
         if isinstance(decl_type, ArrayType) and decl_type.size_val is not None:
             self.prov[name] = Prov(name, decl_type.size_val, 0, depth)
@@ -1879,16 +1884,29 @@ class Parser:
         self._check_attr_placement(attrs, 'object', name_tok, file_scope=True)
         return self._parse_object_decl_after_name(decl_type, name_tok, global_scope=True, is_static=is_static, attrs=attrs)
 
+    def _push_scope(self, names: Optional[Dict[str, TypeNode]] = None) -> None:
+        """进入作用域时开一张遮蔽表：只记录本层声明覆盖了哪些外层来源。"""
+        self.scopes.append(names if names is not None else {})
+        self._prov_saved.append({})
+
+    def _pop_scope(self) -> None:
+        """退出作用域：被遮蔽的外层来源还原；本层新声明的来源保留，供悬空检测。"""
+        self.scopes.pop()
+        saved = self._prov_saved.pop()
+        for name, prev in saved.items():
+            if prev is not None:
+                self.prov[name] = prev
+
     def parse_block(self, create_new_scope: bool = True) -> BlockStmt:
         lb = self._eat('LBRACE')
         if create_new_scope:
-            self.scopes.append({})
+            self._push_scope()
         stmts: List[StmtNode] = []
         while self._cur().kind != 'RBRACE':
             stmts.append(self.parse_stmt())
         self._eat('RBRACE')
         if create_new_scope:
-            self.scopes.pop()
+            self._pop_scope()
         return BlockStmt(line=lb.line, col=lb.col, stmts=stmts)
 
     def parse_stmt(self) -> StmtNode:
@@ -1925,7 +1943,7 @@ class Parser:
         if tok.kind == 'KW_FOR':
             self._eat('KW_FOR')
             self._eat('LPAREN')
-            self.scopes.append({})
+            self._push_scope()
             init_stmt: Optional[StmtNode] = None
             if self._cur().kind != 'SEMI':
                 if self._cur().kind == 'KW_OBJECT':
@@ -1952,7 +1970,7 @@ class Parser:
             self.loop_depth += 1
             body = self.parse_block()
             self.loop_depth -= 1
-            self.scopes.pop()
+            self._pop_scope()
             return ForStmt(line=tok.line, col=tok.col, init_stmt=init_stmt, cond_expr=cond_expr, step_stmt=step_stmt, body=body)
 
         if tok.kind == 'KW_SWITCH':
@@ -2211,11 +2229,11 @@ class Parser:
                     raise SemanticError(f"{self.filename}:{c_tok.line}:{c_tok.col}: Duplicate case value '{const_int}'")
                 seen_case_vals.add(const_int)
                 self._eat('COLON')
-                self.scopes.append({})
+                self._push_scope()
                 c_stmts: List[StmtNode] = []
                 while self._cur().kind not in ('KW_CASE', 'KW_DEFAULT', 'RBRACE'):
                     c_stmts.append(self.parse_stmt())
-                self.scopes.pop()
+                self._pop_scope()
                 cases.append(CaseClause(line=c_tok.line, value=c_val, stmts=c_stmts))
             elif self._cur().kind == 'KW_DEFAULT':
                 d_tok = self._eat('KW_DEFAULT')
@@ -2224,11 +2242,11 @@ class Parser:
                 has_default = True
                 if self._cur().kind == 'COLON':
                     self._eat('COLON')
-                self.scopes.append({})
+                self._push_scope()
                 d_stmts: List[StmtNode] = []
                 while self._cur().kind not in ('KW_CASE', 'KW_DEFAULT', 'RBRACE'):
                     d_stmts.append(self.parse_stmt())
-                self.scopes.pop()
+                self._pop_scope()
                 cases.append(CaseClause(line=d_tok.line, value=None, stmts=d_stmts))
             else:
                 tok = self._cur()

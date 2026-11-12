@@ -1,6 +1,6 @@
 # Sigil-C 教程
 
-从零到"能交付的模块"。每章有一个能编译、能运行、输出确定的小程序；正文里的代码块都可以直接放进 `.sigil` 文件。
+从零到"能交付的模块"。每章有一个能编译、能运行、输出确定的小程序；带 `main` 的代码块可以直接编译；其余是片段，默认已包含对应头文件。
 
 ## 怎么跑
 
@@ -97,7 +97,7 @@ o! b. flag m, true;
 ```sigil
 #define LIMIT 50
 
-e{ Mode { MODE_OFF m, 0, MODE_ON m, 1, MODE_TEST m, 2 }; }
+e{ Mode { MODE_OFF m, 0, MODE_ON m, 1, MODE_TEST m, 2 };
 
 i4 main(v.) {
     o! Mode m m, MODE_ON;
@@ -230,7 +230,7 @@ printf("%d\n", (i4)strlen(s));
 `s{ Vec2 { i4 x; i4 y; };` 定义 `struct Vec2`；初始化用 `{ 3, 4 }`。
 
 ```sigil
-s{ Vec2 { i4 x; i4 y; }; }
+s{ Vec2 { i4 x; i4 y; };
 
 i4 dot(Vec2 a, Vec2 b) { r; a.x * b.x + a.y * b.y; }
 v. scale(p* Vec2 v, i4 k) { v->x m* k; v->y m* k; }
@@ -241,8 +241,8 @@ v. scale(p* Vec2 v, i4 k) { v->x m* k; v->y m* k; }
 ## 2.4 共用体
 
 ```sigil
-u{ Payload { i4 i; u4 u; f8 f; }; }
-s{ Value { Kind kind; Payload data; }; }
+u{ Payload { i4 i; u4 u; f8 f; };
+s{ Value { Kind kind; Payload data; };
 ```
 
 `u{` 就是 C 的 `union`。C 没有和类型，标准做法是 `tag + union` 手写——Sigil-C 也一样。
@@ -254,7 +254,7 @@ s{ Flags {
     u4 a w! 3;
     u4 b w! 2;
     u4 c w! 5;
-}; }
+};
 
 t! (z? Flags =? 4, "Flags must fit in one u4");
 ```
@@ -478,7 +478,7 @@ free(p);
 **尚未验证**。理论上可以写：
 
 ```sigil
-i4 main(i4 argc, p* p* c1 argv) { ... }
+i4 main(i4 argc, p* p* c1 argv) { r; 0; }
 ```
 
 但没有示例、没有测试，不建议依赖。

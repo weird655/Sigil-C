@@ -2173,6 +2173,28 @@ i4 main(v.) {
     if leaked:
         failures.append(("99. hygiene", "test leaked files into the repo root", ", ".join(leaked)))
 
+    # Layer 40: shadowed locals restore the outer provenance
+    def test_shadow_prov():
+        c_src = compile_source(
+            "i4 main(v.) { o! i4 x m, 1; { o! i4 x m, 2; } r; x - 1; }",
+            "shadow.sigil")
+        assert "return (x - 1)" in c_src, c_src
+
+    assert_ok("40. scope", "shadowed locals restore the outer provenance", test_shadow_prov)
+
+    # Layer 40: tutorial document consistency
+    def tutorial_doc_consistency():
+        tut = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TUTORIAL.md")
+        with open(tut, encoding="utf-8") as f:
+            text = f.read()
+        assert "}; }" not in text, "stray extra brace in a tutorial snippet"
+        for i in range(1, 18):
+            assert f"{i:02d}_" in text, f"tutorial does not reference example {i:02d}"
+        for part in ("Part 0", "Part 1", "Part 2", "Part 3", "Part 4", "Part 5", "Part 6", "Part 7"):
+            assert part in text, part
+
+    assert_ok("40. scope", "tutorial references 01-17 and has no broken snippet braces", tutorial_doc_consistency)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2180,7 +2202,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 39-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 40-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
