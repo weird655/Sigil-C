@@ -45,7 +45,7 @@
 
 * **许可证**：代码改为 **MIT**（`LICENSE`），文档保留 **CC BY 4.0**（`LICENSE-CC-BY-4.0`）；`pyproject.toml` 同步。
 
-* **质量门**：`ruff`（E/F/W/I，忽略中文长行与解析器紧凑单行）+ `mypy` 零错误；覆盖率门槛 80%（`coverage report` 在 CI 里卡）；`python tools/check.py` 一条命令跑完 py_compile / lint / types / tests。新增 `quality` CI job、`CONTRIBUTING.md`、issue / PR 模板与 tag 触发的 `release.yml`。
+* **质量门**：`ruff`（E/F/W/I，忽略中文长行与解析器紧凑单行）+ `mypy` 零错误；覆盖率门槛 80%（`coverage report` 在 CI 里卡）；`python tools/check.py` 一条命令跑完 py_compile / lint / types / tests。新增 `quality` CI job、`CONTRIBUTING.md`、issue / PR 模板与 tag 触发的 `release.yml`；矩阵中途退出（`SystemExit`）按失败记录，CI 还检查 `MATRIX PASSED` 摘要，杜绝静默绿。
 
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 

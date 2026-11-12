@@ -33,7 +33,10 @@ jobs:
         run: python3 sigilc.py --check examples
 
       - name: Test matrix
-        run: python3 test_matrix.py
+        run: |
+          set -o pipefail
+          python3 test_matrix.py | tee /tmp/matrix.log
+          grep -q "MATRIX PASSED" /tmp/matrix.log
 
       - name: Compile the VM example with strict flags
         run: |

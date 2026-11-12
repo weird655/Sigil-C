@@ -36,7 +36,7 @@ def run_test_matrix():
         total += 1
         try:
             fn()
-        except Exception as e:
+        except (Exception, SystemExit) as e:
             failures.append((layer, desc, f"{type(e).__name__}: {e}"))
             print(f"  [FAIL] [{layer}] {desc} -> {type(e).__name__}: {e}")
             return
@@ -51,7 +51,7 @@ def run_test_matrix():
         except exc_type as e:
             passed += 1
             print(f"  [PASS] [{layer}] {desc} -> Caught {exc_type.__name__}: {e}")
-        except Exception as e:
+        except BaseException as e:
             failures.append((layer, desc, f"expected {exc_type.__name__}, got {type(e).__name__}: {e}"))
             print(f"  [FAIL] [{layer}] {desc} -> expected {exc_type.__name__}, got {type(e).__name__}: {e}")
         else:
