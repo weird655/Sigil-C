@@ -950,6 +950,27 @@ class Parser:
                     self.func_sigs[name] = (params, ret)
 
         if '<stdio.h>' in txt:
+            # FILE 是 C 的 opaque 句柄：只登记类型名，不登记字段
+            if 'FILE' not in self.user_types:
+                self.user_types['FILE'] = 'external'
+                EXTERNAL_C_SPELLING['FILE'] = 'FILE'
+            t_file = PointerType(ln, cl, BaseType(ln, cl, 'FILE'))
+            for stream in ('stdin', 'stdout', 'stderr'):
+                self.scopes[0].setdefault(stream, t_file)
+            reg_fn('fopen', [t_cstr, t_cstr], t_file)
+            reg_fn('freopen', [t_cstr, t_cstr, t_file], t_file)
+            reg_fn('fclose', [t_file], t_int)
+            reg_fn('fflush', [t_file], t_int)
+            reg_fn('fread', [t_vptr, t_size, t_size, t_file], t_size)
+            reg_fn('fwrite', [t_cvptr, t_size, t_size, t_file], t_size)
+            reg_fn('fgets', [t_buf, t_int, t_file], t_buf)
+            reg_fn('fputs', [t_cstr, t_file], t_int)
+            reg_fn('fgetc', [t_file], t_int)
+            reg_fn('fputc', [t_int, t_file], t_int)
+            reg_fn('feof', [t_file], t_int)
+            reg_fn('fprintf', [t_file, t_cstr], t_int, variadic=True)
+            reg_fn('remove', [t_cstr], t_int)
+            reg_fn('rename', [t_cstr, t_cstr], t_int)
             reg_fn('printf', [t_cstr], t_int, variadic=True)
             reg_fn('sprintf', [t_buf, t_cstr], t_int, variadic=True)
             reg_fn('snprintf', [t_buf, t_size, t_cstr], t_int, variadic=True)

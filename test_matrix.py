@@ -2051,12 +2051,42 @@ i4 main(v.) {
     assert_ok("35. libc", "printf/strlen/strcpy/atoi/toupper/sqrt are typed from headers", test_libc_builtins)
 
     os.chdir(orig_cwd)
+    # Layer 36: FILE* as an opaque libc handle
+    def test_file_io():
+        src = """#include <stdio.h>
+
+i4 main(v.) {
+    o! p* FILE f m, fopen("out.txt", "w");
+    i? (f =? NULL) { r; 1; }
+    fprintf(f, "hello %d\\n", 42);
+    fclose(f);
+
+    o! p* FILE g m, fopen("out.txt", "r");
+    i? (g =? NULL) { r; 2; }
+    o! c1[16] buf;
+    fgets(a& buf[0], 16, g);
+    fclose(g);
+    printf("%s", buf);
+    r; 0;
+}
+"""
+        with open("fileio.c", "w") as f:
+            f.write(compile_source(src, "fileio.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "fileio.c", "-o", "fileio"],
+            check=True)
+        run = subprocess.run(["./fileio"], capture_output=True, text=True)
+        assert run.returncode == 0, run.stderr
+        assert run.stdout.strip() == "hello 42", run.stdout
+
+    assert_ok("36. fileio", "fopen/fprintf/fgets work through an opaque FILE handle", test_file_io)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 35-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 36-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
