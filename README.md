@@ -172,24 +172,136 @@ C 里对应 `void (*DISPATCH[10])(VM *)`——名字埋在星号中间；这里�
 
 ### 三级指针：一个内存池
 
-[`pool.sigil`](examples/pool.sigil) 把指针嵌套、权限分流和 `o!` 实体放在一个能跑的程序里：
+完整源码（[`examples/pool.sigil`](examples/pool.sigil)，每行都有注释）：
 
 ```sigil
+#include <stdio.h>
+
+/* ==================================================================
+   内存池：多重指针嵌套 + 读写权限分流
+   ==================================================================
+
+   物理布局（raw_storage，8 个 u4，切成两个跨度 4 的块）：
+
+     index :   0     1     2     3  |   4     5     6     7
+     block :   └──── Block 0 ────────┘  └──── Block 1 ────────┘
+     value :  101   202     ·     ·  |  404     ·     ·     ·
+                 ▲                        ▲
+                 │                        │
+            slot_alpha                 slot_beta
+                 ▲
+                 │
+           free_slot (u4 **)  ←── cursor_hub (u4 ***) 指向 free_slot 本身
+
+   三条练习线：
+     1. p* / p* p* / p* p* p*   —— 三级指针逐层剥离
+     2. p* c@ 与 c@ p*          —— 指向物只读 vs 指针自身只读
+     3. o!                      —— 每个栈实体都显式声明
+   ================================================================== */
+
 s{ Pool {
-    p* c@ u4 arena_guard;     /* 只读基址视图，禁止经此写入 */
-    p* u4 arena_raw;          /* 可写物理池首地址 */
-    p* p* u4 free_slot;       /* u4 **：当前空闲块的句柄槽 */
-    p* p* p* u4 cursor_hub;   /* u4 ***：指向二级槽位指针本身 */
-    u4 stride;
-    u4 allocated;
+    p* c@ u4 arena_guard;     // 只读基址视图：审计/校验用，经它写入会被类型检查拒绝
+    p* u4 arena_raw;          // 可写物理池首地址：真正分配内存的地方
+    p* p* u4 free_slot;       // 二级槽位指针（u4 **）：指向"当前空闲块的句柄槽"
+    p* p* p* u4 cursor_hub;   // 三级游标中枢（u4 ***）：指向 free_slot 这个指针变量本身
+    u4 stride;                // 每个块的跨度（以 u4 计），本例为 4
+    u4 allocated;             // 已分配的块数，最后用于校验
 };
 
+/* ------------------------------------------------------------------
+   分配一个块：从三级游标中枢开始，逐层解引用到物理块首地址
+
+     cursor_hub  (u4 ***)  ← 指向 free_slot 的地址
+       *cursor_hub  → free_slot  (u4 **)  当前空闲槽位
+       **cursor_hub → slot_xxx   (u4 *)   槽位里保存的物理块地址
+       ***cursor_hub→ 块首字     (u4)
+
+   返回 **cursor_hub，并在块首字写入 init_tag。
+   ------------------------------------------------------------------ */
 p* u4 pool_acquire_block(p* Pool pool_rw, u4 init_tag) {
-    o! p* p* u4 active_slot m, p* pool_rw->cursor_hub;   /* u4 *** → u4 ** */
-    o! p* u4 block_ptr m, p* active_slot;                /* u4 **  → u4 *  */
+    // 第 1 级：u4 *** → u4 **，取出当前活动的槽位
+    o! p* p* u4 active_slot m, p* pool_rw->cursor_hub;
+
+    // 第 2 级：u4 ** → u4 *，取出槽位里保存的物理块地址
+    o! p* u4 block_ptr m, p* active_slot;
+
+    // 拿到物理块后：首字写标记，池计数 +1
     p* block_ptr m, init_tag;
     pool_rw->allocated m, pool_rw->allocated + 1;
-    r; block_ptr;
+
+    r; block_ptr;    // 返回句柄，调用方可以继续 block_ptr[i] 写后续字
+}
+
+/* ------------------------------------------------------------------
+   热迁移：把某个槽位改指向新块，并写入新块首字
+
+   target_slot 是"槽位的地址"（u4 **），所以：
+     *target_slot  = new_block   改槽位内容（换绑）
+     **target_slot = payload     写新块的首字
+   ------------------------------------------------------------------ */
+v. pool_relocate_slot(p* p* u4 target_slot, p* u4 new_block, u4 payload) {
+    p* target_slot m, new_block;      // 一级解引用：替换槽位里的物理块地址
+    p* p* target_slot m, payload;     // 二级解引用：往换绑后的新块首字写载荷
+}
+
+u4 memory_pool_demo(v.) {
+    // 底层物理内存：8 个 u4，只有两个块首字需要预置为 0
+    o! u4[8] raw_storage;
+    raw_storage[0] m, 0;              // Block 0 首字
+    raw_storage[4] m, 0;              // Block 1 首字
+
+    // 两个块句柄槽位：分别绑定 Block 0（偏移 0）与 Block 1（偏移 4）
+    o! p* u4 slot_alpha m, a& raw_storage[0];
+    o! p* u4 slot_beta  m, a& raw_storage[4];
+
+    // 实例化池实体，装填基础管线
+    o! Pool main_pool;
+    main_pool.arena_guard m, raw_storage;          // 数组退化为首地址，加只读视图
+    main_pool.arena_raw   m, raw_storage;          // 同一块内存的可写视图
+    main_pool.free_slot   m, a& slot_alpha;        // 初始空闲槽位指向 slot_alpha
+    main_pool.cursor_hub  m, a& main_pool.free_slot; // 中枢指向 free_slot 自身
+    main_pool.stride      m, 4;                    // 每块 4 个 u4
+    main_pool.allocated   m, 0;                    // 计数清零
+
+    // 权限分流：ro 只做审计读取，rw 才允许改池状态
+    o! p* c@ Pool ro_pool m, a& main_pool;   // 指向物只读
+    o! p* Pool rw_pool    m, a& main_pool;   // 可写
+
+    // 第一次分配：cursor_hub → free_slot → slot_alpha → Block 0，首字写 101
+    o! p* u4 blk_first m, pool_acquire_block(rw_pool, 101);
+    blk_first[1] m, 202;              // Block 0 的第二个字
+
+    // 推进游标：把 free_slot 改指 slot_beta（无分支切槽）
+    rw_pool->free_slot m, a& slot_beta;
+
+    // 第二次分配：现在取到 Block 1，首字写 303
+    o! p* u4 blk_second m, pool_acquire_block(rw_pool, 303);
+
+    // 三级解引用：***hub_probe 穿透三层读出当前块首字
+    o! p* p* p* u4 hub_probe m, ro_pool->cursor_hub;
+    o! u4 deep_read_val m, p* p* p* hub_probe;
+
+    // 固定槽位指针：槽位地址锁死（c@），但仍能改它指向的物理块
+    o! c@ p* p* u4 pinned_slot m, a& slot_alpha;
+    pool_relocate_slot(pinned_slot, blk_second, 404);   // slot_alpha 换绑到 Block 1
+
+    // 只读锚点验证最终物理内存
+    o! p* c@ u4 guard_view m, ro_pool->arena_guard;
+    o! u4 block0_head m, guard_view[0];   // 101
+    o! u4 block0_next m, guard_view[1];   // 202
+    o! u4 block1_head m, p* slot_alpha;   // 404（slot_alpha 已重映射到 Block 1）
+    o! u4 total_used m, ro_pool->allocated;   // 2
+
+    printf("block0: head=%u next=%u\n", block0_head, block0_next);
+    printf("block1: head=%u (via slot_alpha)\n", block1_head);
+    printf("deep_read=%u allocated=%u\n", deep_read_val, total_used);
+    r; block0_head + block0_next + deep_read_val + block1_head + total_used;   // 1012
+}
+
+i4 main(v.) {
+    u4 sum m, memory_pool_demo();     // 101 + 202 + 303 + 404 + 2
+    printf("checksum=%u\n", sum);
+    r; (i4)sum - 1012;                // 校验和不对就返回非零
 }
 ```
 
@@ -200,8 +312,15 @@ deep_read=303 allocated=2
 checksum=1012
 ```
 
-三种权限写法在同一个结构体里分工：`p* c@ u4` 指向物只读（审计探针），`p* u4` 可写（物理池），
-`c@ p* p* u4` 指针自身只读但能改它指向的槽位（固定句柄做热迁移）。换 C 写同样的东西，声明要从星号中间往外读。
+三种权限写法在同一个结构体里分工：
+
+| 写法 | 含义 | 用途 |
+|---|---|---|
+| `p* c@ u4` | 指向物只读 | 审计探针，禁止经它写入 |
+| `p* u4` | 可写指针 | 物理池操作 |
+| `c@ p* p* u4` | 指针自身只读 | 固定句柄，仍可改它指向的块 |
+
+换 C 写同样的东西，声明要从星号中间往外读；这里从上到下就是「指针 → 只读 / 只读指针 → 类型」。
 
 ---
 

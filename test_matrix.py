@@ -1598,6 +1598,14 @@ int main(void) {
         assert "deep_read=303 allocated=2" in out, out
         assert "checksum=1012" in out, out
 
+        # README 里嵌的是同一份源码：漂移就红
+        repo = os.path.dirname(os.path.abspath(__file__))
+        readme = open(os.path.join(repo, "README.md"), encoding="utf-8").read()
+        head = readme.index("完整源码（[`examples/pool.sigil`]")
+        block = readme[head:].split("```sigil\n", 1)[1].split("\n```", 1)[0]
+        src = open(os.path.join(EXAMPLES, "pool.sigil"), encoding="utf-8").read().rstrip("\n")
+        assert block.strip() == src.strip(), "README pool block drifted from examples/pool.sigil"
+
     assert_ok("20. pool", "pool: p* chains, const split, c@ p* pinned slot, o! entities", test_example_pool)
 
     if failures:
