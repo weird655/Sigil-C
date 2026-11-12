@@ -1916,6 +1916,7 @@ int main(void) {
     # Layer 33: the LSP loop itself (stdio JSON-RPC session)
     def test_lsp_loop():
         import io as _io
+
         import sigilc as _sigilc
 
         frames = _io.BytesIO()
