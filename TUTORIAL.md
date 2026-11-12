@@ -59,7 +59,7 @@ area(4 x 6) = 24
 - `v.` 是空类型，也是空参数列表——`main(v.)` 就是 `int main(void)`
 - `r;` 自带分号；空返回要写 `r; ;`
 - `o!` 在基类型直接开头时可省（`u4 w m, 4;`）；用户定义类型与指针仍必须写
-- 空格即断句：`p* u4` 是指针，`p * q` 是乘法。完整规矩见 [`SYNTAX.md`](SYNTAX.md) §0.8
+- 空格即断句：`p* u4` 是指针，`p * q` 是乘法。完整规矩见 [`SYNTAX.md`](SYNTAX.md)（速查表） §0.8
 
 📄 [`examples/tutorial/01_hello.sigil`](examples/tutorial/01_hello.sigil)
 
@@ -375,7 +375,7 @@ uint32_t scale(const uint32_t *src, uint32_t n, uint32_t max);
 | 9 | 以为指针参数有长度 | 参数来源未知，不查 | 不抓 |
 | 10 | 手改生成的 `.c` | 只改 `.sigil` | 纪律 |
 
-前七条有机器兜底，后三条靠人。完整清单见 [`MIGRATION.md`](MIGRATION.md)。
+前七条有机器兜底，后三条靠人。完整清单见 [`MIGRATION.md`](MIGRATION.md)（迁移对照）。
 
 ---
 
@@ -385,7 +385,7 @@ uint32_t scale(const uint32_t *src, uint32_t n, uint32_t max);
 
 **五条规则**
 
-1. 只许用 [`SYNTAX.md`](SYNTAX.md) 里的印记，不确定就查
+1. 只许用 [`SYNTAX.md`](SYNTAX.md)（速查表） 里的印记，不确定就查
 2. 写操作必须带 `m`
 3. 每段代码必须过 `--check`
 4. 报错先读 `-->` 那一行和插入符
@@ -433,7 +433,7 @@ gcc -std=c99 -Wall -Wextra -Werror -pedantic x.c -o x && ./x
 | 运算 | ✓ `&.` ✓ `=?` ✓ `\|^` `\|.` `&^` `^^` `!?` `!.` | 逻辑 / 比较 / 位 |
 | 类型名 | ✓ `i4` ✓ `u4` ✓ `u2` ✓ `u1` ✓ `c1` ✓ `b.` `f4` `f8` | 定宽整数、字符、布尔、浮点 |
 
-完整 52 项见 [`SYNTAX.md`](SYNTAX.md)。
+完整 52 项见 [`SYNTAX.md`](SYNTAX.md)（速查表）。
 
 ---
 

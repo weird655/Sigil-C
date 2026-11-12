@@ -222,14 +222,14 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 
 ## 示例
 
-| 文件 | 讲什么 | 输出 |
-|---|---|---|
-| [`tutorial/01..07`](examples/tutorial/) | 教程配套：软件 / 嵌入 / 硬件 | 见 [`TUTORIAL.md`](TUTORIAL.md) |
-| [`vm.sigil`](examples/vm.sigil) | 堆栈虚拟机：函数指针表 + 字节码 | `42` |
-| [`regmap.sigil`](examples/regmap.sigil) | MMIO：`packed` + 位域 + `offsetof` 断言 | `ctrl=0x005d` |
-| [`callbacks.sigil`](examples/callbacks.sigil) | 全局函数指针表 | `quit after 2 ticks` |
-| [`wire.sigil`](examples/wire.sigil) | 大端帧解析 | `frames=2 bytes=9` |
-| [`pool.sigil`](examples/pool.sigil) | 内存池：三级指针、读写视图分流 | `checksum=1012` |
+| 中文名 | 文件 | 讲什么 | 输出 |
+|---|---|---|---|
+| 教程配套 | [`tutorial/01..07`](examples/tutorial/) | 软件 / 嵌入 / 硬件三线 | 见 `TUTORIAL.md`（教程） |
+| 虚拟机 | [`vm.sigil`](examples/vm.sigil) | 函数指针表 + 字节码 | `42` |
+| 寄存器映射 | [`regmap.sigil`](examples/regmap.sigil) | `packed` + 位域 + `offsetof` 断言 | `ctrl=0x005d` |
+| 回调表 | [`callbacks.sigil`](examples/callbacks.sigil) | 全局函数指针表 | `quit after 2 ticks` |
+| 帧解析 | [`wire.sigil`](examples/wire.sigil) | 大端帧解析 | `frames=2 bytes=9` |
+| 内存池 | [`pool.sigil`](examples/pool.sigil) | 三级指针、读写视图分流 | `checksum=1012` |
 
 虚拟机那台机器的核心只有这几行（节选）：
 
@@ -388,12 +388,14 @@ int main(void) {
 
 ## 文档
 
-| 文件 | 内容 |
-|---|---|
-| [`TUTORIAL.md`](TUTORIAL.md) | 教程：软件 / 嵌入 / 硬件三个方向，每章一个可运行程序 |
-| [`SYNTAX.md`](SYNTAX.md) | 52 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
-| [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
-| [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+| 中文名 | 文件 | 内容 |
+|---|---|---|
+| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | 软件 / 嵌入 / 硬件三个方向，每章一个可运行程序 |
+| 速查表 | [`SYNTAX.md`](SYNTAX.md) | 52 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
+| 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
+| 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+
+> 文件名是英文，第一列是中文名——按中文找即可。
 
 ---
 
