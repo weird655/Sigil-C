@@ -1,6 +1,6 @@
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 185 项自动化测试矩阵覆盖明细。
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 186 项自动化测试矩阵覆盖明细。
 
 ## [v1.1] - 2026-11-12（当前版本）
 
@@ -37,9 +37,12 @@
 * **LSP 补全改为片段、默认关闭**：补全项从"单词"改为结构片段（`insertTextFormat` 2），`i?`、`s?`、`s{`、`o!` 等直接展开骨架；`completionProvider` 默认不宣告，启动加 `--lsp-completion` 才开启，关闭时补全请求返回空列表。`documentSymbol` 保持默认开启。
 * **LSP 大纲**：`--lsp` 增加 `textDocument/documentSymbol`（函数 / 结构体 / 联合体 / 枚举 / 全局变量，枚举成员作为子项）；补全改为按光标前缀过滤，不再返回全量列表。第 27 层测试。
 * **两个低频印记**：`a?`（`_Alignof`，结果 `size_t`，只接受完整对象类型，与 `a!N` 互为读写）与 `d!`（trap：GCC/Clang 用 `__builtin_trap()`，其他后端 `abort()`；在 `s?` 中视为终止，不再补 fallthrough）。闭集从 52 增至 54。第 28 层测试。
-* 测试矩阵 **185 项 / 28 层**。
+* **工程修正**：代码许可证改为 MIT（文档保留 CC BY 4.0）；CI 增加 `windows-latest` job（`py_compile` + `--check` + 转译，有 gcc 时编译运行）；测试矩阵改为在独立临时目录运行，不再写工作区；补 LSP JSON-RPC framing 测试。第 29 层。
+* 测试矩阵 **186 项 / 29 层**。
 
 * **文档**：`p*` 的定位从「已知弱点」改为「书写纪律」——`p*` 紧邻才是指针，乘法必须写 `p * q`；`p*q` 会报 `Cannot dereference non-pointer type`，是编译期错误而不是静默歧义。
+
+* **许可证**：代码改为 **MIT**（`LICENSE`），文档保留 **CC BY 4.0**（`LICENSE-CC-BY-4.0`）；`pyproject.toml` 同步。
 
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 

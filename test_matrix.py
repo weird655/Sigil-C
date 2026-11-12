@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
 import os
+import platform
+import shutil
 import sys
 import tempfile
 import subprocess
@@ -13,6 +15,12 @@ def run_test_matrix():
     passed = 0
     total = 0
     failures = []
+
+    # 每个 case 的文件都写进独立临时目录，互不覆盖、不污染仓库
+    orig_cwd = os.getcwd()
+    work_dir = tempfile.mkdtemp(prefix="sigil-tests-")
+    shutil.copy(os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden.sigil"), work_dir)
+    os.chdir(work_dir)
 
     def assert_ok(layer, desc, fn):
         nonlocal passed, total
@@ -41,8 +49,14 @@ def run_test_matrix():
             failures.append((layer, desc, f"expected {exc_type.__name__}, but compilation succeeded"))
             print(f"  [FAIL] [{layer}] {desc} -> expected {exc_type.__name__}, but compilation succeeded")
 
-    gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
-    uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
+    try:
+        gcc_ver = subprocess.run(["gcc", "--version"], capture_output=True, text=True).stdout.splitlines()[0]
+    except (FileNotFoundError, IndexError):
+        gcc_ver = "gcc not found"
+    try:
+        uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError:
+        uname_info = platform.platform()
     print(f"=== SIGIL-C v1.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
@@ -1801,12 +1815,27 @@ int main(void) {
 
     assert_ok("28. sigils", "d! emits SIGIL_TRAP and counts as terminating", test_trap_sigil)
 
+    os.chdir(orig_cwd)
+    # Layer 29: LSP JSON-RPC framing
+    def test_lsp_framing():
+        import io as _io
+        import sigilc as _sigilc
+        buf = _io.BytesIO()
+        _sigilc._lsp_write(buf, {"jsonrpc": "2.0", "id": 7, "result": None})
+        raw = buf.getvalue()
+        assert raw.startswith(b"Content-Length: "), raw[:40]
+        assert raw.endswith(b"}"), raw[-40:]
+        msg = _sigilc._lsp_read(_io.BytesIO(raw))
+        assert msg["id"] == 7 and msg["result"] is None, msg
+
+    assert_ok("29. lsp-framing", "LSP Content-Length framing round-trips", test_lsp_framing)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 28-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 29-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

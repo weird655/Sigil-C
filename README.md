@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-185%20%2F%2028%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-186%20%2F%2029%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -516,10 +516,11 @@ int main(void) {
 - 解析器：`Parser`，作用域、类型表、指针来源都在这里维护
 - 代码生成：`CodeGenerator`，只输出 C99 + 少量宏（`SIGIL_IDX` / `SIGIL_ATTR` / `SIGIL_TRAP` …）
 - 工具层：`--build` / `--fmt` / `--check` / `--lsp` 全部在同一个文件里
+- **单文件是分发特性**：一个 `sigilc.py` 拷走就能用；等它超过 ~5k 行或出现第二个维护者，再按 `lexer/parser/ast/semantic/codegen/lsp/cli` 拆包
 
 ## 测试矩阵
 
-185 项 / 28 层，每层一个主题：
+186 项 / 29 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -536,12 +537,12 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 185 项 / 28 层，需要 gcc
+python3 test_matrix.py        # 186 项 / 29 层，需要 gcc
 ```
 
-每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。
+每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
 
-CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 各跑一遍：
+CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 `windows-latest` job 做 `py_compile`、`--check examples`、转译 VM 示例，并在有 gcc 时编译运行：
 
 [`ci.yml`](.github/workflows/ci.yml) · [最近一次运行](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
 
@@ -570,7 +571,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 各跑一遍：
 ## 状态
 
 - 版本 **1.1**，已打 tag `v1.1`；语法冻结（v1.x 只加不改）。
-- 185 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过。
+- 186 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（tag 已推，Release 页需在网页手动创建）。
 
@@ -585,6 +586,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 各跑一遍：
 
 ## 许可证
 
-代码与文档以 **CC BY 4.0** 发布，全文见 [`LICENSE`](LICENSE)。可复制、修改、再分发（含商业用途），保留署名与许可证链接即可。
+- **代码**：MIT，全文见 [`LICENSE`](LICENSE)。
+- **文档**：CC BY 4.0，全文见 [`LICENSE-CC-BY-4.0`](LICENSE-CC-BY-4.0)。
 
-> CC BY 4.0 不含专利授权条款；如需软件惯例，可叠加 MIT 双许可。
+> 代码用 MIT 是软件惯例（含免责条款、无 copyleft、与 C / Python 生态兼容）；文档用 CC BY 是因为它本来就是写给读的。

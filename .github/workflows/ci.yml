@@ -32,7 +32,7 @@ jobs:
       - name: Semantic check every example
         run: python3 sigilc.py --check examples
 
-      - name: 178-case matrix
+      - name: Test matrix
         run: python3 test_matrix.py
 
       - name: Compile the VM example with strict flags
@@ -40,3 +40,37 @@ jobs:
           python3 sigilc.py examples/vm.sigil -o /tmp/vm.c
           gcc -std=c99 -Wall -Wextra -Werror -pedantic /tmp/vm.c -o /tmp/vm
           /tmp/vm | tail -3
+
+  windows:
+    name: windows-check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile the transpiler
+        run: python -m py_compile sigilc.py
+
+      - name: Semantic check every example
+        run: python sigilc.py --check examples
+
+      - name: Transpile the VM example
+        run: python sigilc.py examples/vm.sigil -o vm.c
+
+      - name: Compile and run with gcc if present
+        shell: pwsh
+        run: |
+          $gcc = (Get-Command gcc -ErrorAction SilentlyContinue).Source
+          if (-not $gcc -and (Test-Path 'C:\msys64\mingw64\bin\gcc.exe')) {
+            $gcc = 'C:\msys64\mingw64\bin\gcc.exe'
+          }
+          if (-not $gcc) {
+            Write-Host 'gcc not found on runner; skipping compile step'
+            exit 0
+          }
+          & $gcc -std=c99 -Wall -Wextra -Werror -pedantic vm.c -o vm.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\vm.exe | Select-Object -Last 1
