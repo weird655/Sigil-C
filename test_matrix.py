@@ -1851,7 +1851,10 @@ int main(void) {
         def call(argv):
             buf = _io.StringIO()
             with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                rc = _sigilc.main(argv)
+                try:
+                    rc = _sigilc.main(argv)
+                except SystemExit as exc:  # argparse 的 action="version" 会 exit(0)
+                    rc = int(exc.code or 0)
             return rc, buf.getvalue()
 
         rc, out = call(["--version"])
@@ -1865,6 +1868,9 @@ int main(void) {
         rc, out = call(["--check", src, "--json"])
         assert rc == 0 and '"ok": true' in out, (rc, out)
 
+        # 已经是规范格式时 --fmt 不会打印；写成松散格式再看输出
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) {   r; 0; }\n")
         rc, out = call(["--fmt", src])
         assert rc == 0 and "i4 main" in out, (rc, out)
 

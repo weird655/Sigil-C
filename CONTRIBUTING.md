@@ -12,7 +12,7 @@
 
 ```bash
 python tools/check.py            # 编译 + ruff + mypy + 186 项测试
-python tools/check.py --coverage # 同上，测试带覆盖率（门槛 80%）
+python tools/check.py --coverage # 同上，测试带覆盖率（门槛 83%）
 python tools/fuzz.py --iterations 300   # 变异模糊测试（CI 跑 300 次）
 python tools/bench.py --runs 20 --max-ms 500  # 性能基线（CI 卡 500ms）
 ```
