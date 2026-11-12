@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-182%20%2F%2026%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-183%20%2F%2027%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -101,7 +101,8 @@ sigilc --build src -o app --run
 `sigilc.py --lsp` 是一个零依赖 LSP 服务（stdio JSON-RPC）：
 
 - 打开/修改文件时推送诊断（与 `--check` 同一套检查，带 range）
-- 补全 52 个印记、类型名与 `true` / `false` / `NULL`
+- 补全：按光标前的词前缀过滤 52 个印记、类型名与 `true` / `false` / `NULL`
+- 文档大纲：函数、结构体 / 联合体、枚举（成员作子项）、全局变量
 
 Neovim（内置 LSP）示例：
 
@@ -402,7 +403,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 182 项 / 26 层，需要 gcc
+python3 test_matrix.py        # 183 项 / 27 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。

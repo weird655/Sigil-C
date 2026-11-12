@@ -1,6 +1,6 @@
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 182 项自动化测试矩阵覆盖明细。
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 183 项自动化测试矩阵覆盖明细。
 
 ## [v1.1] - 2026-11-12（当前版本）
 
@@ -34,7 +34,8 @@
 * **目录构建出头文件**：`--build DIR --emit-header` 为每个 `.sigil` 在 `.sigil-build/` 下同时生成 `.h`，`s@` 符号照旧被排除；`--header` 与 `--build` 同用会明确报错。第 24 层测试。
 * **脚手架与结构化诊断**：`--init DIR` 生成最小工程（`src/main.sigil` + README + `.gitignore`，`--force` 可覆盖）；`--check --json` 输出 `{ok, checked, diagnostics:[{file,line,column,severity,message}]}`，供编辑器与 CI 消费。第 25 层测试。
 * **LSP**：`--lsp` 提供零依赖 stdio JSON-RPC 服务——打开/修改时推送诊断（与 `--check` 同一套检查，带 range），补全 52 个印记、类型名与字面量；Neovim / Helix / Emacs 等通用客户端可直接接入。第 26 层测试。
-* 测试矩阵 **182 项 / 26 层**。
+* **LSP 大纲**：`--lsp` 增加 `textDocument/documentSymbol`（函数 / 结构体 / 联合体 / 枚举 / 全局变量，枚举成员作为子项）；补全改为按光标前缀过滤，不再返回全量列表。第 27 层测试。
+* 测试矩阵 **183 项 / 27 层**。
 
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 

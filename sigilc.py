@@ -3858,7 +3858,7 @@ def _lsp_diagnostics(uri: str, text: str):
         }]
 
 
-def _lsp_completion_items():
+def _lsp_completion_items(prefix: str = ""):
     items = []
     for name in sorted(set(SIGIL_KEYWORDS) | set(SIGIL_OPERATORS)):
         items.append({"label": name, "kind": 14, "detail": "sigil"})
@@ -3866,12 +3866,57 @@ def _lsp_completion_items():
         items.append({"label": name, "kind": 25, "detail": "type"})
     for name in ("true", "false", "NULL"):
         items.append({"label": name, "kind": 12, "detail": "literal"})
+    if prefix:
+        items = [item for item in items if item["label"].startswith(prefix)]
     return items
+
+
+def _lsp_word_prefix(text: str, line: int, character: int) -> str:
+    lines = text.splitlines()
+    if line < 0 or line >= len(lines):
+        return ""
+    prefix = lines[line][:max(0, character)]
+    m = re.search(r"[A-Za-z0-9_]+$", prefix)
+    return m.group(0) if m else ""
+
+
+def _lsp_document_symbols(text: str):
+    try:
+        tokens = Lexer(text, "buffer.sigil").tokenize()
+        ast = Parser(tokens, "buffer.sigil").parse_program()
+    except (LexerError, ParseError, SemanticError):
+        return []
+
+    def make(node, name: str, kind: int, children=None):
+        line = max(0, getattr(node, "line", 1) - 1)
+        col = max(0, getattr(node, "col", 1) - 1)
+        span = {"start": {"line": line, "character": col},
+                "end": {"line": line, "character": col + max(1, len(name))}}
+        symbol = {"name": name, "kind": kind, "range": span, "selectionRange": span}
+        if children:
+            symbol["children"] = children
+        return symbol
+
+    out = []
+    for node in ast:
+        if isinstance(node, FuncDefNode):
+            out.append(make(node, node.name, 12))
+        elif isinstance(node, StructDefNode):
+            out.append(make(node, node.name, 23))
+        elif isinstance(node, EnumDefNode):
+            kids = [make(node, item[0], 22) for item in node.items]
+            out.append(make(node, node.name, 10, kids))
+        elif isinstance(node, VarDeclStmt):
+            out.append(make(node, node.name, 13))
+        elif isinstance(node, ExternalTypeNode):
+            out.append(make(node, node.name, 23))
+    return out
 
 
 def _lsp_run() -> int:
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
+    docs = {}
     while True:
         msg = _lsp_read(stdin)
         if msg is None:
@@ -3886,12 +3931,14 @@ def _lsp_run() -> int:
                 "result": {"capabilities": {
                     "textDocumentSync": 1,
                     "completionProvider": {"triggerCharacters": [" "]},
+                    "documentSymbolProvider": True,
                 }},
             })
         elif method == "initialized":
             pass
         elif method == "textDocument/didOpen":
             doc = params["textDocument"]
+            docs[doc["uri"]] = doc["text"]
             _lsp_write(stdout, {
                 "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
                 "params": {"uri": doc["uri"], "diagnostics": _lsp_diagnostics(doc["uri"], doc["text"])},
@@ -3899,20 +3946,31 @@ def _lsp_run() -> int:
         elif method == "textDocument/didChange":
             uri = params["textDocument"]["uri"]
             text = params["contentChanges"][-1]["text"]
+            docs[uri] = text
             _lsp_write(stdout, {
                 "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
                 "params": {"uri": uri, "diagnostics": _lsp_diagnostics(uri, text)},
             })
         elif method == "textDocument/didClose":
             uri = params["textDocument"]["uri"]
+            docs.pop(uri, None)
             _lsp_write(stdout, {
                 "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics",
                 "params": {"uri": uri, "diagnostics": []},
             })
         elif method == "textDocument/completion":
+            uri = params["textDocument"]["uri"]
+            pos = params.get("position") or {}
+            prefix = _lsp_word_prefix(docs.get(uri, ""), pos.get("line", 0), pos.get("character", 0))
             _lsp_write(stdout, {
                 "jsonrpc": "2.0", "id": msg_id,
-                "result": {"isIncomplete": False, "items": _lsp_completion_items()},
+                "result": {"isIncomplete": False, "items": _lsp_completion_items(prefix)},
+            })
+        elif method == "textDocument/documentSymbol":
+            uri = params["textDocument"]["uri"]
+            _lsp_write(stdout, {
+                "jsonrpc": "2.0", "id": msg_id,
+                "result": _lsp_document_symbols(docs.get(uri, "")),
             })
         elif method == "shutdown":
             _lsp_write(stdout, {"jsonrpc": "2.0", "id": msg_id, "result": None})

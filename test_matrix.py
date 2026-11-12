@@ -1757,12 +1757,26 @@ int main(void) {
 
     assert_ok("26. lsp", "LSP diagnostics and completion are wired to the checker", test_lsp_core)
 
+    # Layer 27: LSP document symbols and prefix completion
+    def test_lsp_symbols():
+        import sigilc as _sigilc
+        text = ("s{ Vec2 { i4 x; i4 y; };\n"
+                "e{ Mode { M_A m, 0, M_B m, 1 };\n"
+                "o! u4 counter m, 0;\n"
+                "i4 add(i4 a, i4 b) { r; a + b; }\n")
+        syms = {sym["name"]: sym["kind"] for sym in _sigilc._lsp_document_symbols(text)}
+        assert syms == {"Vec2": 23, "Mode": 10, "counter": 13, "add": 12}, syms
+        labels = {item["label"] for item in _sigilc._lsp_completion_items("i")}
+        assert "i?" in labels and "p*" not in labels, labels
+
+    assert_ok("27. lsp", "LSP document symbols cover structs, enums, globals and functions", test_lsp_symbols)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 26-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 27-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
