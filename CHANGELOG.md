@@ -1,6 +1,6 @@
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 191 项自动化测试矩阵覆盖明细。
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 192 项自动化测试矩阵覆盖明细。
 
 ## [v1.1] - 2026-11-12（当前版本）
 
@@ -39,7 +39,7 @@
 * **两个低频印记**：`a?`（`_Alignof`，结果 `size_t`，只接受完整对象类型，与 `a!N` 互为读写）与 `d!`（trap：GCC/Clang 用 `__builtin_trap()`，其他后端 `abort()`；在 `s?` 中视为终止，不再补 fallthrough）。闭集从 52 增至 54。第 28 层测试。
 * **工程修正**：代码许可证改为 MIT（文档保留 CC BY 4.0）；CI 增加 `windows-latest` job（`py_compile` + `--check` + 转译，有 gcc 时编译运行）；测试矩阵改为在独立临时目录运行，不再写工作区；补 LSP JSON-RPC framing 测试。第 29 层。
 * **质量门加厚**：`quality` job 增加确定性模糊测试（300 次变异，只允许三种编译错误）与性能基线（转译 `vm.sigil` 中位数上限 500ms）；第 30 层补 CLI 进程内测试（`--version/--check --json/--fmt/--init/--build/--emit-prelude`），覆盖率 80% → 86%（门槛 85%）。
-* 测试矩阵 **191 项 / 34 层**。
+* 测试矩阵 **192 项 / 35 层**。
 
 * **文档**：`p*` 的定位从「已知弱点」改为「书写纪律」——`p*` 紧邻才是指针，乘法必须写 `p * q`；`p*q` 会报 `Cannot dereference non-pointer type`，是编译期错误而不是静默歧义。
 
@@ -52,6 +52,8 @@
 * **`--no-line`**：生成 C 时省略每条语句前的 `#line`，给 C 用户交付可读源；默认仍带 `#line`，gcc 报错指回 `.sigil`。第 30 层补断言。
 
 * **架构收口**：前导宏从 `parser.py` 移到 `preamble.py`，版本号单点化到 `version.py`；新增第 34 层架构守卫（模块级依赖方向、无环、只允许标准库、总行数 ≤ 5200、parser ≤ 2600），以及 `packaging` CI job（干净环境 `pip install .` + `sigilc --version` + 端到端编译）。分层与预算写进 `ARCHITECTURE.md`。
+
+* **蹭 C 标准库**：`#include` 登记的原型扩展到 `string.h`（strcpy/strcat/strcmp/strchr/strstr/memmove…）、`ctype.h`（isalpha/isdigit/toupper…）、`stdlib.h`（atoi/rand/getenv）、`math.h`（sqrt/fabs/pow）、`stdio.h`（sprintf/snprintf/sscanf）。第 35 层用一个同时用到五类头文件的程序验证。
 
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 

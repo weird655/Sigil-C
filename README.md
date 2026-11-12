@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-191%20%2F%2034%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-192%20%2F%2035%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -309,6 +309,20 @@ o! p* u4 slot;            /* 指针必须 */
 
 ---
 
+### 标准库
+
+没有自己的标准库，直接用 C 的：
+
+```sigil
+#include <string.h>
+
+o! c1[8] buf;
+strcpy(a& buf[0], "hi");
+o! i4 n m, (i4)strlen(a& buf[0]);
+```
+
+`#include` 会登记常用原型：`<stdio.h>` / `<stdlib.h>` / `<string.h>` / `<ctype.h>` / `<math.h>` / `<assert.h>`。不在表里的函数手写原型（`i4 foo(...);`），或先用 `x!` 登记外部类型；`math.h` 在 Linux 链接时加 `-lm`。
+
 ## 54 个印记
 
 | 组 | 数量 | 印记 |
@@ -566,7 +580,7 @@ int main(void) {
 
 ## 测试矩阵
 
-191 项 / 34 层，每层一个主题：
+192 项 / 35 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -582,11 +596,12 @@ int main(void) {
 | 29–31 | framing / CLI 进程内 / 模糊测试 |
 | 32–33 | 属性测试 / LSP 全流程 |
 | 34 | 架构守卫（依赖方向 / 标准库 / 预算） |
+| 35 | libc 头文件原型登记 |
 
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 191 项 / 34 层，需要 gcc
+python3 test_matrix.py        # 192 项 / 35 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -594,7 +609,7 @@ python3 test_matrix.py        # 191 项 / 34 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 191 项测试
+python tools/check.py            # py_compile → ruff → mypy → 192 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -630,7 +645,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - 版本 **1.1**，已打 tag `v1.1`；语法冻结（v1.x 只加不改）。
-- 191 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 192 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（推 tag 会自动建；已有 tag 可在 Actions 里手动运行 `release` workflow）。
 

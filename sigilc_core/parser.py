@@ -939,6 +939,9 @@ class Parser:
         t_cstr = PointerType(ln, cl, BaseType(ln, cl, 'char', is_const=True))
         t_vptr = PointerType(ln, cl, BaseType(ln, cl, 'void'))
         t_cvptr = PointerType(ln, cl, BaseType(ln, cl, 'void', is_const=True))
+        t_buf = PointerType(ln, cl, BaseType(ln, cl, 'char'))
+        t_u32 = BaseType(ln, cl, 'uint32_t')
+        t_double = BaseType(ln, cl, 'double')
 
         def reg_fn(name: str, params: List[TypeNode], ret: TypeNode, variadic: bool = False):
             if name not in self.scopes[0]:
@@ -948,6 +951,9 @@ class Parser:
 
         if '<stdio.h>' in txt:
             reg_fn('printf', [t_cstr], t_int, variadic=True)
+            reg_fn('sprintf', [t_buf, t_cstr], t_int, variadic=True)
+            reg_fn('snprintf', [t_buf, t_size, t_cstr], t_int, variadic=True)
+            reg_fn('sscanf', [t_cstr, t_cstr], t_int, variadic=True)
             reg_fn('puts', [t_cstr], t_int)
             reg_fn('putchar', [t_int], t_int)
         if '<stdlib.h>' in txt:
@@ -956,11 +962,34 @@ class Parser:
             reg_fn('free', [t_vptr], t_void)
             reg_fn('exit', [t_int], t_void)
             reg_fn('abort', [], t_void)
+            reg_fn('atoi', [t_cstr], t_int)
+            reg_fn('rand', [], t_int)
+            reg_fn('srand', [t_u32], t_void)
+            reg_fn('getenv', [t_cstr], t_buf)
         if '<string.h>' in txt:
             reg_fn('memcpy', [t_vptr, t_cvptr, t_size], t_vptr)
+            reg_fn('memmove', [t_vptr, t_cvptr, t_size], t_vptr)
             reg_fn('memset', [t_vptr, t_int, t_size], t_vptr)
             reg_fn('memcmp', [t_cvptr, t_cvptr, t_size], t_int)
             reg_fn('strlen', [t_cstr], t_size)
+            reg_fn('strcpy', [t_buf, t_cstr], t_buf)
+            reg_fn('strncpy', [t_buf, t_cstr, t_size], t_buf)
+            reg_fn('strcat', [t_buf, t_cstr], t_buf)
+            reg_fn('strcmp', [t_cstr, t_cstr], t_int)
+            reg_fn('strncmp', [t_cstr, t_cstr, t_size], t_int)
+            reg_fn('strchr', [t_cstr, t_int], t_buf)
+            reg_fn('strrchr', [t_cstr, t_int], t_buf)
+            reg_fn('strstr', [t_cstr, t_cstr], t_buf)
+        if '<ctype.h>' in txt:
+            for name in ('isalnum', 'isalpha', 'isdigit', 'islower', 'isspace',
+                         'isupper', 'isxdigit'):
+                reg_fn(name, [t_int], t_int)
+            reg_fn('tolower', [t_int], t_int)
+            reg_fn('toupper', [t_int], t_int)
+        if '<math.h>' in txt:
+            reg_fn('sqrt', [t_double], t_double)
+            reg_fn('fabs', [t_double], t_double)
+            reg_fn('pow', [t_double, t_double], t_double)
         if '<assert.h>' in txt:
             reg_fn('assert', [t_int], t_void)
 

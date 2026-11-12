@@ -2023,12 +2023,40 @@ int main(void) {
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
+    # Layer 35: libc headers register prototypes
+    def test_libc_builtins():
+        src = """#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+
+i4 main(v.) {
+    o! c1[8] buf;
+    strcpy(a& buf[0], "hi");
+    o! i4 n m, (i4)strlen(a& buf[0]);
+    o! i4 c m, toupper('a');
+    o! i4 v m, atoi("42");
+    o! f8 s m, sqrt(9.0);
+    printf("%d %d %d %d %s\\n", n, c, v, (i4)s, buf);
+    r; 0;
+}
+"""
+        with open("libc.c", "w") as f:
+            f.write(compile_source(src, "libc.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-c",
+             "libc.c", "-o", "libc.o"],
+            check=True)
+
+    assert_ok("35. libc", "printf/strlen/strcpy/atoi/toupper/sqrt are typed from headers", test_libc_builtins)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 34-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 35-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
