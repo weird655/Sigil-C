@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import os
+import sys
+import tempfile
 import subprocess
 from sigilc import (
     Lexer, Parser, CodeGenerator, compile_source, compile_header, check_source,
@@ -1608,12 +1610,32 @@ int main(void) {
 
     assert_ok("20. pool", "pool: p* chains, const split, c@ p* pinned slot, o! entities", test_example_pool)
 
+    # Layer 21: --build links a directory of .sigil files
+    def test_build_mode():
+        work = tempfile.mkdtemp(prefix="sigil-build-")
+        src_dir = os.path.join(work, "src")
+        os.makedirs(src_dir)
+        with open(os.path.join(src_dir, "a.sigil"), "w") as f:
+            f.write("i4 triple(i4 x) { r; x * 3; }\n")
+        with open(os.path.join(src_dir, "b.sigil"), "w") as f:
+            f.write('#include <stdio.h>\ni4 triple(i4 x);\ni4 main(v.) { printf("%d\\n", triple(7)); r; 0; }\n')
+        exe = os.path.join(work, "app")
+        r = subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+             "--build", src_dir, "-o", exe, "--run"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "21" in r.stdout, r.stdout
+        assert os.path.exists(os.path.join(src_dir, ".sigil-build", "a.c"))
+
+    assert_ok("21. build", "--build transpiles a directory and links the results", test_build_mode)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 20-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 21-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

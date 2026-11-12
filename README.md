@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-174%20%2F%2020%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-175%20%2F%2021%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -47,6 +47,32 @@ area(4 x 6) = 24
 ```
 
 ---
+
+## 工具链
+
+```bash
+# 单文件：转译 + 编译
+python3 sigilc.py app.sigil -o app.c
+gcc -std=c99 -Wall -Wextra -Werror -pedantic app.c -o app
+
+# 多文件：转译目录下所有 .sigil，再链接成一个可执行文件
+python3 sigilc.py --build src -o app --run
+#   src/a.sigil -> src/.sigil-build/a.c
+#   gcc -std=c99 ... a.c b.c -o app
+```
+
+`--build` 的其他开关：`--cc clang` 换编译器、`--cflags "-std=c99 -O2"` 换旗标、
+`--bounds-check` / `--define` / `--prelude` 会透传给每个文件。
+
+装成命令（可选）：
+
+```bash
+pip install -e .
+sigilc --build src -o app --run
+```
+
+编辑器：`editors/vscode/` 是最小 VS Code 语法扩展（`.sigil` 高亮、注释与括号配置），
+把它复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.1.0` 后重启即可。
 
 ## 它挡什么
 
@@ -329,7 +355,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 174 项 / 20 层，需要 gcc
+python3 test_matrix.py        # 175 项 / 21 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。

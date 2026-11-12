@@ -29,3 +29,10 @@ diff_bin.exe
 ubsan_runner.c
 ubsan_bin
 ubsan_bin.exe
+
+# --build 产物
+.sigil-build/
+# Python 打包
+build/
+dist/
+*.egg-info/

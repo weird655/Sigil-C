@@ -1,0 +1,79 @@
+{
+  "name": "Sigil-C",
+  "scopeName": "source.sigil",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#preprocessor" },
+    { "include": "#strings" },
+    { "include": "#characters" },
+    { "include": "#numbers" },
+    { "include": "#control" },
+    { "include": "#declaration" },
+    { "include": "#pointer" },
+    { "include": "#builtin-type" },
+    { "include": "#assignment" },
+    { "include": "#operator" },
+    { "include": "#literal" },
+    { "include": "#function-call" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "name": "comment.line.double-slash.sigil", "match": "//.*$" },
+        { "name": "comment.block.sigil", "begin": "/\\*", "end": "\\*/" }
+      ]
+    },
+    "preprocessor": {
+      "name": "meta.preprocessor.sigil",
+      "match": "^\\s*#.*$"
+    },
+    "strings": {
+      "name": "string.quoted.double.sigil",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.sigil", "match": "\\\\." }
+      ]
+    },
+    "characters": {
+      "name": "string.quoted.single.sigil",
+      "match": "'(\\\\.|[^'\\\\])'"
+    },
+    "numbers": {
+      "name": "constant.numeric.sigil",
+      "match": "\\b(0[xX][0-9a-fA-F]+|0[bB][01]+|0[0-7]*|[0-9]+)([uUlL]*)\\b"
+    },
+    "control": {
+      "name": "keyword.control.sigil",
+      "match": "(?<![A-Za-z0-9_&;])(?:i\\?|e:|w~|f~|d~|s\\?|k:|d:|r;|b!|c\\^)(?![A-Za-z0-9_])"
+    },
+    "declaration": {
+      "name": "keyword.other.declaration.sigil",
+      "match": "(?<![A-Za-z0-9_])(?:o!|s@|a@|i@|x!|t!|g!|l!|w!|a!\\d+)(?![A-Za-z0-9_])"
+    },
+    "pointer": {
+      "name": "storage.type.pointer.sigil",
+      "match": "(?<![A-Za-z0-9_])(?:p\\*|c@|v@|r@|a&|f\\^|b\\.|v\\.|z\\?|g\\?)(?![A-Za-z0-9_])"
+    },
+    "builtin-type": {
+      "name": "storage.type.builtin.sigil",
+      "match": "\\b(?:i1|i2|i4|i8|u1|u2|u4|u8|f4|f8|c1|size_t|ptrdiff_t|va_list)\\b"
+    },
+    "assignment": {
+      "name": "keyword.operator.assignment.sigil",
+      "match": "(?<![A-Za-z0-9_])m[,\\+\\-\\*/](?![A-Za-z0-9_])"
+    },
+    "operator": {
+      "name": "keyword.operator.sigil",
+      "match": "(?:=\\?|!\\?|&\\.|\\|\\.|!\\.|\\|\\^|&\\^|\\^\\^|~\\^|->|<<|>>|<=|>=)"
+    },
+    "literal": {
+      "name": "constant.language.sigil",
+      "match": "\\b(?:true|false|NULL)\\b"
+    },
+    "function-call": {
+      "name": "entity.name.function.sigil",
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()"
+    }
+  }
+}

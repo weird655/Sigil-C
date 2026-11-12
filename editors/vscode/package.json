@@ -1,0 +1,26 @@
+{
+  "name": "sigil-c",
+  "displayName": "Sigil-C",
+  "description": "Syntax highlighting for Sigil-C (.sigil)",
+  "version": "1.1.0",
+  "publisher": "weird655",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "sigil",
+        "aliases": ["Sigil-C", "sigil"],
+        "extensions": [".sigil"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sigil",
+        "scopeName": "source.sigil",
+        "path": "./sigil.tmLanguage.json"
+      }
+    ]
+  }
+}

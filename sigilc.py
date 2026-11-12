@@ -6,6 +6,7 @@ Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer 
 
 import sys
 import os
+import subprocess
 import re
 import argparse
 from dataclasses import dataclass, field
@@ -3638,14 +3639,76 @@ def _print_error(exc: Exception, fname: str, src: str) -> None:
     print(f"  {line_no:>4} | {text}", file=sys.stderr)
     print(f"       | {' ' * max(0, col - 1)}^", file=sys.stderr)
 
+def _parse_defines(items: List[str]) -> Optional[Dict[str, str]]:
+    defines: Dict[str, str] = {}
+    for item in items:
+        if "=" not in item:
+            print(f"error: --define expects NAME=VALUE, got '{item}'", file=sys.stderr)
+            return None
+        d_name, d_value = item.split("=", 1)
+        defines[d_name.strip()] = d_value.strip()
+    return defines
+
+
+def _collect_sources(root: str) -> List[str]:
+    found: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = sorted(d for d in dirnames if d not in ('.git', '.sigil-build'))
+        for name in sorted(filenames):
+            if name.endswith(".sigil"):
+                found.append(os.path.join(dirpath, name))
+    return found
+
+
+def _build_project(args, defines: Dict[str, str]) -> int:
+    """把目录下所有 .sigil 转译到 .sigil-build/，再用 gcc 链接成一个可执行文件。"""
+    root = args.build
+    sources = _collect_sources(root)
+    if not sources:
+        print(f"error: no .sigil files under '{root}'", file=sys.stderr)
+        return 1
+
+    out_dir = os.path.join(root, ".sigil-build")
+    c_paths: List[str] = []
+    for src_path in sources:
+        rel = os.path.relpath(src_path, root)
+        c_path = os.path.join(out_dir, os.path.splitext(rel)[0] + ".c")
+        os.makedirs(os.path.dirname(c_path) or out_dir, exist_ok=True)
+        with open(src_path, "r", encoding="utf-8") as f:
+            src = f.read()
+        try:
+            c_src = compile_source(src, rel, prelude=args.prelude,
+                                   bounds_check=args.bounds_check, defines=defines)
+        except (LexerError, ParseError, SemanticError) as e:
+            _print_error(e, rel, src)
+            return 1
+        with open(c_path, "w", encoding="utf-8") as f:
+            f.write(c_src)
+        print(f"Transpile {src_path} -> {c_path}")
+        c_paths.append(c_path)
+
+    exe = args.output_opt or args.output or "a.out"
+    if os.name == "nt" and not exe.lower().endswith(".exe"):
+        exe += ".exe"
+    cmd = [args.cc] + args.cflags.split() + c_paths + ["-o", exe]
+    print("Link      " + " ".join(cmd))
+    rc = subprocess.run(cmd).returncode
+    if rc != 0:
+        return rc
+    print(f"Built     {exe}")
+    if args.run:
+        return subprocess.run([os.path.abspath(exe)]).returncode
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         prog="sigilc.py",
-        description="Sigil-C v1.1 — transpile .sigil sources to ISO C99",
+        description="Sigil-C v1.1 - transpile .sigil sources to ISO C99",
     )
-    ap.add_argument("input", help="input .sigil source file")
+    ap.add_argument("input", nargs="?", help="input .sigil source file")
     ap.add_argument("output", nargs="?", help="output .c path (default: <input>.c)")
-    ap.add_argument("-o", "--output", dest="output_opt", metavar="PATH", help="output .c path")
+    ap.add_argument("-o", "--output", dest="output_opt", metavar="PATH", help="output path")
     ap.add_argument("--emit-header", action="store_true",
                     help="also emit a C header next to the output (same basename, .h)")
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
@@ -3658,22 +3721,30 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
+    ap.add_argument("--build", metavar="DIR", nargs="?", const=".", default=None,
+                    help="transpile every .sigil under DIR and link them into one executable")
+    ap.add_argument("--run", action="store_true", help="with --build: run the executable afterwards")
+    ap.add_argument("--cc", default="gcc", help="C compiler used by --build (default: gcc)")
+    ap.add_argument("--cflags", default="-std=c99 -Wall -Wextra -Werror -pedantic",
+                    help="compiler flags used by --build")
     ap.add_argument("--version", action="version", version="Sigil-C 1.1")
     args = ap.parse_args(argv)
+
+    defines = _parse_defines(args.define)
+    if defines is None:
+        return 2
+
+    if args.build is not None:
+        return _build_project(args, defines)
+
+    if not args.input:
+        ap.error("input is required unless --build DIR is given")
 
     in_path = args.input
     out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".c")
     with open(in_path, "r", encoding="utf-8") as f:
         src = f.read()
     fname = os.path.basename(in_path)
-
-    defines: Dict[str, str] = {}
-    for item in args.define:
-        if "=" not in item:
-            print(f"error: --define expects NAME=VALUE, got '{item}'", file=sys.stderr)
-            return 2
-        d_name, d_value = item.split("=", 1)
-        defines[d_name.strip()] = d_value.strip()
 
     if args.emit_prelude:
         with open(args.emit_prelude, "w", encoding="utf-8") as f:
@@ -3703,9 +3774,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     return 0
 
-if __name__ == "__main__":
+
+def cli() -> None:
     try:
         sys.exit(main())
     except (LexerError, ParseError, SemanticError) as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    cli()
