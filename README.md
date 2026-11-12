@@ -1,8 +1,8 @@
 # Sigil-C（印记-C）
 
-**把数据流写在字面上的 C。**
+一个小实验项目：把 `.sigil` 转译成 ISO C99。52 个双字符记号，外加一些编译期检查。
 
-52 个双字符记号，每个记号只说一件事：写操作带牌（`m`），指针带来源，越界与悬垂在编译前拦下。
+> 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
 [![tests](https://img.shields.io/badge/tests-174%20%2F%2020%20layers-brightgreen)](test_matrix.py)
