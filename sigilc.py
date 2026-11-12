@@ -6,6 +6,7 @@ Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer 
 
 import sys
 import os
+import json
 import subprocess
 import re
 import argparse
@@ -3779,7 +3780,50 @@ def format_source(src: str) -> str:
     return text + ("\n" if src.endswith("\n") else "")
 
 
-def _check_targets(target: str, defines: Dict[str, str]) -> int:
+_INIT_MAIN = """#include <stdio.h>
+
+/* 由 `sigilc.py --init` 生成 */
+
+i4 main(v.) {
+    printf("hello, sigil\\n");
+    r; 0;
+}
+"""
+
+_INIT_README = """# {name}
+
+用 Sigil-C 写的小项目。
+
+```bash
+python3 sigilc.py --build src -o app --run
+```
+"""
+
+
+def _init_project(target: str, force: bool) -> int:
+    """生成一个最小可运行工程：src/main.sigil + README + .gitignore。"""
+    files = {
+        os.path.join(target, "src", "main.sigil"): _INIT_MAIN,
+        os.path.join(target, "README.md"): _INIT_README.format(name=os.path.basename(os.path.abspath(target))),
+        os.path.join(target, ".gitignore"): ".sigil-build/\n",
+    }
+    if not force:
+        existing = [path for path in files if os.path.exists(path)]
+        if existing:
+            print("error: files already exist (use --force to overwrite): " + ", ".join(existing), file=sys.stderr)
+            return 1
+    for path, content in files.items():
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+        print(f"Created  {path}")
+    print(f"Next     python3 sigilc.py --build {os.path.join(target, 'src')} -o app --run")
+    return 0
+
+
+def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False) -> int:
     """对单个文件或目录下所有 .sigil 做词法/语法/语义检查，不写文件。"""
     if os.path.isdir(target):
         files = _collect_sources(target)
@@ -3792,7 +3836,7 @@ def _check_targets(target: str, defines: Dict[str, str]) -> int:
         print(f"error: no .sigil files under '{target}'", file=sys.stderr)
         return 1
 
-    failed = 0
+    failures = []
     for path in files:
         with open(path, "r", encoding="utf-8") as f:
             src = f.read()
@@ -3800,10 +3844,32 @@ def _check_targets(target: str, defines: Dict[str, str]) -> int:
         try:
             check_source(src, rel, defines=defines)
         except (LexerError, ParseError, SemanticError) as e:
-            _print_error(e, rel, src)
-            failed += 1
-    if failed:
-        print(f"{failed}/{len(files)} file(s) failed", file=sys.stderr)
+            failures.append((rel, src, e))
+
+    if json_out:
+        diagnostics = []
+        for rel, _src, exc in failures:
+            msg = str(exc)
+            m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
+            if m:
+                diagnostics.append({
+                    "file": os.path.abspath(m.group(1)) if os.path.exists(m.group(1)) else m.group(1),
+                    "line": int(m.group(2)),
+                    "column": int(m.group(3)),
+                    "severity": "error",
+                    "message": m.group(4),
+                })
+            else:
+                diagnostics.append({"file": os.path.abspath(path), "line": 0, "column": 0,
+                                    "severity": "error", "message": msg})
+        print(json.dumps({"ok": not failures, "checked": len(files),
+                          "diagnostics": diagnostics}, ensure_ascii=False))
+        return 1 if failures else 0
+
+    for rel, src, exc in failures:
+        _print_error(exc, rel, src)
+    if failures:
+        print(f"{len(failures)}/{len(files)} file(s) failed", file=sys.stderr)
         return 1
     print(f"Checked {len(files)} file(s): OK")
     return 0
@@ -3914,6 +3980,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         return rc
     print(f"Built     {exe}")
     if args.run:
+        sys.stdout.flush()
         return subprocess.run([os.path.abspath(exe)]).returncode
     return 0
 
@@ -3938,6 +4005,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
+    ap.add_argument("--init", metavar="DIR", nargs="?", const=".", default=None,
+                    help="scaffold a minimal project in DIR")
+    ap.add_argument("--force", action="store_true", help="with --init: overwrite existing files")
+    ap.add_argument("--json", action="store_true", help="with --check: emit JSON diagnostics")
     ap.add_argument("--fmt", metavar="PATH", nargs="?", const=".", default=None,
                     help="format a .sigil file (stdout) or every .sigil under PATH with --write")
     ap.add_argument("--write", action="store_true", help="with --fmt: rewrite files in place")
@@ -3956,6 +4027,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if defines is None:
         return 2
 
+    if args.init is not None:
+        return _init_project(args.init, args.force)
+
     if args.build is not None:
         if args.header:
             print("error: --header is not supported with --build; use --emit-header", file=sys.stderr)
@@ -3969,7 +4043,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ap.error("input is required unless --build DIR is given")
 
     if args.check:
-        return _check_targets(args.input, defines)
+        return _check_targets(args.input, defines, json_out=args.json)
 
     in_path = args.input
     out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".c")

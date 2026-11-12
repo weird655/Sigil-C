@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import sys
 import tempfile
@@ -1711,12 +1712,45 @@ int main(void) {
 
     assert_ok("24. build", "--build --emit-header writes headers and keeps s@ internal", test_build_headers)
 
+    # Layer 25: --init scaffold and --check --json diagnostics
+    def test_init_project():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py")
+        work = tempfile.mkdtemp(prefix="sigil-init-")
+        proj = os.path.join(work, "demo")
+        r = subprocess.run([sys.executable, script, "--init", proj], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert os.path.exists(os.path.join(proj, "src", "main.sigil"))
+
+        exe = os.path.join(work, "app")
+        r = subprocess.run([sys.executable, script, "--build", os.path.join(proj, "src"), "-o", exe, "--run"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "hello, sigil" in r.stdout, r.stdout
+
+    assert_ok("25. init", "--init scaffolds a project that builds and runs", test_init_project)
+
+    def test_check_json():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py")
+        work = tempfile.mkdtemp(prefix="sigil-json-")
+        bad = os.path.join(work, "bad.sigil")
+        with open(bad, "w") as f:
+            f.write("i4 f(v.) { r; nope; }\n")
+        r = subprocess.run([sys.executable, script, "--check", bad, "--json"], capture_output=True, text=True)
+        assert r.returncode == 1, (r.stdout, r.stderr)
+        data = json.loads(r.stdout)
+        assert data["ok"] is False and data["checked"] == 1, data
+        diag = data["diagnostics"][0]
+        assert diag["line"] == 1 and diag["column"] >= 1, diag
+        assert "nope" in diag["message"], diag
+
+    assert_ok("25. init", "--check --json emits machine-readable diagnostics", test_check_json)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 24-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 25-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
