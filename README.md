@@ -1,6 +1,8 @@
 # Sigil-C（印记-C）
 
-把 C 写成**从左往右读**的样子。编译到 ISO C99，越界、悬垂、逃逸挡在编译前。
+**把数据流写在字面上的 C。**
+
+52 个双字符记号，每个记号只说一件事：写操作带牌（`m`），指针带来源，越界与悬垂在编译前拦下。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
 [![tests](https://img.shields.io/badge/tests-173%20%2F%2019%20layers-brightgreen)](test_matrix.py)
@@ -99,6 +101,8 @@ int32_t main(void) {
 }
 ```
 
+书写规格只有一条主线：**空格即断句**——`p* u4` 是「指针 + 类型」，`p * q` 是乘法。完整规矩见 [`SYNTAX.md`](SYNTAX.md) §0.8。
+
 `o!` 是对象声明前缀；**基类型直接开头时可省**（`u4 x;`），用户定义类型与指针仍必须写：
 
 ```sigil
@@ -194,7 +198,7 @@ int main(void) {
 | 文件 | 内容 |
 |---|---|
 | [`TUTORIAL.md`](TUTORIAL.md) | 教程：软件 / 嵌入 / 硬件三个方向，每章一个可运行程序 |
-| [`SYNTAX.md`](SYNTAX.md) | 52 个印记的闭集清单、类型绑定、运算符优先级 |
+| [`SYNTAX.md`](SYNTAX.md) | 52 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
 

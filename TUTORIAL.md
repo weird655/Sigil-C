@@ -59,6 +59,7 @@ area(4 x 6) = 24
 - `v.` 是空类型，也是空参数列表——`main(v.)` 就是 `int main(void)`
 - `r;` 自带分号；空返回要写 `r; ;`
 - `o!` 在基类型直接开头时可省（`u4 w m, 4;`）；用户定义类型与指针仍必须写
+- 空格即断句：`p* u4` 是指针，`p * q` 是乘法。完整规矩见 [`SYNTAX.md`](SYNTAX.md) §0.8
 
 📄 [`examples/tutorial/01_hello.sigil`](examples/tutorial/01_hello.sigil)
 
