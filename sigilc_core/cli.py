@@ -18,13 +18,14 @@ from .api import (
 )
 from .lexer import LexerError
 from .nodes import ParseError, SemanticError
-from .parser import C99_PRELUDE
+from .preamble import C99_PRELUDE
+from .version import __version__
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(
         prog="sigilc.py",
-        description="Sigil-C v1.1 - transpile .sigil sources to ISO C99",
+        description=f"Sigil-C v{__version__} - transpile .sigil sources to ISO C99",
     )
     ap.add_argument("input", nargs="?", help="input .sigil source file")
     ap.add_argument("output", nargs="?", help="output .c path (default: <input>.c)")
@@ -62,7 +63,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--no-line", action="store_true",
                     help="omit #line directives so the generated C reads like ordinary C")
 
-    ap.add_argument("--version", action="version", version="Sigil-C 1.1")
+    ap.add_argument("--version", action="version", version=f"Sigil-C {__version__}")
     args = ap.parse_args(argv)
 
     defines = _parse_defines(args.define)

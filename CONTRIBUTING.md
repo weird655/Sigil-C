@@ -20,6 +20,8 @@ python tools/bench.py --runs 20 --max-ms 500  # 性能基线（CI 卡 500ms）
 
 CI 在 Ubuntu（py3.10 / 3.12）与 Windows 上跑同样的步骤。提交前本地必须全绿。
 
+第 34 层是架构守卫：模块级依赖方向、只允许标准库、总行数与 `parser.py` 行数预算；分层说明见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+
 ## 测试数字只有一处来源
 
 测试数 = `test_matrix.py` 的输出（当前 186 项 / 29 层）。README、CHANGELOG 只是引用，不要手改数字；CI 的步骤名也不带数字。

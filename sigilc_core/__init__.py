@@ -73,7 +73,8 @@ from .nodes import (
     WhileStmt,
     emit_expr,
 )
-from .parser import C99_HEADER, C99_HEADER_BODY, C99_PRELUDE, Parser
+from .parser import Parser
+from .preamble import C99_HEADER, C99_HEADER_BODY, C99_PRELUDE
 from .type_system import (
     ArrayType,
     BaseType,
@@ -92,8 +93,10 @@ from .type_system import (
     with_const,
     with_volatile,
 )
+from .version import __version__
 
 __all__ = [
+    "__version__",
     "ATTR_FILE_SCOPE_ONLY",
     "ATTR_INT_LIST",
     "ATTR_NOARGS",

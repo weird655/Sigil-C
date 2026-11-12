@@ -28,7 +28,7 @@ from .nodes import (
     WhileStmt,
     emit_expr,
 )
-from .parser import C99_HEADER, C99_HEADER_BODY
+from .preamble import C99_HEADER, C99_HEADER_BODY
 from .type_system import format_c_declarator
 
 

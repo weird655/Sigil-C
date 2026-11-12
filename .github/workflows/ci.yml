@@ -44,6 +44,29 @@ jobs:
           gcc -std=c99 -Wall -Wextra -Werror -pedantic /tmp/vm.c -o /tmp/vm
           /tmp/vm | tail -3
 
+  packaging:
+    name: packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install the package into a clean environment
+        run: python -m pip install .
+
+      - name: Console script works
+        run: sigilc --version
+
+      - name: End-to-end from the installed command
+        run: |
+          printf '#include <stdio.h>\n\ni4 main(v.) { printf("ok\\n"); r; 0; }\n' > /tmp/hello.sigil
+          sigilc /tmp/hello.sigil -o /tmp/hello.c --no-line
+          gcc -std=c99 -Wall -Wextra -Werror -pedantic /tmp/hello.c -o /tmp/hello
+          /tmp/hello | grep -q ok
+
   quality:
     name: quality
     runs-on: ubuntu-latest

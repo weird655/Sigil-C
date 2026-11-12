@@ -1972,12 +1972,63 @@ int main(void) {
 
     assert_ok("33. lsp-loop", "a full stdio session handles open/change/completion/symbols/exit", test_lsp_loop)
 
+    # Layer 34: architecture guards (dependency direction, stdlib only, budget)
+    def test_architecture():
+        import ast as _ast
+
+        import sigilc_core
+
+        allowed = {
+            "lexer": set(),
+            "version": set(),
+            "preamble": {"version"},
+            "type_system": {"lexer"},
+            "nodes": {"type_system"},
+            "parser": {"lexer", "nodes", "type_system"},
+            "codegen": {"nodes", "preamble", "type_system"},
+            "api": {"codegen", "lexer", "nodes", "parser"},
+            "cli": {"api", "lexer", "nodes", "preamble", "version"},
+            "__init__": {"api", "cli", "codegen", "lexer", "nodes", "parser",
+                         "preamble", "type_system", "version"},
+        }
+        stdlib = set(sys.stdlib_module_names)
+        pkg = os.path.dirname(os.path.abspath(sigilc_core.__file__))
+        sizes = {}
+        for name, deps in allowed.items():
+            path = os.path.join(pkg, "__init__.py" if name == "__init__" else name + ".py")
+            with open(path, encoding="utf-8") as f:
+                src = f.read()
+            sizes[name] = len(src.splitlines())
+            tree = _ast.parse(src)
+            for node in tree.body:  # 只看模块级 import；函数内的延迟导入单独说明
+                if isinstance(node, _ast.Import):
+                    for alias in node.names:
+                        assert alias.name.split(".")[0] in stdlib, (name, alias.name)
+                elif isinstance(node, _ast.ImportFrom):
+                    if node.level == 1:
+                        assert node.module in deps, (name, node.module, deps)
+                    else:
+                        assert (node.module or "").split(".")[0] in stdlib, (name, node.module)
+
+        # 无环：按依赖顺序排列，模块只能指向自己之前的模块
+        order = ["version", "lexer", "preamble", "type_system", "nodes",
+                 "parser", "codegen", "api", "cli", "__init__"]
+        for name in order:
+            for dep in allowed[name]:
+                assert order.index(dep) < order.index(name), (name, dep)
+
+        total = sum(sizes.values())
+        assert total <= 5200, (total, sizes)
+        assert sizes["parser"] <= 2600, sizes["parser"]
+
+    assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 33-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 34-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
