@@ -3,13 +3,22 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import tempfile
-import subprocess
+
 from sigilc import (
-    Lexer, Parser, CodeGenerator, compile_source, compile_header, check_source,
-    LexerError, ParseError, SemanticError, format_c_declarator
+    Lexer,
+    LexerError,
+    ParseError,
+    Parser,
+    SemanticError,
+    check_source,
+    compile_header,
+    compile_source,
+    format_c_declarator,
 )
+
 
 def run_test_matrix():
     passed = 0
@@ -1338,6 +1347,7 @@ int main(void) {
 
     def test_error_snippet():
         import sys as _sys
+
         import sigilc as _sigilc
         with open("snip.sigil", "w") as f:
             f.write("i4 main(v.) { o! u4[3] a m, { 1, 2, 3 }; r; (i4)a[5]; }")
@@ -1819,6 +1829,7 @@ int main(void) {
     # Layer 29: LSP JSON-RPC framing
     def test_lsp_framing():
         import io as _io
+
         import sigilc as _sigilc
         buf = _io.BytesIO()
         _sigilc._lsp_write(buf, {"jsonrpc": "2.0", "id": 7, "result": None})

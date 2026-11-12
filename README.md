@@ -496,6 +496,7 @@ int main(void) {
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 54 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+| 贡献指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 环境、一键检查、加印记清单、发布流程 |
 
 > 文件名是英文，第一列是中文名——按中文找即可。
 
@@ -542,6 +543,13 @@ python3 test_matrix.py        # 186 项 / 29 层，需要 gcc
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
 
+本地一键质量门：
+
+```bash
+python tools/check.py            # py_compile → ruff → mypy → 186 项测试
+python tools/check.py --coverage # 附覆盖率（门槛 80%）
+```
+
 CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 `windows-latest` job 做 `py_compile`、`--check examples`、转译 VM 示例，并在有 gcc 时编译运行：
 
 [`ci.yml`](.github/workflows/ci.yml) · [最近一次运行](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
@@ -571,7 +579,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - 版本 **1.1**，已打 tag `v1.1`；语法冻结（v1.x 只加不改）。
-- 186 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过。
+- 186 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 80%。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（tag 已推，Release 页需在网页手动创建）。
 

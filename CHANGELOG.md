@@ -44,6 +44,8 @@
 
 * **许可证**：代码改为 **MIT**（`LICENSE`），文档保留 **CC BY 4.0**（`LICENSE-CC-BY-4.0`）；`pyproject.toml` 同步。
 
+* **质量门**：`ruff`（E/F/W/I，忽略中文长行与解析器紧凑单行）+ `mypy` 零错误；覆盖率门槛 80%（`coverage report` 在 CI 里卡）；`python tools/check.py` 一条命令跑完 py_compile / lint / types / tests。新增 `quality` CI job、`CONTRIBUTING.md`、issue / PR 模板与 tag 触发的 `release.yml`。
+
 ## [v1.0.0] - 2026-11-11（破坏兼容的语法大修）
 
 * **破坏性语法变更**：复合赋值印记统一使用 `m` 词根：`m+` (`+=`)、`m-` (`-=`)、`m*` (`*=`)、`m/` (`/=`)；旧写法 `a+`、`s-`、`d/` 不再接受。迁移时分别替换为 `m+`、`m-`、`m/`，`m*` 保持不变。README 已加入迁移提示。

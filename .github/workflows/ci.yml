@@ -41,6 +41,30 @@ jobs:
           gcc -std=c99 -Wall -Wextra -Werror -pedantic /tmp/vm.c -o /tmp/vm
           /tmp/vm | tail -3
 
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dev tools
+        run: python -m pip install --quiet ruff mypy coverage
+
+      - name: Lint (ruff)
+        run: ruff check sigilc.py test_matrix.py tools/check.py
+
+      - name: Types (mypy)
+        run: mypy sigilc.py
+
+      - name: Tests with coverage
+        run: |
+          coverage run test_matrix.py
+          coverage report
+
   windows:
     name: windows-check
     runs-on: windows-latest

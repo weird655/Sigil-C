@@ -4,14 +4,14 @@ Sigil-C v1.1 Compiler
 Source -> DFA Lexer -> Recursive-Descent AST Parser -> Static Semantic Analyzer -> C99 Codegen
 """
 
-import sys
-import os
-import json
-import subprocess
-import re
 import argparse
+import json
+import os
+import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict, Set, NamedTuple
+from typing import Dict, List, NamedTuple, Optional, Set, Tuple
 
 # ============================================================================
 # 1. DFA Lexer
@@ -225,11 +225,11 @@ class Lexer:
                 bin_digits.append(self._advance())
             if not bin_digits:
                 raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid binary literal")
-            suffix = []
+            suffix_chars = []
             while self.pos < self.n and self._peek() in 'uUlL':
-                suffix.append(self._advance())
+                suffix_chars.append(self._advance())
             # 转换为标准 C99 十六进制字面量以保证 gcc -std=c99 -pedantic 零警告
-            buf.append(hex(int(''.join(bin_digits), 2)) + ''.join(suffix))
+            buf.append(hex(int(''.join(bin_digits), 2)) + ''.join(suffix_chars))
         else:
             starts_zero = (self._peek() == '0')
             while self.pos < self.n and self._peek().isdigit():
@@ -265,9 +265,9 @@ class Lexer:
 
         literal = ''.join(buf)
         if not is_float:
-            suffix = literal[len(literal.rstrip('uUlL')):]
-            if suffix not in VALID_INTEGER_SUFFIXES:
-                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid C99 integer suffix '{suffix}'")
+            suffix_text = literal[len(literal.rstrip('uUlL')):]
+            if suffix_text not in VALID_INTEGER_SUFFIXES:
+                raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid C99 integer suffix '{suffix_text}'")
 
         if self._peek() == '.' or self._peek().isalpha() or self._peek() == '_':
             raise LexerError(f"{self.filename}:{start_line}:{start_col}: Invalid trailing character '{self._peek()}' in number literal")
@@ -572,13 +572,13 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
     curr = t
     while True:
         if isinstance(curr, BaseType):
-            qualifiers = [q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled]
-            prefix = " ".join(qualifiers) + (" " if qualifiers else "")
+            qualifier_words = [q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled]
+            prefix = " ".join(qualifier_words) + (" " if qualifier_words else "")
             c_name = EXTERNAL_C_SPELLING.get(curr.c_name, curr.c_name)
             return f"{prefix}{c_name}" + (f" {inner}" if inner else "")
         elif isinstance(curr, PointerType):
-            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile"), (curr.is_restrict, "restrict")) if enabled)
-            ptr_str = f"* {qualifiers} {inner}" if qualifiers and inner else (f"* {qualifiers}" if qualifiers else f"*{inner}")
+            qualifier_text = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile"), (curr.is_restrict, "restrict")) if enabled)
+            ptr_str = f"* {qualifier_text} {inner}" if qualifier_text and inner else (f"* {qualifier_text}" if qualifier_text else f"*{inner}")
             if isinstance(curr.pointee, (ArrayType, FunctionPointerType)):
                 inner = f"({ptr_str.strip()})"
             else:
@@ -593,8 +593,8 @@ def format_c_declarator(t: TypeNode, var_name: str = "") -> str:
             if curr.is_variadic:
                 params_c.append("...")
             param_list_str = ", ".join(params_c) if params_c else "void"
-            qualifiers = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
-            qual = f"{qualifiers} " if qualifiers else ""
+            qualifier_text = " ".join(q for enabled, q in ((curr.is_const, "const"), (curr.is_volatile, "volatile")) if enabled)
+            qual = f"{qualifier_text} " if qualifier_text else ""
             fn_inner = f"(*{qual}{inner})({param_list_str})"
             return format_c_declarator(curr.return_type, fn_inner)
         else:
@@ -863,6 +863,7 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, SizeofExpr):
         if e.target_type is not None:
             return f"sizeof({format_c_declarator(e.target_type)})"
+        assert e.operand is not None
         return f"sizeof({emit_expr(e.operand)})"
     if isinstance(e, AlignofExpr):
         return f"SIGIL_ALIGNOF({format_c_declarator(e.target_type)})"
@@ -920,7 +921,7 @@ class Parser:
         self.enum_constants: Dict[str, int] = {}
         self.macro_consts: Dict[str, int] = {}
         # 指针来源：名字 -> (基对象, 元素个数, 相对基对象的偏移)
-        self.prov: Dict[str, Tuple[str, int, int]] = {}
+        self.prov: Dict[str, Prov] = {}
         self.local_objects: Set[str] = set()
         self.param_names: Set[str] = set()
         # 跨函数逃逸：函数名 -> 被写进全局的参数名
@@ -1628,9 +1629,12 @@ class Parser:
             for i, pt in enumerate(params):
                 if not (isinstance(pt, PointerType) and pt.is_restrict):
                     continue
-                if i >= len(provs) or provs[i][1] is None:
+                if i >= len(provs):
                     continue
-                base_i = provs[i][1].base
+                prov_i = provs[i][1]
+                if prov_i is None:
+                    continue
+                base_i = prov_i.base
                 for j, (_a2, p2) in enumerate(provs):
                     if j == i or p2 is None:
                         continue
@@ -1810,7 +1814,7 @@ class Parser:
                 outcomes |= self._statement_flow(stmt.else_branch)
             return outcomes
         if isinstance(stmt, SwitchStmt):
-            outcomes: Set[str] = set()
+            outcomes = set()
             has_default = any(case.value is None for case in stmt.cases)
             for start in range(len(stmt.cases)):
                 case_outcomes = {"fallthrough"}
@@ -1834,7 +1838,7 @@ class Parser:
                 except SemanticError:
                     cond_value = None
                 always_true = cond_value is not None and cond_value != 0
-            outcomes: Set[str] = set()
+            outcomes = set()
             if "return" in body_outcomes:
                 outcomes.add("return")
             if not always_true or "break" in body_outcomes:
@@ -2193,6 +2197,7 @@ class Parser:
                 w_tok = self._eat('INT_NUM')
                 width = self._attr_int_value(w_tok, w_tok.value)
                 self._check_bitfield_base(bf_tok, ft)
+                assert isinstance(ft, BaseType)
                 limit = BITFIELD_WIDTH[ft.c_name]
                 if width < 1 or width > limit:
                     raise SemanticError(
@@ -2291,6 +2296,7 @@ class Parser:
                 w_tok = self._eat('INT_NUM')
                 width = self._attr_int_value(w_tok, w_tok.value)
                 self._check_bitfield_base(bf_tok, ft)
+                assert isinstance(ft, BaseType)
                 limit = BITFIELD_WIDTH[ft.c_name]
                 if width < 1 or width > limit:
                     raise SemanticError(
@@ -2359,7 +2365,7 @@ class Parser:
         attrs = attrs or []
         self._validate_non_void_var(decl_type, name_tok)
         self._register_symbol(name_tok.value, decl_type, name_tok)
-        init_expr = None
+        init_expr: Optional[ExprNode] = None
         if self._cur().kind == 'OP_ASSIGN':
             op_tok = self._eat('OP_ASSIGN')
             if self._cur().kind == 'LBRACE':
@@ -2396,6 +2402,7 @@ class Parser:
                 dot_tok = self._eat('DOT')
                 fld_tok = self._eat('IDENT')
                 self._eat('OP_ASSIGN')
+                val: ExprNode
                 if self._cur().kind == 'LBRACE':
                     val = self.parse_brace_init()
                 else:
@@ -2430,6 +2437,9 @@ class Parser:
 
     def _check_brace_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
         if isinstance(target, ArrayType):
+            size_val = target.size_val
+            if size_val is None:
+                raise SemanticError(f"{self.filename}:{init.line}:{init.col}: Array initializer target has no fixed size")
             if any(isinstance(e, DesignatedInit) for e in init.elements):
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: Struct designators '.field m,' cannot initialize an array")
@@ -2440,20 +2450,20 @@ class Parser:
                         raise SemanticError(
                             f"{self.filename}:{elem.line}:{elem.col}: Cannot mix designated '[index] m,' and positional "
                             f"initializers in one list")
-                    if elem.index_val >= target.size_val:
+                    if elem.index_val >= size_val:
                         raise SemanticError(
                             f"{self.filename}:{elem.line}:{elem.col}: Array designator [{elem.index_val}] out of range "
-                            f"(size is {target.size_val})")
+                            f"(size is {size_val})")
                     if elem.index_val in seen_idx:
                         raise SemanticError(
                             f"{self.filename}:{elem.line}:{elem.col}: Duplicate array designator [{elem.index_val}]")
                     seen_idx.add(elem.index_val)
                     self._check_init_element(target.element_type, elem.value, name_tok)
                 return
-            if len(init.elements) > target.size_val:
+            if len(init.elements) > size_val:
                 raise SemanticError(
                     f"{self.filename}:{init.line}:{init.col}: Too many initializers for '{name_tok.value}': "
-                    f"{len(init.elements)} given, array holds {target.size_val}")
+                    f"{len(init.elements)} given, array holds {size_val}")
             for elem in init.elements:
                 self._check_init_element(target.element_type, elem, name_tok)
             return
@@ -2687,7 +2697,7 @@ class Parser:
             self._eat('KW_FOR')
             self._eat('LPAREN')
             self.scopes.append({})
-            init_stmt = None
+            init_stmt: Optional[StmtNode] = None
             if self._cur().kind != 'SEMI':
                 if self._cur().kind == 'KW_OBJECT':
                     self._eat('KW_OBJECT')
@@ -3575,6 +3585,7 @@ class CodeGenerator:
             if s.kind == 'start':
                 self._emit(f"va_start({emit_expr(s.ap)}, {s.last_name});", s.line, indent)
             elif s.kind == 'copy':
+                assert s.ap2 is not None
                 self._emit(f"va_copy({emit_expr(s.ap)}, {emit_expr(s.ap2)});", s.line, indent)
             else:
                 self._emit(f"va_end({emit_expr(s.ap)});", s.line, indent)
@@ -3925,7 +3936,7 @@ _LSP_SNIPPETS = {
 
 
 def _lsp_capabilities(completion_enabled: bool):
-    caps = {"textDocumentSync": 1, "documentSymbolProvider": True}
+    caps: Dict[str, object] = {"textDocumentSync": 1, "documentSymbolProvider": True}
     if completion_enabled:
         caps["completionProvider"] = {"triggerCharacters": [" "]}
     return caps
@@ -3933,7 +3944,7 @@ def _lsp_capabilities(completion_enabled: bool):
 
 def _lsp_completion_items(prefix: str = ""):
     """结构片段补全：补的是印记后面的形状，不是单个单词。"""
-    items = []
+    items: List[Dict[str, object]] = []
     for label in sorted(_LSP_SNIPPETS):
         insert, detail = _LSP_SNIPPETS[label]
         items.append({"label": label, "kind": 14, "detail": detail,
@@ -3943,7 +3954,7 @@ def _lsp_completion_items(prefix: str = ""):
     for name in ("true", "false", "NULL"):
         items.append({"label": name, "kind": 12, "detail": "literal"})
     if prefix:
-        items = [item for item in items if item["label"].startswith(prefix)]
+        items = [item for item in items if str(item["label"]).startswith(prefix)]
     return items
 
 

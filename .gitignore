@@ -36,3 +36,7 @@ ubsan_bin.exe
 build/
 dist/
 *.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

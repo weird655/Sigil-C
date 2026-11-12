@@ -22,3 +22,26 @@ sigil = "sigilc:cli"
 
 [tool.setuptools]
 py-modules = ["sigilc"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+# 中文注释按显示宽度算会普遍超过 88/120，长行不交给机器判；E701 是解析器里有意的紧凑单行
+ignore = ["E501", "E701"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["sigilc.py"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+source = ["sigilc"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_empty = true
