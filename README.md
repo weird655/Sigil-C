@@ -581,7 +581,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 - 版本 **1.1**，已打 tag `v1.1`；语法冻结（v1.x 只加不改）。
 - 186 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 80%。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建。
-- 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（tag 已推，Release 页需在网页手动创建）。
+- 未做：堆模型、完整头文件解析、跨文件分析、包管理、GitHub Release（推 tag 会自动建；已有 tag 可在 Actions 里手动运行 `release` workflow）。
 
 ## 版本策略
 
