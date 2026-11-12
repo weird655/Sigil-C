@@ -1889,6 +1889,12 @@ int main(void) {
         rc, out = call([src, "--bounds-check", "--emit-prelude", os.path.join(work, "prelude.h")])
         assert rc == 0 and os.path.exists(os.path.join(work, "prelude.h")), (rc, out)
 
+        no_line = os.path.join(work, "noline.c")
+        rc, out = call([src, "-o", no_line, "--no-line"])
+        assert rc == 0, (rc, out)
+        with open(no_line, encoding="utf-8") as f:
+            assert "#line" not in f.read()
+
     assert_ok("30. cli", "CLI modes run in-process and cover tooling branches", test_cli_in_process)
 
     # Layer 31: deterministic fuzz

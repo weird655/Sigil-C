@@ -14,12 +14,13 @@ from .parser import Parser
 
 
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
-                   bounds_check: bool = False, defines: Optional[Dict[str, str]] = None) -> str:
+                   bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
+                   line_directives: bool = True) -> str:
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename, defines).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
-                         cli_defines=defines).generate(ast)
+                         cli_defines=defines, line_directives=line_directives).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None) -> None:
     """词法 + 语法 + 静态语义检查，不产生任何输出。"""
@@ -589,7 +590,8 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             src = f.read()
         try:
             c_src = compile_source(src, rel, prelude=args.prelude,
-                                   bounds_check=args.bounds_check, defines=defines)
+                                   bounds_check=args.bounds_check, defines=defines,
+                                   line_directives=not args.no_line)
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, rel, src)
             return 1

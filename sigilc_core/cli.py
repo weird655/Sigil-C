@@ -59,6 +59,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--cc", default="gcc", help="C compiler used by --build (default: gcc)")
     ap.add_argument("--cflags", default="-std=c99 -Wall -Wextra -Werror -pedantic",
                     help="compiler flags used by --build")
+    ap.add_argument("--no-line", action="store_true",
+                    help="omit #line directives so the generated C reads like ordinary C")
+
     ap.add_argument("--version", action="version", version="Sigil-C 1.1")
     args = ap.parse_args(argv)
 
@@ -99,7 +102,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Prelude  {args.emit_prelude}")
 
     try:
-        c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check, defines=defines)
+        c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check,
+                               defines=defines, line_directives=not args.no_line)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(c_src)
         print(f"Compiled {in_path} -> {out_path}")

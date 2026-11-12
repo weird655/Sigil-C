@@ -35,8 +35,10 @@ from .type_system import format_c_declarator
 class CodeGenerator:
     def __init__(self, filename: str = "input.sigil", header_mode: bool = False,
                  prelude_include: Optional[str] = None, bounds_check: bool = False,
-                 cli_defines: Optional[Dict[str, str]] = None):
+                 cli_defines: Optional[Dict[str, str]] = None,
+                 line_directives: bool = True):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
+        self.line_directives = line_directives
         self.header_mode = header_mode
         self.prelude_include = prelude_include
         self.bounds_check = bounds_check
@@ -47,8 +49,10 @@ class CodeGenerator:
         pad = "    " * indent
         if self.header_mode:
             self.lines.append(f"{pad}{code}\n")
-        else:
+        elif self.line_directives:
             self.lines.append(f'#line {line} "{self.safe_filename}"\n{pad}{code}\n')
+        else:
+            self.lines.append(f"{pad}{code}\n")
 
     def _attrs_c(self, attrs: List[Attribute]) -> str:
         """属性列表 → 'SIGIL_ATTR(a, b(...))'；无属性时返回空串。"""
