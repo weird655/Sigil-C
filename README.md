@@ -36,7 +36,8 @@
 ```sigil
 #include <stdio.h>
 
-i4 main(v.) {
+i4 main(v.) 
+{
     printf("Hello, World\n");
     r; 0;
 }
