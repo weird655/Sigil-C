@@ -42,6 +42,6 @@ warn_unused_ignores = true
 source = ["sigilc"]
 
 [tool.coverage.report]
-fail_under = 83
+fail_under = 85
 show_missing = true
 skip_empty = true

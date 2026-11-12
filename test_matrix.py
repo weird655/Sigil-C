@@ -1902,12 +1902,75 @@ int main(void) {
 
     assert_ok("31. fuzz", "mutated sources only raise the three expected error types", test_fuzz)
 
+    # Layer 32: property-based generation (random valid programs -> gcc)
+    def test_propgen():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "propgen.py")
+        r = subprocess.run(
+            [sys.executable, script, "--count", "12", "--seed", "3"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "all compile" in r.stdout, r.stdout
+
+    assert_ok("32. propgen", "random well-typed programs transpile to C gcc accepts", test_propgen)
+
+    # Layer 33: the LSP loop itself (stdio JSON-RPC session)
+    def test_lsp_loop():
+        import io as _io
+        import sigilc as _sigilc
+
+        frames = _io.BytesIO()
+
+        def send(obj):
+            _sigilc._lsp_write(frames, obj)
+
+        uri = "file:///tmp/buf.sigil"
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}})
+        send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+        send({"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
+            "textDocument": {"uri": uri, "languageId": "sigil", "version": 1,
+                             "text": "i4 main(v.) { r; nope; }\n"}}})
+        send({"jsonrpc": "2.0", "method": "textDocument/didChange", "params": {
+            "textDocument": {"uri": uri, "version": 2},
+            "contentChanges": [{"text": "i4 main(v.) { r; 0; }\n"}]}})
+        send({"jsonrpc": "2.0", "id": 2, "method": "textDocument/completion", "params": {
+            "textDocument": {"uri": uri}, "position": {"line": 0, "character": 1}}})
+        send({"jsonrpc": "2.0", "id": 3, "method": "textDocument/documentSymbol", "params": {
+            "textDocument": {"uri": uri}}})
+        send({"jsonrpc": "2.0", "id": 4, "method": "unknown/method", "params": {}})
+        send({"jsonrpc": "2.0", "method": "textDocument/didClose", "params": {
+            "textDocument": {"uri": uri}}})
+        send({"jsonrpc": "2.0", "id": 5, "method": "shutdown", "params": {}})
+        send({"jsonrpc": "2.0", "method": "exit", "params": {}})
+        payload = frames.getvalue()
+
+        class _In:
+            buffer = _io.BytesIO(payload)
+
+        class _Out:
+            buffer = _io.BytesIO()
+
+        old_in, old_out = sys.stdin, sys.stdout
+        sys.stdin, sys.stdout = _In(), _Out()
+        try:
+            rc = _sigilc._lsp_run(True)
+        finally:
+            sys.stdin, sys.stdout = old_in, old_out
+
+        out = _Out.buffer.getvalue()
+        assert rc == 0, rc
+        assert b"publishDiagnostics" in out, out[:200]
+        assert b"Undeclared identifier" in out, out[:400]
+        assert b"documentSymbolProvider" in out, out[:400]
+        assert b"-32601" in out, out[:400]
+
+    assert_ok("33. lsp-loop", "a full stdio session handles open/change/completion/symbols/exit", test_lsp_loop)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 31-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 33-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
