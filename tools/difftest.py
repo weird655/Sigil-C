@@ -46,11 +46,17 @@ CASES = [
         "c": "#include <stdio.h>\n#include <string.h>\n#include <ctype.h>\nint main(void){const char*s=\"a1b2c3\";int d=0;for(int i=0;i<(int)strlen(s);i++)if(isdigit(s[i]))d++;printf(\"%d\\n\",d);return 0;}\n",
         "sigil": '#include <stdio.h>\n#include <string.h>\n#include <ctype.h>\n\ni4 main(v.) {\n    o! p* c@ c1 s m, "a1b2c3";\n    o! i4 d m, 0;\n    o! i4 i m, 0;\n    w~ (i < (i4)strlen(s)) {\n        i? (isdigit(s[i]) !? 0) { d m+ 1; }\n        i m+ 1;\n    }\n    printf("%d\\n", d);\n    r; 0;\n}\n',
     },
+    {
+        "name": "stdin-sum",
+        "stdin": "1 2 3 4 5\n",
+        "c": "#include <stdio.h>\nint main(void){int x,s=0;while(scanf(\"%d\",&x)==1)s+=x;printf(\"%d\\n\",s);return 0;}\n",
+        "sigil": '#include <stdio.h>\n\ni4 main(v.) {\n    o! i4 x m, 0;\n    o! i4 s m, 0;\n    w~ (scanf("%d", a& x) =? 1) { s m+ x; }\n    printf("%d\\n", s);\n    r; 0;\n}\n',
+    },
 ]
 
 
-def _run(exe):
-    return subprocess.run([exe], capture_output=True, text=True, timeout=20)
+def _run(exe, stdin_text=None):
+    return subprocess.run([exe], input=stdin_text, capture_output=True, text=True, timeout=20)
 
 
 def main():
@@ -72,8 +78,8 @@ def main():
         subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
                         gen_c, "-o", gen_exe], check=True, capture_output=True)
 
-        ref = _run(ref_exe)
-        gen = _run(gen_exe)
+        ref = _run(ref_exe, case.get("stdin"))
+        gen = _run(gen_exe, case.get("stdin"))
         if (ref.stdout, ref.returncode) != (gen.stdout, gen.returncode):
             failures += 1
             print(f"FAIL {name}: C={ref.stdout!r}/{ref.returncode} Sigil={gen.stdout!r}/{gen.returncode}",

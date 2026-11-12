@@ -2105,13 +2105,50 @@ i4 main(v.) {
 
     assert_ok("38. runcheck", "random u4 programs print the expected value", test_runcheck)
 
+    # Layer 39: a stdin-driven program
+    def test_stdin_words():
+        src = """#include <stdio.h>
+#include <ctype.h>
+
+i4 main(v.) {
+    o! c1[128] line;
+    o! i4 words m, 0;
+    o! i4 in_word m, 0;
+    w~ (fgets(a& line[0], 128, stdin) !? NULL) {
+        o! i4 i m, 0;
+        w~ ((i4)line[i] !? 0) {
+            i? (isspace(line[i]) !? 0) {
+                in_word m, 0;
+            } e: {
+                i? (in_word =? 0) { words m+ 1; in_word m, 1; }
+            }
+            i m+ 1;
+        }
+        in_word m, 0;
+    }
+    printf("%d\\n", words);
+    r; 0;
+}
+"""
+        with open("stdin.c", "w") as f:
+            f.write(compile_source(src, "stdin.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "stdin.c", "-o", "stdin"],
+            check=True)
+        run = subprocess.run(["./stdin"], input="hello world\nfoo bar baz\n",
+                             capture_output=True, text=True)
+        assert run.returncode == 0, run.stderr
+        assert run.stdout.strip() == "5", run.stdout
+
+    assert_ok("39. stdin", "fgets/isspace over piped stdin counts five words", test_stdin_words)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
     os.chdir(orig_cwd)
-    print(f"=== ALL {passed}/{total} TESTS IN 38-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 39-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

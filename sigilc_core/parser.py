@@ -972,6 +972,8 @@ class Parser:
             reg_fn('remove', [t_cstr], t_int)
             reg_fn('rename', [t_cstr, t_cstr], t_int)
             reg_fn('printf', [t_cstr], t_int, variadic=True)
+            reg_fn('scanf', [t_cstr], t_int, variadic=True)
+            reg_fn('getchar', [], t_int)
             reg_fn('sprintf', [t_buf, t_cstr], t_int, variadic=True)
             reg_fn('snprintf', [t_buf, t_size, t_cstr], t_int, variadic=True)
             reg_fn('sscanf', [t_cstr, t_cstr], t_int, variadic=True)
