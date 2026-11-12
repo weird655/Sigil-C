@@ -89,6 +89,12 @@ jobs:
       - name: Property test (random valid programs -> gcc)
         run: python tools/propgen.py --count 40 --seed 1
 
+      - name: Differential execution (C vs Sigil-C)
+        run: python tools/difftest.py
+
+      - name: Execution semantics (random programs)
+        run: python tools/runcheck.py --count 30 --seed 1
+
       - name: Fuzz (deterministic)
         run: python tools/fuzz.py --iterations 300 --seed 1
 

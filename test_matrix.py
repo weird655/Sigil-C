@@ -2086,13 +2086,32 @@ i4 main(v.) {
     if leaked:
         failures.append(("99. hygiene", "test leaked files into the repo root", ", ".join(leaked)))
 
+    # Layer 37: differential C vs Sigil-C execution
+    def test_difftest():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "difftest.py")
+        r = subprocess.run([sys.executable, script], capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "outputs agree" in r.stdout, r.stdout
+
+    assert_ok("37. difftest", "six C/Sigil-C pairs produce identical output", test_difftest)
+
+    # Layer 38: random programs execute to the Python reference value
+    def test_runcheck():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "runcheck.py")
+        r = subprocess.run([sys.executable, script, "--count", "12", "--seed", "5"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "match Python reference" in r.stdout, r.stdout
+
+    assert_ok("38. runcheck", "random u4 programs print the expected value", test_runcheck)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
     os.chdir(orig_cwd)
-    print(f"=== ALL {passed}/{total} TESTS IN 36-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 38-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
