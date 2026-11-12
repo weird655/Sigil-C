@@ -55,10 +55,16 @@ jobs:
         run: python -m pip install --quiet ruff mypy coverage
 
       - name: Lint (ruff)
-        run: ruff check sigilc.py test_matrix.py tools/check.py
+        run: ruff check sigilc.py test_matrix.py tools
 
       - name: Types (mypy)
         run: mypy sigilc.py
+
+      - name: Fuzz (deterministic)
+        run: python tools/fuzz.py --iterations 300 --seed 1
+
+      - name: Benchmark (transpile examples/vm.sigil)
+        run: python tools/bench.py --runs 20 --max-ms 500
 
       - name: Tests with coverage
         run: |

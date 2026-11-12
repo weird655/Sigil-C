@@ -1841,12 +1841,67 @@ int main(void) {
 
     assert_ok("29. lsp-framing", "LSP Content-Length framing round-trips", test_lsp_framing)
 
+    # Layer 30: CLI entry points in-process (covers main()/tooling)
+    def test_cli_in_process():
+        import contextlib
+        import io as _io
+
+        import sigilc as _sigilc
+
+        def call(argv):
+            buf = _io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                rc = _sigilc.main(argv)
+            return rc, buf.getvalue()
+
+        rc, out = call(["--version"])
+        assert rc == 0 and "Sigil-C" in out, (rc, out)
+
+        work = tempfile.mkdtemp(prefix="sigil-cli-")
+        src = os.path.join(work, "a.sigil")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; 0; }\n")
+
+        rc, out = call(["--check", src, "--json"])
+        assert rc == 0 and '"ok": true' in out, (rc, out)
+
+        rc, out = call(["--fmt", src])
+        assert rc == 0 and "i4 main" in out, (rc, out)
+
+        rc, out = call([src, "-o", os.path.join(work, "a.c"), "--define", "N=3"])
+        assert rc == 0 and os.path.exists(os.path.join(work, "a.c")), (rc, out)
+
+        proj = os.path.join(work, "proj")
+        rc, out = call(["--init", proj])
+        assert rc == 0 and os.path.exists(os.path.join(proj, "src", "main.sigil")), (rc, out)
+
+        exe = os.path.join(work, "app")
+        rc, out = call(["--build", os.path.join(proj, "src"), "-o", exe, "--emit-header"])
+        assert rc == 0, (rc, out)
+        assert os.path.exists(os.path.join(proj, "src", ".sigil-build", "main.h")), out
+
+        rc, out = call([src, "--bounds-check", "--emit-prelude", os.path.join(work, "prelude.h")])
+        assert rc == 0 and os.path.exists(os.path.join(work, "prelude.h")), (rc, out)
+
+    assert_ok("30. cli", "CLI modes run in-process and cover tooling branches", test_cli_in_process)
+
+    # Layer 31: deterministic fuzz
+    def test_fuzz():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "fuzz.py")
+        r = subprocess.run(
+            [sys.executable, script, "--iterations", "120", "--seed", "11"],
+            capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "only expected errors" in r.stdout, r.stdout
+
+    assert_ok("31. fuzz", "mutated sources only raise the three expected error types", test_fuzz)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 29-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 31-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
