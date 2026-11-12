@@ -335,6 +335,27 @@ fclose(f);
 
 `stdin` / `stdout` / `stderr` 同时可用；`FILE` 没有字段，解引用会被拒绝。
 
+## 栈与堆：三种标准写法
+
+栈和堆不是 Sigil-C 的概念，是 C 的；它只提供把两者写对的形状。三条法则各有一个可运行示例：
+
+| 写法 | 解决什么 | 例子 |
+|---|---|---|
+| **栈 + SBO** | 小对象留栈，超过阈值才进堆；调用方分配，被调方只写 `r@` 区间 | [`18_stack_sbo.sigil`](examples/tutorial/18_stack_sbo.sigil) |
+| **Arena** | 把堆退化成栈：分配 = 对齐 + 加法，回收 = 游标归零 | [`19_arena.sigil`](examples/tutorial/19_arena.sigil) |
+| **SoA** | 连续数组 + 32 位下标替代指针图，缓存行满载荷 | [`20_soa.sigil`](examples/tutorial/20_soa.sigil) |
+
+```sigil
+v. kernel(r@ p* c@ f4 in, r@ p* f4 out, u4 n) {
+    o! u4 i m, 0;
+    w~ (i < n) { out[i] m, in[i] * 2.0f + 1.0f; i m+ 1; }
+}
+```
+
+`r@` 让两个区间互不重叠；Arena 用 `off` 当 `sp`，SoA 用 `u4` 下标代替 `p*` 指针。
+
+三个示例都进测试（第 18 层），完整解释见 [`TUTORIAL.md`](TUTORIAL.md) §5.3。
+
 ## 54 个印记
 
 | 组 | 数量 | 印记 |
