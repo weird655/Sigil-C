@@ -29,7 +29,10 @@ jobs:
       - name: Transpile check (no compiler)
         run: python3 sigilc.py --version && python3 sigilc.py examples/vm.sigil -o /tmp/vm.c && head -3 /tmp/vm.c
 
-      - name: 159-case matrix
+      - name: Semantic check every example
+        run: python3 sigilc.py --check examples
+
+      - name: 178-case matrix
         run: python3 test_matrix.py
 
       - name: Compile the VM example with strict flags

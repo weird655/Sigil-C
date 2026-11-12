@@ -3779,6 +3779,36 @@ def format_source(src: str) -> str:
     return text + ("\n" if src.endswith("\n") else "")
 
 
+def _check_targets(target: str, defines: Dict[str, str]) -> int:
+    """对单个文件或目录下所有 .sigil 做词法/语法/语义检查，不写文件。"""
+    if os.path.isdir(target):
+        files = _collect_sources(target)
+    elif os.path.isfile(target):
+        files = [target]
+    else:
+        print(f"error: '{target}' is not a file or directory", file=sys.stderr)
+        return 1
+    if not files:
+        print(f"error: no .sigil files under '{target}'", file=sys.stderr)
+        return 1
+
+    failed = 0
+    for path in files:
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+        rel = os.path.relpath(path)
+        try:
+            check_source(src, rel, defines=defines)
+        except (LexerError, ParseError, SemanticError) as e:
+            _print_error(e, rel, src)
+            failed += 1
+    if failed:
+        print(f"{failed}/{len(files)} file(s) failed", file=sys.stderr)
+        return 1
+    print(f"Checked {len(files)} file(s): OK")
+    return 0
+
+
 def _format_targets(target: str, write: bool, check_only: bool) -> int:
     if os.path.isdir(target):
         files = _collect_sources(target)
@@ -3924,6 +3954,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not args.input:
         ap.error("input is required unless --build DIR is given")
 
+    if args.check:
+        return _check_targets(args.input, defines)
+
     in_path = args.input
     out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".c")
     with open(in_path, "r", encoding="utf-8") as f:
@@ -3936,11 +3969,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Prelude  {args.emit_prelude}")
 
     try:
-        if args.check:
-            check_source(src, fname, defines=defines)
-            print(f"Checked {in_path}: OK")
-            return 0
-
         c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check, defines=defines)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(c_src)

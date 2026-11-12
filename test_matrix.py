@@ -1665,12 +1665,36 @@ int main(void) {
 
     assert_ok("22. fmt", "formatter keeps sigil adjacency and string literals intact", test_fmt_adjacency)
 
+    # Layer 23: --check accepts a directory
+    def test_check_dir():
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py")
+        work = tempfile.mkdtemp(prefix="sigil-check-")
+
+        good = os.path.join(work, "good")
+        os.makedirs(good)
+        with open(os.path.join(good, "a.sigil"), "w") as f:
+            f.write("i4 f(v.) { r; 1; }\n")
+        with open(os.path.join(good, "b.sigil"), "w") as f:
+            f.write("i4 g(v.) { r; 2; }\n")
+        r = subprocess.run([sys.executable, script, "--check", good], capture_output=True, text=True)
+        assert r.returncode == 0, (r.stdout, r.stderr)
+        assert "Checked 2 file(s): OK" in r.stdout, r.stdout
+
+        bad = os.path.join(work, "bad")
+        os.makedirs(bad)
+        with open(os.path.join(bad, "bad.sigil"), "w") as f:
+            f.write("i4 f(v.) { r; nope; }\n")
+        r = subprocess.run([sys.executable, script, "--check", bad], capture_output=True, text=True)
+        assert r.returncode == 1, r.returncode
+
+    assert_ok("23. check", "--check over a directory reports per-file diagnostics", test_check_dir)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 22-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 23-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

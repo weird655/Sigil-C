@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-177%20%2F%2022%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-178%20%2F%2023%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -59,6 +59,13 @@ gcc -std=c99 -Wall -Wextra -Werror -pedantic app.c -o app
 python3 sigilc.py --build src -o app --run
 #   src/a.sigil -> src/.sigil-build/a.c
 #   gcc -std=c99 ... a.c b.c -o app
+```
+
+批量检查（不改文件）：
+
+```bash
+python3 sigilc.py --check src          # 整个目录
+python3 sigilc.py --check src/a.sigil
 ```
 
 格式化：按空格纪律重排（`--write` 就地写回，`--fmt-check` 只检查、CI 用）：
@@ -362,7 +369,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 177 项 / 22 层，需要 gcc
+python3 test_matrix.py        # 178 项 / 23 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。
