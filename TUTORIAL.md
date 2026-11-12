@@ -433,7 +433,7 @@ gcc -std=c99 -Wall -Wextra -Werror -pedantic x.c -o x && ./x
 | 运算 | ✓ `&.` ✓ `=?` ✓ `\|^` `\|.` `&^` `^^` `!?` `!.` | 逻辑 / 比较 / 位 |
 | 类型名 | ✓ `i4` ✓ `u4` ✓ `u2` ✓ `u1` ✓ `c1` ✓ `b.` `f4` `f8` | 定宽整数、字符、布尔、浮点 |
 
-完整 52 项见 [`SYNTAX.md`](SYNTAX.md)（速查表）。
+完整 54 项见 [`SYNTAX.md`](SYNTAX.md)（速查表）。
 
 ---
 

@@ -1771,12 +1771,38 @@ int main(void) {
 
     assert_ok("27. lsp", "LSP document symbols cover structs, enums, globals and functions", test_lsp_symbols)
 
+    # Layer 28: rare sigils a? (alignof) and d! (trap)
+    def test_alignof_sigil():
+        sigil = 't! (a? u8 =? 8, "u8 align");\ni4 main(v.) { r; (i4)(a? u8) - 8; }\n'
+        with open("alignof.c", "w") as f:
+            f.write(compile_source(sigil, "alignof.sigil"))
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "alignof.c", "-o", "alignof_bin"],
+            check=True
+        )
+        assert subprocess.run(["./alignof_bin"], check=False).returncode == 0
+
+    assert_ok("28. sigils", "a? queries alignment as a constant", test_alignof_sigil)
+
+    def test_trap_sigil():
+        c_src = compile_source("i4 main(v.) { i? (1 =? 2) { d!; } r; 0; }", "trap.sigil")
+        assert "SIGIL_TRAP();" in c_src, c_src
+        with open("trap.c", "w") as f:
+            f.write(c_src)
+        subprocess.run(
+            ["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "trap.c", "-o", "trap_bin"],
+            check=True
+        )
+        assert subprocess.run(["./trap_bin"], check=False).returncode == 0
+
+    assert_ok("28. sigils", "d! emits SIGIL_TRAP and counts as terminating", test_trap_sigil)
+
     if failures:
         print(f"=== {passed}/{total} PASSED, {len(failures)} FAILED ===")
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 27-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 28-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

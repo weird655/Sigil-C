@@ -36,7 +36,8 @@ SIGIL_KEYWORDS = {
     'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',
     'd~': 'KW_DO',       'g!': 'KW_GOTO',     'l!': 'KW_LABEL',
     'r@': 'KW_RESTRICT',  'g?': 'KW_GENERIC',
-    'x!': 'KW_EXTERNAL',
+    'x!': 'KW_EXTERNAL',   'a?': 'KW_ALIGNOF',
+    'd!': 'KW_TRAP',
 }
 
 # x! 声明的外部类型：Sigil 侧名字 -> 生成 C 里的实际拼写
@@ -797,6 +798,14 @@ class SizeofExpr(ExprNode):
     operand: Optional[ExprNode]
 
 @dataclass
+class AlignofExpr(ExprNode):
+    target_type: TypeNode
+
+@dataclass
+class TrapStmt(StmtNode):
+    """`d!`：立即终止执行（SIGIL_TRAP）。"""
+
+@dataclass
 class AggregateInit(ExprNode):
     """`{ e1, e2, ... }` 位置式聚合初始化；只允许出现在声明初始化位置。"""
     elements: List[ExprNode]
@@ -855,6 +864,8 @@ def emit_expr(e: ExprNode) -> str:
         if e.target_type is not None:
             return f"sizeof({format_c_declarator(e.target_type)})"
         return f"sizeof({emit_expr(e.operand)})"
+    if isinstance(e, AlignofExpr):
+        return f"SIGIL_ALIGNOF({format_c_declarator(e.target_type)})"
     if isinstance(e, UnaryExpr):
         return f"({e.op}{emit_expr(e.operand)})"
     if isinstance(e, BinaryExpr):
@@ -1269,6 +1280,9 @@ class Parser:
 
         if isinstance(expr, SizeofExpr):
             # sizeof 的结果类型是 size_t（已内置为整型，可与其它整型互相赋值）
+            return BaseType(line=expr.line, col=expr.col, c_name='size_t')
+
+        if isinstance(expr, AlignofExpr):
             return BaseType(line=expr.line, col=expr.col, c_name='size_t')
 
         if isinstance(expr, UnaryExpr):
@@ -1780,6 +1794,8 @@ class Parser:
 
     def _statement_flow(self, stmt: StmtNode) -> Set[str]:
         """Possible exits from a statement: return, break, continue, or fallthrough."""
+        if isinstance(stmt, TrapStmt):
+            return {"return"}
         if isinstance(stmt, ReturnStmt):
             return {"return"}
         if isinstance(stmt, JumpStmt):
@@ -2703,6 +2719,11 @@ class Parser:
         if tok.kind == 'KW_SWITCH':
             return self.parse_switch()
 
+        if tok.kind == 'KW_TRAP':
+            self._eat('KW_TRAP')
+            self._eat('SEMI')
+            return TrapStmt(line=tok.line, col=tok.col)
+
         if tok.kind == 'KW_RETURN':
             self._eat('KW_RETURN')
             if self.current_func_ret is None:
@@ -3143,6 +3164,16 @@ class Parser:
                 raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
             return SizeofExpr(line=tok.line, col=tok.col, target_type=None, operand=operand)
 
+        # a? 取对齐字节数，结果 size_t
+        if tok.kind == 'KW_ALIGNOF':
+            self._eat('KW_ALIGNOF')
+            if not self._sizeof_takes_type():
+                raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'a?' requires a type operand")
+            target_t = self.parse_type()
+            if is_void_type(target_t) or not self._is_complete_object_type(target_t):
+                raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'a?' requires a complete object type")
+            return AlignofExpr(line=tok.line, col=tok.col, target_type=target_t)
+
         # g? 按静态类型选分支（转译期解析，生成 C99 里只有被选中的那条）
         if tok.kind == 'KW_GENERIC':
             return self.parse_generic()
@@ -3324,6 +3355,12 @@ C99_HEADER_BODY = """#include <stdint.h>
   #define SIGIL_FALLTHROUGH() __attribute__((fallthrough))
 #else
   #define SIGIL_FALLTHROUGH() ((void)0)
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+  #define SIGIL_TRAP() __builtin_trap()
+#else
+  #define SIGIL_TRAP() abort()
 #endif
 
 """
@@ -3521,6 +3558,8 @@ class CodeGenerator:
             self._emit(f"return{f' {emit_expr(s.expr)}' if s.expr else ''};", s.line, indent)
         elif isinstance(s, JumpStmt):
             self._emit(f"{s.keyword};", s.line, indent)
+        elif isinstance(s, TrapStmt):
+            self._emit("SIGIL_TRAP();", s.line, indent)
         elif isinstance(s, DoWhileStmt):
             self._emit("do {", s.line, indent)
             for sub in s.body.stmts:
@@ -3594,7 +3633,7 @@ class CodeGenerator:
         last = stmts[-1]
         if isinstance(last, JumpStmt) and last.keyword == 'break':
             return True
-        return isinstance(last, (ReturnStmt, GotoStmt))
+        return isinstance(last, (ReturnStmt, GotoStmt, TrapStmt))
 
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None) -> str:

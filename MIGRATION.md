@@ -76,6 +76,8 @@
 | `enum { A, B } Name;` | `e{ Name { A m, 0, B m, 1 };` | |
 | `typedef` | **不需要** | 名字就是类型 |
 | `sizeof x` / `sizeof(T)` | `z? x` / `z? T` | |
+| `_Alignof(T)` | `a? T` | 结果 `size_t` |
+| `abort()` / `__builtin_trap()` | `d!;` | 立即终止 |
 | `offsetof(T, f)` | `offsetof(T, f)` | 内建 |
 | `__attribute__((packed))` | `a@(packed)` | 白名单 |
 | `__attribute__((aligned(16)))` | `a@(aligned(16))` | |

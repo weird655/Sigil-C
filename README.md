@@ -1,11 +1,11 @@
 # Sigil-C（印记-C）
 
-一个小实验项目：把 `.sigil` 转译成 ISO C99。52 个双字符记号，外加一些编译期检查。
+一个小实验项目：把 `.sigil` 转译成 ISO C99。54 个双字符记号，外加一些编译期检查。
 
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-183%20%2F%2027%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-185%20%2F%2028%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -15,7 +15,7 @@
 
 | 是 | 不是 |
 |---|---|
-| C99 的**表面层**：52 个双字符印记，转译为纯 C99 | 新运行时：没有 GC、没有 VM、零开销 |
+| C99 的**表面层**：54 个双字符印记，转译为纯 C99 | 新运行时：没有 GC、没有 VM、零开销 |
 | **可检查的写法**：写操作带 `m`，指针带来源 | 更安全的 C 本身：堆、空指针、未初始化仍归你 |
 | **可退出**的产物：`#line` 映射 + 标准 C | 有生态的语言：没有包管理、没有标准库 |
 | 适合单文件、重指针、重二进制的程序 | 适合全栈、GUI、需要大量系统头的工程 |
@@ -101,7 +101,7 @@ sigilc --build src -o app --run
 `sigilc.py --lsp` 是一个零依赖 LSP 服务（stdio JSON-RPC）：
 
 - 打开/修改文件时推送诊断（与 `--check` 同一套检查，带 range）
-- 补全：按光标前的词前缀过滤 52 个印记、类型名与 `true` / `false` / `NULL`
+- 补全：按光标前的词前缀过滤 54 个印记、类型名与 `true` / `false` / `NULL`
 - 文档大纲：函数、结构体 / 联合体、枚举（成员作子项）、全局变量
 
 Neovim（内置 LSP）示例：
@@ -195,7 +195,7 @@ o! p* u4 slot;            /* 指针必须 */
 | `r@ p* u4` | `uint32_t * restrict` | 只此一条访问路径 |
 | `f^(u4) -> u4` | `uint32_t (*)(uint32_t)` | 函数指针 |
 
-52 个印记的完整定义在 [`SYNTAX.md`](SYNTAX.md)；逐步讲解见 [`TUTORIAL.md`](TUTORIAL.md) 第 3 章。
+54 个印记的完整定义在 [`SYNTAX.md`](SYNTAX.md)；逐步讲解见 [`TUTORIAL.md`](TUTORIAL.md) 第 3 章。
 
 > **已知弱点**：`p*` 与乘法在字形上撞脸。书写约定见 [`SYNTAX.md`](SYNTAX.md) §0.7。
 
@@ -392,7 +392,7 @@ int main(void) {
 | 中文名 | 文件 | 内容 |
 |---|---|---|
 | 教程 | [`TUTORIAL.md`](TUTORIAL.md) | 软件 / 嵌入 / 硬件三个方向，每章一个可运行程序 |
-| 速查表 | [`SYNTAX.md`](SYNTAX.md) | 52 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
+| 速查表 | [`SYNTAX.md`](SYNTAX.md) | 54 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
 
@@ -403,7 +403,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 183 项 / 27 层，需要 gcc
+python3 test_matrix.py        # 185 项 / 28 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。
@@ -416,7 +416,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 各跑一遍：
 
 ## 版本策略
 
-- **v1.x 只加不改**：既有 `.sigil` 源码与 52 个印记不再破坏性变更。
+- **v1.x 只加不改**：既有 `.sigil` 源码与 54 个印记不再破坏性变更。
 - 必须改动时，先给一个版本的弃用期，再在下个主版本移除。
 - 印记集合冻结：新增印记必须有非它不可的场景，并同步进 `SYNTAX.md` 与 `t!` 测试。
 - 生成物永远可退出：纯 C99 + `#line`，随时可以丢掉转译器只留生成代码。

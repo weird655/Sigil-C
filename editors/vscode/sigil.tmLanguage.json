@@ -49,11 +49,11 @@
     },
     "declaration": {
       "name": "keyword.other.declaration.sigil",
-      "match": "(?<![A-Za-z0-9_])(?:o!|s@|a@|i@|x!|t!|g!|l!|w!|a!\\d+)(?![A-Za-z0-9_])"
+      "match": "(?<![A-Za-z0-9_])(?:o!|s@|a@|i@|x!|t!|g!|l!|w!|d!|a!\\d+)(?![A-Za-z0-9_])"
     },
     "pointer": {
       "name": "storage.type.pointer.sigil",
-      "match": "(?<![A-Za-z0-9_])(?:p\\*|c@|v@|r@|a&|f\\^|b\\.|v\\.|z\\?|g\\?)(?![A-Za-z0-9_])"
+      "match": "(?<![A-Za-z0-9_])(?:p\\*|c@|v@|r@|a&|f\\^|b\\.|v\\.|z\\?|g\\?|a\\?)(?![A-Za-z0-9_])"
     },
     "builtin-type": {
       "name": "storage.type.builtin.sigil",
