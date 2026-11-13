@@ -4,6 +4,43 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [维护期补丁] - 2026-11-13
+
+v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做修复、完备性和文档。
+
+**交付与工具**
+
+* `--no-line`：生成的 C 不再每行插 `#line`，给 C 用户交付可读源；默认仍带。
+* `packaging` CI job：干净环境 `pip install .` + `sigilc --version` + 端到端编译。
+
+**教程**
+
+* TUTORIAL 重写为 Part 0–7，21 个可运行示例（01 hello … 21 qsort），每章带 C 对照与陷阱。
+* 三级指针内存池从 README 移入 TUTORIAL §3.6；同步测试改为比对 TUTORIAL 与 `examples/pool.sigil`。
+* 文档一致性守卫：17→21 个示例全被引用、无坏片段、Part 0–7 齐全。
+
+**检查与语义**
+
+* 遮蔽作用域修复：内层同名对象退出后还原外层指针来源（第 40 层）。
+* `--strict`：无法证明来源的参数下标/解引用显式报错，不再静默放行（第 41 层）。
+* 跨函数来源摘要（Phase 1+2）：`provenance.py` 记录返回来源与出参回写，调用点传播；递归/函数指针/字段回写保守标 unknown（第 42 层）。
+* 测试卫生：所有层在临时目录运行，仓库根出现新文件判失败。
+
+**libc 原型**
+
+* `string.h`：strcpy/strncpy/strcat/strcmp/strncmp/strchr/strrchr/strstr/memmove。
+* `ctype.h`：isalnum/isalpha/isdigit/islower/isspace/isupper/isxdigit/tolower/toupper。
+* `stdlib.h`：atoi/rand/srand/getenv/realloc，以及 `qsort`（函数指针比较器）。
+* `math.h`：sin/cos/tan/exp/log/floor/ceil/fmod。
+* `stdio.h`：scanf/getchar、sprintf/snprintf/sscanf、`FILE` 不透明句柄与文件 I/O、stdin/stdout/stderr。
+
+**文档**
+
+* `MEMORIAL.md` 与维护模式说明；README 末尾题眼。
+* 维护模式措辞与实际情况对齐：不加记号，但接受 C99 完备性补充。
+
+---
+
 ## [v1.1] - 2026-11-12（当前版本）
 
 面向"能被别人链接的模块"与"少踩内存坑"的一次收敛：语言补全 + 数组越界防护。
