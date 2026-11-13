@@ -1031,6 +1031,7 @@ class Parser:
             reg_fn('exit', [t_int], t_void)
             reg_fn('abort', [], t_void)
             reg_fn('atoi', [t_cstr], t_int)
+            reg_fn('qsort', [t_vptr, t_size, t_size, FunctionPointerType(ln, cl, [(t_cvptr, "a"), (t_cvptr, "b")], BaseType(ln, cl, 'int32_t'))], t_void)
             reg_fn('rand', [], t_int)
             reg_fn('srand', [t_u32], t_void)
             reg_fn('getenv', [t_cstr], t_buf)

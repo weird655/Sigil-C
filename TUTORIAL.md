@@ -16,7 +16,7 @@ python3 sigilc.py --build examples/tutorial -o app --run
 
 约定：
 
-- 示例编号 `01`–`20`，都在 `examples/tutorial/`
+- 示例编号 `01`–`21`，都在 `examples/tutorial/`
 - 生成的 C 默认带 `#line`（报错指回 `.sigil`）；给 C 用户看时加 `--no-line`
 - 所有示例都跑在 `-std=c99 -Wall -Wextra -Werror -pedantic` 下
 
@@ -556,6 +556,30 @@ i? (rc !? 0) { printf("failed: %d\n", rc); r; rc; }
 
 ---
 
+## 4.8 没有泛型怎么办：void* + 元素大小
+
+C99 没有泛型，Sigil-C 也没有。办法和 C 一样：
+
+| 需求 | 写法 |
+|---|---|
+| 任意类型的数组 | `p* v.` + 元素大小 `u4` |
+| 排序 | `qsort(base, n, size, cmp)`，比较器 `f^(p* c@ v., p* c@ v.) -> i4` |
+| 编译期按类型分派 | `g?`（转译期解析，不依赖 C11 的 `_Generic`） |
+
+```sigil
+i4 cmp(p* c@ v. a, p* c@ v. b) {
+    o! p* c@ i4 x m, (p* c@ i4)a;
+    o! p* c@ i4 y m, (p* c@ i4)b;
+    r; (i4)(p* x - p* y);
+}
+
+qsort(a& a[0], 5, z? i4, cmp);
+```
+
+完整例子：`21_qsort.sigil`。代价和 C 一样：运行时类型信息丢了，比较器里的强制转换要自己保证。
+
+---
+
 # Part 5 · 进阶
 
 ## 5.1 递归
@@ -759,6 +783,7 @@ sigilc --build src -o app --emit-header
 | 18 栈+SBO | `18_stack_sbo.sigil` |
 | 19 Arena | `19_arena.sigil` |
 | 20 SoA | `20_soa.sigil` |
+| 21 qsort | `21_qsort.sigil` |
 
 ## C 对照速查
 

@@ -1610,6 +1610,7 @@ int main(void) {
             "18_stack_sbo": "first=3.0 heap=0",
             "19_arena": "x=42 off=4",
             "20_soa": "sum=3.0 last_next=4",
+            "21_qsort": "1 1 3 4 5",
         }
         tut = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
         for name, expect in cases.items():
@@ -2197,7 +2198,7 @@ i4 main(v.) {
         with open(tut, encoding="utf-8") as f:
             text = f.read()
         assert "}; }" not in text, "stray extra brace in a tutorial snippet"
-        for i in range(1, 21):
+        for i in range(1, 22):
             assert f"{i:02d}_" in text, f"tutorial does not reference example {i:02d}"
         for part in ("Part 0", "Part 1", "Part 2", "Part 3", "Part 4", "Part 5", "Part 6", "Part 7"):
             assert part in text, part

@@ -1,0 +1,23 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+/* 第 21 章：C99 的"泛型"——void* + 元素大小 + qsort
+   - 没有模板；类型信息在运行时丢掉
+   - 比较器负责把 void* 转回真实类型
+   - 排序算法交给 libc，不自己写 */
+
+i4 cmp(p* c@ v. a, p* c@ v. b) {
+    o! p* c@ i4 x m, (p* c@ i4)a;
+    o! p* c@ i4 y m, (p* c@ i4)b;
+    r; (i4)(p* x - p* y);
+}
+
+i4 main(v.) {
+    o! i4[5] a m, { 3, 1, 4, 1, 5 };
+    qsort(a& a[0], 5, z? i4, cmp);
+
+    o! i4 i m, 0;
+    w~ (i < 5) { printf("%d ", a[i]); i m+ 1; }
+    printf("\n");
+    r; 0;
+}

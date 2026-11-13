@@ -410,7 +410,7 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 
 | 中文名 | 文件 | 讲什么 | 输出 |
 |---|---|---|---|
-| 教程配套 | [`tutorial/01..20`](examples/tutorial/) | 软件 / 嵌入 / 硬件三线 | 见 `TUTORIAL.md`（教程） |
+| 教程配套 | [`tutorial/01..21`](examples/tutorial/) | 软件 / 嵌入 / 硬件三线 | 见 `TUTORIAL.md`（教程） |
 | 虚拟机 | [`vm.sigil`](examples/vm.sigil) | 函数指针表 + 字节码 | `42` |
 | 寄存器映射 | [`regmap.sigil`](examples/regmap.sigil) | `packed` + 位域 + `offsetof` 断言 | `ctrl=0x005d` |
 | 回调表 | [`callbacks.sigil`](examples/callbacks.sigil) | 全局函数指针表 | `quit after 2 ticks` |
@@ -457,7 +457,7 @@ int main(void) {
 
 | 中文名 | 文件 | 内容 |
 |---|---|---|
-| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，20 个可运行示例 |
+| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，21 个可运行示例 |
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 54 个印记的闭集清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
