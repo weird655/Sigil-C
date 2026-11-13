@@ -1,0 +1,5 @@
+i4 add(i4 a, i4 b) { r; a + b; }
+
+i4 main(v.) {
+    r; add(20, 22);
+}
