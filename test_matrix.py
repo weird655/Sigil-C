@@ -2256,6 +2256,42 @@ i4 main(v.) {
 
     assert_ok("42. provenance", "cross-function summaries track returned and out-written sources", test_cross_function_prov)
 
+    # Layer 43: call-site length contracts
+    def test_contract_length():
+        base = """i4 f(p* u4 p) { r; (i4)p[3]; }
+
+i4 main(v.) {
+    o! u4[%d] a m, { 0 };
+    r; f(a& a[0]);
+}
+"""
+        compile_source(base % 4, "len_ok.sigil")
+        try:
+            compile_source(base % 3, "len_bad.sigil")
+        except SemanticError as e:
+            assert "requires 4 element(s)" in str(e), e
+        else:
+            raise AssertionError("short array passed to a function that indexes p[3]")
+
+        unknown = """i4 f(p* u4 p) { r; (i4)p[2]; }
+
+i4 g(p* u4 p) { r; f(p); }
+
+i4 main(v.) {
+    o! u4[5] a m, { 0 };
+    r; g(a& a[0]);
+}
+"""
+        compile_source(unknown, "len_unknown.sigil")
+        try:
+            compile_source(unknown, "len_unknown.sigil", strict=True)
+        except SemanticError as e:
+            assert "Cannot prove" in str(e), e
+        else:
+            raise AssertionError("strict mode accepted an unprovable length contract")
+
+    assert_ok("43. contracts", "calls must satisfy a callee's requires_len; --strict rejects unknown", test_contract_length)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2263,7 +2299,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 42-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 43-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

@@ -8,7 +8,7 @@
 递归调用、函数指针、结构体字段回写都不建模。
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .nodes import (
     AssignStmt,
@@ -19,6 +19,7 @@ from .nodes import (
     IndexExpr,
     Prov,
     ReturnStmt,
+    SemanticError,
     UnaryExpr,
 )
 
@@ -41,6 +42,7 @@ class OutWrite:
 class FuncProvSummary:
     returns: List[RetSource] = field(default_factory=list)
     out_writes: List[OutWrite] = field(default_factory=list)
+    required_len: Dict[int, int] = field(default_factory=dict)
     unknown: bool = False
 
 
@@ -105,6 +107,28 @@ def _lvalue_offset(target: ExprNode, params: List[str]) -> Optional[Tuple[int, i
     return None
 
 
+def check_param_access(parser, root, expr, kind, const_index=None) -> None:
+    """pv 未知的参数访问：--strict 拒绝；否则记录长度要求。"""
+    name = parser._param_name(root)
+    if name is None:
+        return
+    if parser.strict_provenance:
+        raise SemanticError(
+            f"{parser.filename}:{expr.line}:{expr.col}: Cannot prove the bounds of parameter "
+            f"'{name}' on {kind} (cross-function provenance is not tracked); "
+            f"pass a bounded array or drop --strict")
+    need = 1 if const_index is None else const_index + 1
+    if need > 0:
+        note_required_len(parser, name, need)
+
+
+def note_required_len(parser, name: str, need: int) -> None:
+    if parser.cur_summary is None or name not in parser.cur_params:
+        return
+    idx = parser.cur_params.index(name)
+    parser.cur_summary.required_len[idx] = max(parser.cur_summary.required_len.get(idx, 0), need)
+
+
 def note_return(parser, stmt: ReturnStmt) -> None:
     if parser.cur_summary is None or stmt.expr is None:
         return
@@ -138,6 +162,21 @@ def apply_call(parser, call: CallExpr) -> None:
     summary = parser.func_summaries.get(call.callee.name)
     if summary is None:
         return
+    for param_idx, need in summary.required_len.items():
+        if param_idx >= len(call.args):
+            continue
+        prov = parser._prov_of(call.args[param_idx])
+        if prov is not None:
+            if prov.offset + need > prov.size:
+                raise SemanticError(
+                    f"{parser.filename}:{call.line}:{call.col}: call to '{call.callee.name}' requires "
+                    f"{need} element(s) from argument {param_idx + 1}, but '{prov.base}' provides "
+                    f"{prov.size - prov.offset}")
+        elif parser.strict_provenance:
+            raise SemanticError(
+                f"{parser.filename}:{call.line}:{call.col}: call to '{call.callee.name}' requires "
+                f"{need} element(s) from argument {param_idx + 1}, but its provenance is unknown "
+                f"(drop --strict to allow unchecked)")
     if summary.unknown:
         return
     if len(summary.returns) == 1:

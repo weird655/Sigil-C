@@ -477,13 +477,8 @@ class Parser:
                     if not self._is_complete_object_type(sub_t.pointee):
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference pointer to incomplete or void type")
                     pv = self._prov_live(self._prov_of(expr.operand), expr)
-                    if pv is None and self.strict_provenance:
-                        pname = self._param_name(expr.operand)
-                        if pname is not None:
-                            raise SemanticError(
-                                f"{self.filename}:{expr.line}:{expr.col}: Cannot prove the bounds of parameter "
-                                f"'{pname}' on dereference (cross-function provenance is not tracked); "
-                                f"pass a bounded array or drop --strict")
+                    if pv is None:
+                        provenance.check_param_access(self, expr.operand, expr, "dereference")
                     if pv is not None:
                         if pv.offset < 0 or pv.offset >= pv.size:
                             raise SemanticError(
@@ -527,13 +522,8 @@ class Parser:
                         f"{self.filename}:{expr.line}:{expr.col}: Cannot subscript pointer to incomplete or void type"
                     )
                 pv = self._prov_live(self._prov_of(expr.base), expr)
-                if pv is None and self.strict_provenance:
-                    pname = self._param_name(expr.base)
-                    if pname is not None:
-                        raise SemanticError(
-                            f"{self.filename}:{expr.line}:{expr.col}: Cannot prove the bounds of parameter "
-                            f"'{pname}' on subscript (cross-function provenance is not tracked); "
-                            f"pass a bounded array or drop --strict")
+                if pv is None:
+                    provenance.check_param_access(self, expr.base, expr, "subscript", self._try_const(expr.index))
                 if pv is not None:
                     c_idx = self._try_const(expr.index)
                     if c_idx is not None:
