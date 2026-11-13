@@ -38,7 +38,7 @@ i4 main(v.) {
 
     w~ (off + 2 <= n) {
         o! FrameHeader h;
-        h.raw m, be16(a& STREAM[off]);
+        h.raw m, be16(p@ STREAM[off]);
         o! u4 len m, (u4)h.bits.len;
 
         i? (off + 2 + len > n) {

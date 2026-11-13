@@ -44,11 +44,11 @@ i4 main(v.) {
     c.running m, 1;
     c.last m, '?';
 
-    dispatch(a& c, EV_KEY, 'a');
-    dispatch(a& c, EV_TICK, 0);
-    dispatch(a& c, EV_KEY, 'b');
-    dispatch(a& c, EV_NONE, 0);
-    dispatch(a& c, EV_QUIT, 0);
+    dispatch(p@ c, EV_KEY, 'a');
+    dispatch(p@ c, EV_TICK, 0);
+    dispatch(p@ c, EV_KEY, 'b');
+    dispatch(p@ c, EV_NONE, 0);
+    dispatch(p@ c, EV_QUIT, 0);
 
     i? (!.c.running) {
         printf("quit after %u ticks, %u keys, last='%c'\n", c.ticks, c.keys, c.last);

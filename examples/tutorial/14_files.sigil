@@ -10,7 +10,7 @@ i4 main(v.) {
 
     o! p* FILE g m, fopen("tut14.txt", "r");
     o! c1[32] buf;
-    fgets(a& buf[0], 32, g);
+    fgets(p@ buf[0], 32, g);
     fclose(g);
 
     printf("read=%s", buf);

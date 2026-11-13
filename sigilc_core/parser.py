@@ -492,9 +492,9 @@ class Parser:
                 self._check_restricted_base(expr.operand)
                 if isinstance(expr.operand, MemberExpr) and self._member_is_bitfield(expr.operand):
                     raise SemanticError(
-                        f"{self.filename}:{expr.line}:{expr.col}: Cannot take the address ('a&') of bit-field '{expr.operand.field}'")
+                        f"{self.filename}:{expr.line}:{expr.col}: Cannot take the address ('p@') of bit-field '{expr.operand.field}'")
                 if not isinstance(expr.operand, (IdentExpr, IndexExpr, MemberExpr)) and not (isinstance(expr.operand, UnaryExpr) and expr.operand.op == '*'):
-                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot take address ('a&') of rvalue expression")
+                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot take address ('p@') of rvalue expression")
                 return PointerType(line=expr.line, col=expr.col, pointee=sub_t)
             if expr.op == '!':
                 if not self._is_scalar_type(sub_t):

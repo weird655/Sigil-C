@@ -63,9 +63,9 @@ i4 main(v.) {
     reg.bits.parity m, 2;
     reg.bits.stop m, 1;
     reg.bits.div m, 5;
-    write_ctrl(a& u, reg.raw);
+    write_ctrl(p@ u, reg.raw);
 
-    uart_show(a& u, "uart0");
-    printf("tx_ready=%u raw=0x%04x\n", (u4)tx_ready(a& u), read_ctrl(a& u));
+    uart_show(p@ u, "uart0");
+    printf("tx_ready=%u raw=0x%04x\n", (u4)tx_ready(p@ u), read_ctrl(p@ u));
     r; 0;
 }

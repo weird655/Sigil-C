@@ -4,7 +4,7 @@
 
 i4 main(v.) {
     o! i4[5] a m, { 1, 2, 3, 4, 5 };
-    o! p* i4 p m, a& a[0];
+    o! p* i4 p m, p@ a[0];
     o! i4 sum m, 0;
     o! i4 i m, 0;
     w~ (i < 5) { sum m+ p[i]; i m+ 1; }

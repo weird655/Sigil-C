@@ -16,7 +16,7 @@ v. kernel(r@ p* c@ f4 in, r@ p* f4 out, u4 n) {
 v. execute(p* c@ f4 input, u4 n) {
     o! f4[256] stack_buf;
     o! i4 on_heap m, 0;
-    o! p* f4 target m, a& stack_buf[0];
+    o! p* f4 target m, p@ stack_buf[0];
 
     i? (n > STACK_THRESHOLD) {
         target m, (p* f4)malloc(n * (z? f4));
@@ -32,6 +32,6 @@ v. execute(p* c@ f4 input, u4 n) {
 
 i4 main(v.) {
     o! f4[4] small m, { 1.0f, 2.0f, 3.0f, 4.0f };
-    execute(a& small[0], 4);
+    execute(p@ small[0], 4);
     r; 0;
 }

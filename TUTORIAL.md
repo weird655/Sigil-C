@@ -61,7 +61,7 @@ int32_t main(void) {
 ```text
 error: a.sigil:3:5: Returning the address of local object 'x' would dangle after return
   --> a.sigil:3:5
-     3 |     r; a& x;
+     3 |     r; p@ x;
        |     ^
 ```
 
@@ -219,7 +219,7 @@ printf("%d\n", a[4]);
 
 o! p* c@ c1 s m, "hello";
 o! c1[16] buf;
-strcpy(a& buf[0], s);
+strcpy(p@ buf[0], s);
 printf("%d\n", (i4)strlen(s));
 ```
 
@@ -283,20 +283,20 @@ x! struct sockaddr_in { u2 sin_family; u2 sin_port; u4 sin_addr; };
 
 ```sigil
 o! i4 x m, 7;
-o! p* i4 p m, a& x;      /* &x */
+o! p* i4 p m, p@ x;      /* &x */
 printf("%d\n", p* p);    /* *p */
 p* p m, 9;               /* *p = 9 */
 ```
 
 - `p* T` 是"指向 T 的指针"
-- `a& x` 取地址，`p* p` 解引用
+- `p@ x` 取地址，`p* p` 解引用
 - `p*` 紧邻才是指针；`p * q` 是乘法（见 SYNTAX §0.7）
 
 ## 3.2 指针算术与数组
 
 ```sigil
 o! i4[5] a m, { 1, 2, 3, 4, 5 };
-o! p* i4 p m, a& a[0];
+o! p* i4 p m, p@ a[0];
 o! p* i4 last m, p + 4;
 printf("%d\n", p* last);
 p m+ 1;                  /* 指针自增，是语句不是表达式 */
@@ -329,7 +329,7 @@ TABLE[i](a, b);
 ```sigil
 p* i4 bad(v.) {
     o! i4 x m, 1;
-    r; a& x;          /* error: Returning the address of local object */
+    r; p@ x;          /* error: Returning the address of local object */
 }
 ```
 
@@ -412,31 +412,31 @@ u4 memory_pool_demo(v.) {
     raw_storage[0] m, 0;
     raw_storage[4] m, 0;
 
-    o! p* u4 slot_alpha m, a& raw_storage[0];   // Block 0
-    o! p* u4 slot_beta  m, a& raw_storage[4];   // Block 1
+    o! p* u4 slot_alpha m, p@ raw_storage[0];   // Block 0
+    o! p* u4 slot_beta  m, p@ raw_storage[4];   // Block 1
 
     o! Pool main_pool;
     main_pool.arena_guard m, raw_storage;
     main_pool.arena_raw   m, raw_storage;
-    main_pool.free_slot   m, a& slot_alpha;
-    main_pool.cursor_hub  m, a& main_pool.free_slot;
+    main_pool.free_slot   m, p@ slot_alpha;
+    main_pool.cursor_hub  m, p@ main_pool.free_slot;
     main_pool.stride      m, 4;
     main_pool.allocated   m, 0;
 
-    o! p* c@ Pool ro_pool m, a& main_pool;   // 只读视图
-    o! p* Pool rw_pool    m, a& main_pool;   // 可写视图
+    o! p* c@ Pool ro_pool m, p@ main_pool;   // 只读视图
+    o! p* Pool rw_pool    m, p@ main_pool;   // 可写视图
 
     o! p* u4 blk_first m, pool_acquire_block(rw_pool, 101);
     blk_first[1] m, 202;
 
-    rw_pool->free_slot m, a& slot_beta;      // 推进游标
+    rw_pool->free_slot m, p@ slot_beta;      // 推进游标
 
     o! p* u4 blk_second m, pool_acquire_block(rw_pool, 303);
 
     o! p* p* p* u4 hub_probe m, ro_pool->cursor_hub;
     o! u4 deep_read_val m, p* p* p* hub_probe;   // 穿透三层
 
-    o! c@ p* p* u4 pinned_slot m, a& slot_alpha; // 槽位地址锁死
+    o! c@ p* p* u4 pinned_slot m, p@ slot_alpha; // 槽位地址锁死
     pool_relocate_slot(pinned_slot, blk_second, 404);
 
     o! p* c@ u4 guard_view m, ro_pool->arena_guard;
@@ -485,7 +485,7 @@ checksum=1012
 #include <stdio.h>
 
 i4 n m, 0;
-scanf("%d", a& n);
+scanf("%d", p@ n);
 printf("%d %u %s %c %.2f\n", n, (u4)n, "ok", 'A', 1.5);
 ```
 
@@ -521,7 +521,7 @@ C 侧 `#include "foo.h"` 即可链接。外部头里的结构体用 `x!` 登记�
 ```sigil
 o! f8 ratio m, 1.5;
 o! i4 n m, (i4)ratio;     /* 截断 */
-o! p* v. raw m, (p* v.)a& n;
+o! p* v. raw m, (p* v.)p@ n;
 ```
 
 窄化是静默的（和 C 一样），README 明确列在"不挡"里。
@@ -573,7 +573,7 @@ i4 cmp(p* c@ v. a, p* c@ v. b) {
     r; (i4)(p* x - p* y);
 }
 
-qsort(a& a[0], 5, z? i4, cmp);
+qsort(p@ a[0], 5, z? i4, cmp);
 ```
 
 完整例子：`21_qsort.sigil`。代价和 C 一样：运行时类型信息丢了，比较器里的强制转换要自己保证。
@@ -657,7 +657,7 @@ v. kernel(r@ p* c@ f4 in, r@ p* f4 out, u4 n) {
 }
 
 o! f4[256] stack_buf;
-o! p* f4 target m, a& stack_buf[0];
+o! p* f4 target m, p@ stack_buf[0];
 i? (n > STACK_THRESHOLD) { target m, (p* f4)malloc(n * (z? f4)); }
 ```
 
@@ -773,7 +773,7 @@ sigilc --build src -o app --emit-header
 1. `p* u4` 和 `p * q` 有什么区别？为什么？
 2. `o!` 什么时候可以省略？
 3. `m,` 和 `=` 的区别是什么？为什么写操作要带牌？
-4. `a& x` 在什么情况下会被拒绝？
+4. `p@ x` 在什么情况下会被拒绝？
 5. `s@` 对 `--emit-header` 有什么影响？
 6. `f^` 类型的 `v.` 返回值怎么写？
 7. `#include <string.h>` 之后为什么能直接调 `strlen`？
@@ -788,7 +788,7 @@ sigilc --build src -o app --emit-header
 ## A 记号地图
 
 控制流：`i?` `e:` `w~` `f~` `d~` `s?` `k:` `d:` `r;` `b!` `c^`
-类型：`s{` `u{` `e{` `w!` `p*` `c@` `v@` `r@` `a&` `f^` `b.` `v.` `z?` `a?`
+类型：`s{` `u{` `e{` `w!` `p*` `c@` `v@` `r@` `p@` `f^` `b.` `v.` `z?` `a?`
 声明：`o!` `s@` `a@` `i@` `x!`
 赋值：`m,` `m+` `m-` `m*` `m/`
 运算符：`=?` `!?` `&.` `|.` `!.` `|^` `&^` `^^` `~^` `->` `<<` `>>` `<=` `>=`
@@ -831,7 +831,7 @@ sigilc --build src -o app --emit-header
 | `for (i=0;i<n;i++)` | `f~ (i m, 0; i < n; i m+ 1)` |
 | `return x;` | `r; x;` |
 | `*p` | `p* p` |
-| `&x` | `a& x` |
+| `&x` | `p@ x` |
 | `x == y` | `x =? y` |
 | `x && y` | `x &. y` |
 | `x & y` | `x &^ y` |

@@ -14,7 +14,7 @@ v. scale(p* Vec2 v, i4 k) {
 i4 main(v.) {
     o! Vec2 p m, { 3, 4 };
     o! Vec2 q m, { 1, 2 };
-    scale(a& p, 2);
+    scale(p@ p, 2);
     printf("dot=%d len2=%d\n", dot(p, q), p.x * p.x + p.y * p.y);
     r; 0;
 }

@@ -17,7 +17,7 @@ SIGIL_KEYWORDS = {
     'r;': 'KW_RETURN',   'b!': 'KW_BREAK',    'c^': 'KW_CONTINUE', 's?': 'KW_SWITCH',
     'k:': 'KW_CASE',     'd:': 'KW_DEFAULT',  's{': 'KW_STRUCT',   'u{': 'KW_UNION',
     'e{': 'KW_ENUM',     'o!': 'KW_OBJECT',   'f^': 'KW_FNPTR',    'p*': 'KW_PTR',
-    'a&': 'KW_ADDR',
+    'p@': 'KW_ADDR',
     'c@': 'KW_CONST',    'v@': 'KW_VOLATILE', 'v.': 'TYPE_VOID',   'b.': 'TYPE_BOOL',
     'z?': 'KW_SIZEOF',   's@': 'KW_STATIC',   'a@': 'KW_ATTR',
     'i@': 'KW_INLINE',   'w!': 'KW_BITFIELD', 't!': 'KW_STATIC_ASSERT',

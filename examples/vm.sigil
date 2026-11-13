@@ -177,15 +177,15 @@ v. run(p* VM vm) {
 i4 main(v.) {
     o! VM vm;
 
-    reset(a& vm);
-    load_sum(a& vm);
-    disasm(a& vm);
-    run(a& vm);
+    reset(p@ vm);
+    load_sum(p@ vm);
+    disasm(p@ vm);
+    run(p@ vm);
 
-    reset(a& vm);
-    load_mul(a& vm);
-    disasm(a& vm);
-    run(a& vm);
+    reset(p@ vm);
+    load_mul(p@ vm);
+    disasm(p@ vm);
+    run(p@ vm);
 
     r; 0;
 }

@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 /* 第 3 章：指针与边界
-   p* c@ u1  指向只读 u1 的指针        a& x  取地址
+   p* c@ u1  指向只读 u1 的指针        p@ x  取地址
    指针的来源会被追踪：从哪个数组来、走了多远 */
 
 o! u1[24] SAMPLE m, {
@@ -36,6 +36,6 @@ v. dump(p* c@ u1 buf, u4 n) {
 }
 
 i4 main(v.) {
-    dump(a& SAMPLE[0], 24);
+    dump(p@ SAMPLE[0], 24);
     r; 0;
 }

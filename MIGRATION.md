@@ -1,3 +1,15 @@
+# 迁移说明
+
+## 当前主分支：`a&` → `p@`
+
+取地址从 `a&` 改为 `p@`，原因是识别而不是输入：
+
+- `p*` 是"指针 / 解引用"，`p@` 是"取地址"，同属 `p` 家族
+- `@` 读作 at，和地址/位置相关；`&` 只是一个不表意的符号
+- `c@` 仍然是只读，两个 `@` 各有所指：`c@` 管权限，`p@` 管地址
+
+旧写法 `a&` 不再接受；迁移就是文本替换 `a&` → `p@`。
+
 # C → Sigil-C 迁移对照
 
 这不是"重写"，是**换记法 + 让转译器接手一部分 C 里靠人守的规矩**。
@@ -53,7 +65,7 @@
 | `T **p` | `p* p* T p` | 从右往左读反了：这里是从左往右 |
 | `const T * const p` | `c@ p* c@ T p` | |
 | `restrict T *p` | `r@ p* T p` | |
-| `T *p = &x;` | `o! p* T p m, a& x;` | |
+| `T *p = &x;` | `o! p* T p m, p@ x;` | |
 | `T x;`（T 为用户类型） | `o! T x;` | 内建基类型可省 `o!`：`u4 x;` |
 | `T a[N];` | `o! T[N] a;` | **维度在类型前缀里** |
 | `x = v;` | `x m, v;` | |
@@ -127,7 +139,7 @@ int *f(void) { int x = 1; return &x; }   /* 悬垂 */
 ```
 
 ```sigil
-p* u4 f(v.) { o! u4 x m, 1; r; a& x; }
+p* u4 f(v.) { o! u4 x m, 1; r; p@ x; }
 ```
 
 ```
@@ -138,14 +150,14 @@ error: Returning the address of local object 'x' would dangle after return
 
 ```sigil
 o! p* u4 g;
-v. f(v.) { o! u4 x m, 1; g m, a& x; }
+v. f(v.) { o! u4 x m, 1; g m, p@ x; }
 ```
 
 ```
 error: Storing the address of local object 'x' into 'g' would dangle after this function returns
 ```
 
-出参同罪：`out m, a& x;` → 同样的诊断。
+出参同罪：`out m, p@ x;` → 同样的诊断。
 
 ### 2.5 指针活过它指向的对象 🟥
 
@@ -157,7 +169,7 @@ use(p);                       /* x 已死 */
 
 ```sigil
 o! p* u4 p;
-i? (1) { o! u4 x m, 1; p m, a& x; }
+i? (1) { o! u4 x m, 1; p m, p@ x; }
 o! u4 y m, p* p;
 ```
 
@@ -176,7 +188,7 @@ p += 3;  return *p;           /* 一过末尾就解引用 */
 
 ```sigil
 o! u4[3] a m, { 1, 2, 3 };
-o! p* u4 p m, a& a[0];
+o! p* u4 p m, p@ a[0];
 p m+ 3;
 r; (i4)p* p;
 ```
@@ -188,7 +200,7 @@ error: Dereferencing a pointer into 'a' at element 3, outside 3 element(s)
 ### 2.7 从 `a[i]` 取的指针再下标 🟥
 
 ```sigil
-o! p* u4 p m, a& a[1];        /* 只剩 2 个元素可用 */
+o! p* u4 p m, p@ a[1];        /* 只剩 2 个元素可用 */
 r; (i4)p[2];
 ```
 
@@ -207,7 +219,7 @@ void f(void) { int x = 1; keep(&x); }   /* 返回后 slot 悬垂 */
 ```sigil
 o! p* u4 slot;
 v. keep(p* u4 p) { slot m, p; }
-v. f(v.) { o! u4 x m, 1; keep(a& x); }
+v. f(v.) { o! u4 x m, 1; keep(p@ x); }
 ```
 
 ```
@@ -234,7 +246,7 @@ error: Parameter 1 of 'sum' is 'r@' (restrict) but argument 2 aliases the same o
 ### 2.10 局部 `restrict` 声明后又绕路 🟥
 
 ```sigil
-o! r@ p* u4 p m, a& arr[0];   /* 承诺：只经 p 访问 arr */
+o! r@ p* u4 p m, p@ arr[0];   /* 承诺：只经 p 访问 arr */
 o! u4 x m, arr[1];            /* 违约 */
 ```
 

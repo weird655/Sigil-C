@@ -23,6 +23,6 @@ u4 scale(p* c@ u4 src, u4 n, u4 max) {
 
 i4 main(v.) {
     o! u4[4] in m, { 300, 10, 255, 1 };
-    printf("scale=%u\n", scale(a& in[0], 4, 255));
+    printf("scale=%u\n", scale(p@ in[0], 4, 255));
     r; 0;
 }

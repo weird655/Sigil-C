@@ -27,14 +27,14 @@ v. arena_reset(p* Arena a) { a->off m, 0; }
 i4 main(v.) {
     o! u1[64] buf;
     o! Arena a;
-    arena_init(a& a, a& buf[0], 64);
+    arena_init(p@ a, p@ buf[0], 64);
 
-    o! p* i4 x m, (p* i4)arena_alloc(a& a, 4, 4);
+    o! p* i4 x m, (p* i4)arena_alloc(p@ a, 4, 4);
     i? (x =? NULL) { r; 1; }
     p* x m, 42;
     printf("x=%d off=%u\n", p* x, a.off);
 
-    arena_reset(a& a);
+    arena_reset(p@ a);
     printf("after_reset=%u\n", a.off);
     r; 0;
 }

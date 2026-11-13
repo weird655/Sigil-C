@@ -45,8 +45,8 @@ v. uart_config(p* Uart u, u4 enable, u4 mode, u4 baud) {
 
 i4 main(v.) {
     o! Uart u;
-    uart_init(a& u);
-    uart_config(a& u, 1, 3, 1200);
+    uart_init(p@ u);
+    uart_config(p@ u, 1, 3, 1200);
 
     o! CtrlReg reg;
     reg.raw m, u.ctrl;

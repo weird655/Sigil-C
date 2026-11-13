@@ -32,7 +32,7 @@ python tools/contracts.py app.sigil -o app.contracts.json
 
 ### 1. 调用点强制长度（已做）
 
-已知被调函数的 `requires_len[p] = k`，调用方传 `a& arr[0]` 且 `arr` 大小可证明：
+已知被调函数的 `requires_len[p] = k`，调用方传 `p@ arr[0]` 且 `arr` 大小可证明：
 
 ```text
 error: f requires 3 element(s) from argument 1, 'arr' has 2

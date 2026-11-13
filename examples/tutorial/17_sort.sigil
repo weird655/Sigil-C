@@ -18,7 +18,7 @@ v. insertion(p* i4 a, i4 n) {
 
 i4 main(v.) {
     o! i4[8] a m, { 5, 2, 9, 1, 5, 6, 0, 3 };
-    insertion(a& a[0], 8);
+    insertion(p@ a[0], 8);
     o! i4 i m, 0;
     w~ (i < 8) { printf("%d ", a[i]); i m+ 1; }
     printf("\n");

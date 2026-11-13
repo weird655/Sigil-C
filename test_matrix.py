@@ -222,8 +222,8 @@ def run_test_matrix():
                   "v. f(i4 x) { s? (x) { k: (1 << 65): { b!; } } }")
     assert_raises("4. Semantic", "Reject declaring value variable of incomplete struct type", SemanticError,
                   "s{ Incomplete; v. f(v.) { o! Incomplete x; }")
-    assert_raises("4. Semantic", "Reject taking address ('a&') of rvalue expression", SemanticError,
-                  "v. f(i4 x) { o! p* i4 p m, a& (x + 1); }")
+    assert_raises("4. Semantic", "Reject taking address ('p@') of rvalue expression", SemanticError,
+                  "v. f(i4 x) { o! p* i4 p m, p@ (x + 1); }")
     assert_raises("4. Semantic", "Reject bitwise operator '&^' on floating-point operand", SemanticError,
                   "v. f(f4 x) { o! i4 y m, x &^ 1; }")
     assert_raises("4. Semantic", "Reject binary pointer addition (p + q)", SemanticError,
@@ -353,7 +353,7 @@ i4 main(v.) {
     v.x m, 0x10;
     v.y m, 2;
 
-    o! i4 res m, dot_product(a& u, a& v);
+    o! i4 res m, dot_product(p@ u, p@ v);
     /* &. 为逻辑与 (&&)，&^ 为按位与 (&)，=? 为相等比较 (==) */
     i? (res > 0 &. (res &^ 1) =? 0) {
         printf("dot = %d\n", (int)res);
@@ -835,7 +835,7 @@ int main(void) {
     assert_raises("10. control", "Reject a bit-field on a non-integer base type",
                   SemanticError, "s{ C { f4 x w! 3; }; i4 main(v.) { r; 0; }")
     assert_raises("10. control", "Reject taking the address of a bit-field",
-                  SemanticError, "s{ C { u4 b w! 1; }; i4 main(v.) { o! C c; o! p* u4 q m, a& c.b; r; 0; }")
+                  SemanticError, "s{ C { u4 b w! 1; }; i4 main(v.) { o! C c; o! p* u4 q m, p@ c.b; r; 0; }")
 
     def test_variadic():
         sigil = """
@@ -1306,7 +1306,7 @@ int main(void) {
             sa.sin_port m, 80;
             sa.sin_addr m, 0x7f000001;
             o! p* pthread_fake h m, NULL;
-            i? (h =? NULL) { r; (i4)(family_of(a& sa) + (u4)(z? sockaddr_fake)); }
+            i? (h =? NULL) { r; (i4)(family_of(p@ sa) + (u4)(z? sockaddr_fake)); }
             r; 1;
         }
         """
@@ -1367,7 +1367,7 @@ int main(void) {
         sigil = """
         i4 main(v.) {
             o! u4[3] a m, { 10, 20, 30 };
-            o! p* u4 p m, a& a[1];
+            o! p* u4 p m, p@ a[1];
             r; (i4)p[0] + (i4)p[1];
         }
         """
@@ -1383,15 +1383,15 @@ int main(void) {
     assert_ok("15. v1.1 ptr", "Provenance tracks a pointer into a[1] and allows p[0]..p[1]", test_pointer_provenance_ok)
 
     assert_raises("15. v1.1 ptr", "Reject a constant index through a pointer past the base object",
-                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, a& a[1]; r; (i4)p[2]; }")
+                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, p@ a[1]; r; (i4)p[2]; }")
     assert_raises("15. v1.1 ptr", "Reject dereferencing a pointer advanced past the base object",
-                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, a& a[0]; p m+ 3; r; (i4)p* p; }")
+                  SemanticError, "i4 f(v.) { o! u4[3] a m, { 1, 2, 3 }; o! p* u4 p m, p@ a[0]; p m+ 3; r; (i4)p* p; }")
 
     def test_pointer_dynamic_bound():
         sigil = """
         i4 main(v.) {
             o! u4[3] a m, { 1, 2, 3 };
-            o! p* u4 p m, a& a[1];
+            o! p* u4 p m, p@ a[1];
             o! u4 i m, 0;
             r; (i4)p[i];
         }
@@ -1409,19 +1409,19 @@ int main(void) {
     assert_ok("15. v1.1 ptr", "A dynamic pointer index reuses SIGIL_IDX with the remaining length", test_pointer_dynamic_bound)
 
     assert_raises("15. v1.1 ptr", "Reject returning the address of a local object",
-                  SemanticError, "p* u4 f(v.) { o! u4 x m, 1; r; a& x; }")
+                  SemanticError, "p* u4 f(v.) { o! u4 x m, 1; r; p@ x; }")
     assert_raises("15. v1.1 ptr", "Reject storing the address of a local into a global",
-                  SemanticError, "o! p* u4 g; v. f(v.) { o! u4 x m, 1; g m, a& x; }")
+                  SemanticError, "o! p* u4 g; v. f(v.) { o! u4 x m, 1; g m, p@ x; }")
     assert_raises("15. v1.1 ptr", "Reject storing the address of a local into an out-parameter",
-                  SemanticError, "v. f(p* u4 out) { o! u4 x m, 1; out m, a& x; }")
+                  SemanticError, "v. f(p* u4 out) { o! u4 x m, 1; out m, p@ x; }")
 
     def test_pointer_dangling_ok():
         sigil = """
         o! u4 g m, 5;
-        p* u4 addr_of_global(v.) { r; a& g; }
+        p* u4 addr_of_global(v.) { r; p@ g; }
         v. local_ptr(v.) {
             o! u4 x m, 1;
-            o! p* u4 p m, a& x;
+            o! p* u4 p m, p@ x;
             o! u4 y m, p* p;
         }
         i4 main(v.) { r; (i4)(p* addr_of_global()) + (i4)(z? p* u4) - 8; }
@@ -1431,12 +1431,12 @@ int main(void) {
     assert_ok("15. v1.1 ptr", "Global addresses and locals pointing at locals stay legal", test_pointer_dangling_ok)
 
     assert_raises("15. v1.1 ptr", "Reject using a pointer whose base object has left scope",
-                  SemanticError, "i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } r; (i4)p* p; }")
+                  SemanticError, "i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, p@ x; } r; (i4)p* p; }")
     assert_raises("15. v1.1 ptr", "Reject copying a pointer whose base object has left scope",
-                  SemanticError, "v. f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } o! p* u4 q m, p; }")
+                  SemanticError, "v. f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, p@ x; } o! p* u4 q m, p; }")
     assert_raises("15. v1.1 ptr", "Reject passing a pointer whose base object has left scope",
                   SemanticError,
-                  "u4 rd(p* u4 p) { r; p* p; } i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, a& x; } r; (i4)rd(p); }")
+                  "u4 rd(p* u4 p) { r; p* p; } i4 f(v.) { o! p* u4 p; i? (1) { o! u4 x m, 1; p m, p@ x; } r; (i4)rd(p); }")
 
     def test_pointer_scope_ok():
         sigil = """
@@ -1446,9 +1446,9 @@ int main(void) {
             o! i4 x m, 1;
             s? (a) { k: 1: { x m+ 1; b!; } d: { x m, 0; } }
             o! u4 base m, 7;
-            o! p* u4 p m, a& base;
+            o! p* u4 p m, p@ base;
             i? (1) { o! u4 y m, keep(p) + (i4)p* p; }
-            o! p* u4 gp m, a& g;
+            o! p* u4 gp m, p@ g;
             r; x + (i4)p* gp;
         }
         i4 main(v.) { r; f(1) - 8; }
@@ -1460,7 +1460,7 @@ int main(void) {
     # Layer 16: v1.1 cross-function escape and r@ promise checks
     assert_raises("16. v1.1 xfn", "Reject passing a local address to a callee that stores it into a global",
                   SemanticError,
-                  "o! p* u4 g; v. keep(p* u4 p) { g m, p; } v. f(v.) { o! u4 x m, 1; keep(a& x); }")
+                  "o! p* u4 g; v. keep(p* u4 p) { g m, p; } v. f(v.) { o! u4 x m, 1; keep(p@ x); }")
 
     def test_escape_ok_cases():
         sigil = """
@@ -1468,7 +1468,7 @@ int main(void) {
         o! p* u4 g;
         v. keep(p* u4 p) { g m, p; }
         v. keep_local(p* u4 p) { o! p* u4 local m, p; o! u4 t m, p* local; }
-        v. f(v.) { keep(a& gv); keep_local(a& gv); }
+        v. f(v.) { keep(p@ gv); keep_local(p@ gv); }
         """
         check_source(sigil, "escape_ok.sigil")
 
@@ -1479,7 +1479,7 @@ int main(void) {
                   "u4 sum(r@ p* u4 a, p* u4 b) { r; a[0] + b[0]; } i4 f(v.) { o! u4[4] arr m, { 1, 2, 3, 4 }; r; (i4)sum(arr, arr); }")
     assert_raises("16. v1.1 xfn", "Reject touching an object directly after a local r@ pointer claims it",
                   SemanticError,
-                  "i4 f(v.) { o! u4[4] arr m, { 1, 2, 3, 4 }; o! r@ p* u4 p m, a& arr[0]; o! u4 x m, arr[1]; r; (i4)x; }")
+                  "i4 f(v.) { o! u4[4] arr m, { 1, 2, 3, 4 }; o! r@ p* u4 p m, p@ arr[0]; o! u4 x m, arr[1]; r; (i4)x; }")
 
     def test_restrict_ok_cases():
         sigil = """
@@ -1488,7 +1488,7 @@ int main(void) {
             o! u4[2] x m, { 1, 2 };
             o! u4[2] y m, { 3, 4 };
             o! u4 s m, sum(x, y);
-            o! r@ p* u4 p m, a& x[0];
+            o! r@ p* u4 p m, p@ x[0];
             o! u4 t m, p[1];
             r; (i4)s + (i4)t;
         }
@@ -2074,8 +2074,8 @@ int main(void) {
 
 i4 main(v.) {
     o! c1[8] buf;
-    strcpy(a& buf[0], "hi");
-    o! i4 n m, (i4)strlen(a& buf[0]);
+    strcpy(p@ buf[0], "hi");
+    o! i4 n m, (i4)strlen(p@ buf[0]);
     o! i4 c m, toupper('a');
     o! i4 v m, atoi("42");
     o! f8 s m, sqrt(9.0) + fabs(-2.0);
@@ -2106,7 +2106,7 @@ i4 main(v.) {
     o! p* FILE g m, fopen("out.txt", "r");
     i? (g =? NULL) { r; 2; }
     o! c1[16] buf;
-    fgets(a& buf[0], 16, g);
+    fgets(p@ buf[0], 16, g);
     fclose(g);
     printf("%s", buf);
     r; 0;
@@ -2152,7 +2152,7 @@ i4 main(v.) {
     o! c1[128] line;
     o! i4 words m, 0;
     o! i4 in_word m, 0;
-    w~ (fgets(a& line[0], 128, stdin) !? NULL) {
+    w~ (fgets(p@ line[0], 128, stdin) !? NULL) {
         o! i4 i m, 0;
         w~ ((i4)line[i] !? 0) {
             i? (isspace(line[i]) !? 0) {
@@ -2207,7 +2207,7 @@ i4 main(v.) {
 
         all_sigils = [
             "i?", "e:", "w~", "f~", "d~", "s?", "k:", "d:", "r;", "b!", "c^",
-            "s{", "u{", "e{", "w!", "p*", "c@", "v@", "r@", "a&", "f^",
+            "s{", "u{", "e{", "w!", "p*", "c@", "v@", "r@", "p@", "f^",
             "b.", "v.", "z?", "g?", "a?", "o!", "s@", "a@", "i@", "x!",
             "m,", "m+", "m-", "m*", "m/", "g!", "l!", "t!", "d!",
             "&^", "|^", "^^", "~^", "&.", "|.", "!.", "=?", "!?", "->",
@@ -2248,7 +2248,7 @@ i4 main(v.) {
 
 i4 main(v.) {
     o! u4[5] a m, { 0, 0, 0, 0, 0 };
-    o! p* u4 q m, add2(a& a[0]);
+    o! p* u4 q m, add2(p@ a[0]);
     q[3] m, 1;
     r; 0;
 }
@@ -2265,8 +2265,8 @@ i4 main(v.) {
 i4 main(v.) {
     o! u4[5] a m, { 1, 2, 3, 4, 5 };
     o! u4[2] b m, { 0, 0 };
-    o! p* u4 q m, a& b[0];
-    retarget(a& q, a& a[0]);
+    o! p* u4 q m, p@ b[0];
+    retarget(p@ q, p@ a[0]);
     q[5] m, 9;
     r; 0;
 }
@@ -2286,7 +2286,7 @@ i4 main(v.) {
 
 i4 main(v.) {
     o! u4[%d] a m, { 0 };
-    r; f(a& a[0]);
+    r; f(p@ a[0]);
 }
 """
         compile_source(base % 4, "len_ok.sigil")
@@ -2303,7 +2303,7 @@ i4 g(p* u4 p) { r; f(p); }
 
 i4 main(v.) {
     o! u4[5] a m, { 0 };
-    r; g(a& a[0]);
+    r; g(p@ a[0]);
 }
 """
         compile_source(unknown, "len_unknown.sigil")

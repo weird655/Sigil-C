@@ -42,14 +42,14 @@ v. ring_init(p* Ring rb) {
 
 i4 main(v.) {
     o! Ring rb;
-    ring_init(a& rb);
+    ring_init(p@ rb);
 
     o! u4 i m, 1;
-    w~ (i <= 10) { (v.)ring_push(a& rb, (u1)i); i m+ 1; }   /* 塞 10 个 */
+    w~ (i <= 10) { (v.)ring_push(p@ rb, (u1)i); i m+ 1; }   /* 塞 10 个 */
 
     printf("popped: ");
     o! u1 v m, 0;
-    w~ (ring_pop(a& rb, a& v)) { printf("%u ", (u4)v); }
+    w~ (ring_pop(p@ rb, p@ v)) { printf("%u ", (u4)v); }
     printf("\ndropped: %u\n", rb.dropped);
     r; 0;
 }

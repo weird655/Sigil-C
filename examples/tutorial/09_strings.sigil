@@ -6,7 +6,7 @@
 i4 main(v.) {
     o! p* c@ c1 s m, "hello";
     o! c1[16] buf;
-    strcpy(a& buf[0], s);
+    strcpy(p@ buf[0], s);
     printf("len=%d before=%d first=%c\n",
            (i4)strlen(s), (strcmp(s, "world") < 0) ? 1 : 0, buf[0]);
     r; 0;

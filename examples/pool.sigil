@@ -31,31 +31,31 @@ u4 memory_pool_demo(v.) {
     raw_storage[0] m, 0;
     raw_storage[4] m, 0;
 
-    o! p* u4 slot_alpha m, a& raw_storage[0];   // Block 0
-    o! p* u4 slot_beta  m, a& raw_storage[4];   // Block 1
+    o! p* u4 slot_alpha m, p@ raw_storage[0];   // Block 0
+    o! p* u4 slot_beta  m, p@ raw_storage[4];   // Block 1
 
     o! Pool main_pool;
     main_pool.arena_guard m, raw_storage;
     main_pool.arena_raw   m, raw_storage;
-    main_pool.free_slot   m, a& slot_alpha;
-    main_pool.cursor_hub  m, a& main_pool.free_slot;
+    main_pool.free_slot   m, p@ slot_alpha;
+    main_pool.cursor_hub  m, p@ main_pool.free_slot;
     main_pool.stride      m, 4;
     main_pool.allocated   m, 0;
 
-    o! p* c@ Pool ro_pool m, a& main_pool;   // 只读视图
-    o! p* Pool rw_pool    m, a& main_pool;   // 可写视图
+    o! p* c@ Pool ro_pool m, p@ main_pool;   // 只读视图
+    o! p* Pool rw_pool    m, p@ main_pool;   // 可写视图
 
     o! p* u4 blk_first m, pool_acquire_block(rw_pool, 101);
     blk_first[1] m, 202;
 
-    rw_pool->free_slot m, a& slot_beta;      // 推进游标
+    rw_pool->free_slot m, p@ slot_beta;      // 推进游标
 
     o! p* u4 blk_second m, pool_acquire_block(rw_pool, 303);
 
     o! p* p* p* u4 hub_probe m, ro_pool->cursor_hub;
     o! u4 deep_read_val m, p* p* p* hub_probe;   // 穿透三层
 
-    o! c@ p* p* u4 pinned_slot m, a& slot_alpha; // 槽位地址锁死
+    o! c@ p* p* u4 pinned_slot m, p@ slot_alpha; // 槽位地址锁死
     pool_relocate_slot(pinned_slot, blk_second, 404);
 
     o! p* c@ u4 guard_view m, ro_pool->arena_guard;

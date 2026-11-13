@@ -29,7 +29,7 @@ CASES = [
     {
         "name": "pointer-walk",
         "c": "#include <stdio.h>\nint main(void){int a[5]={1,2,3,4,5};int *p=a;int s=0;for(int i=0;i<5;i++)s+=*(p+i);printf(\"%d\\n\",s);return 0;}\n",
-        "sigil": '#include <stdio.h>\n\ni4 main(v.) {\n    o! i4[5] a m, { 1, 2, 3, 4, 5 };\n    o! p* i4 p m, a& a[0];\n    o! i4 s m, 0;\n    o! i4 i m, 0;\n    w~ (i < 5) { s m+ p[i]; i m+ 1; }\n    printf("%d\\n", s);\n    r; 0;\n}\n',
+        "sigil": '#include <stdio.h>\n\ni4 main(v.) {\n    o! i4[5] a m, { 1, 2, 3, 4, 5 };\n    o! p* i4 p m, p@ a[0];\n    o! i4 s m, 0;\n    o! i4 i m, 0;\n    w~ (i < 5) { s m+ p[i]; i m+ 1; }\n    printf("%d\\n", s);\n    r; 0;\n}\n',
     },
     {
         "name": "switch-fallthrough",
@@ -50,7 +50,7 @@ CASES = [
         "name": "stdin-sum",
         "stdin": "1 2 3 4 5\n",
         "c": "#include <stdio.h>\nint main(void){int x,s=0;while(scanf(\"%d\",&x)==1)s+=x;printf(\"%d\\n\",s);return 0;}\n",
-        "sigil": '#include <stdio.h>\n\ni4 main(v.) {\n    o! i4 x m, 0;\n    o! i4 s m, 0;\n    w~ (scanf("%d", a& x) =? 1) { s m+ x; }\n    printf("%d\\n", s);\n    r; 0;\n}\n',
+        "sigil": '#include <stdio.h>\n\ni4 main(v.) {\n    o! i4 x m, 0;\n    o! i4 s m, 0;\n    w~ (scanf("%d", p@ x) =? 1) { s m+ x; }\n    printf("%d\\n", s);\n    r; 0;\n}\n',
     },
 ]
 
