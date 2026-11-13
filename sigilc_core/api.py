@@ -15,18 +15,19 @@ from .parser import Parser
 
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
-                   line_directives: bool = True) -> str:
+                   line_directives: bool = True, strict: bool = False) -> str:
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename, defines).parse_program()
+    ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives).generate(ast)
 
-def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None) -> None:
+def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None,
+                 strict: bool = False) -> None:
     """词法 + 语法 + 静态语义检查，不产生任何输出。"""
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    Parser(tokens, filename, defines).parse_program()
+    Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
 
 def _header_guard(header_name: str) -> str:
     base = os.path.basename(header_name).upper()
@@ -34,11 +35,11 @@ def _header_guard(header_name: str) -> str:
 
 def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h",
                    prelude: Optional[str] = None, bounds_check: bool = False,
-                   defines: Optional[Dict[str, str]] = None) -> str:
+                   defines: Optional[Dict[str, str]] = None, strict: bool = False) -> str:
     """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename, defines).parse_program()
+    ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
     return CodeGenerator(filename, header_mode=True, prelude_include=prelude,
                          bounds_check=bounds_check, cli_defines=defines).generate_header(ast, _header_guard(header_name))
 
@@ -463,7 +464,8 @@ def _init_project(target: str, force: bool) -> int:
     return 0
 
 
-def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False) -> int:
+def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False,
+                   strict: bool = False) -> int:
     """对单个文件或目录下所有 .sigil 做词法/语法/语义检查，不写文件。"""
     if os.path.isdir(target):
         files = _collect_sources(target)
@@ -482,7 +484,7 @@ def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False)
             src = f.read()
         rel = os.path.relpath(path)
         try:
-            check_source(src, rel, defines=defines)
+            check_source(src, rel, defines=defines, strict=strict)
         except (LexerError, ParseError, SemanticError) as e:
             failures.append((rel, src, e))
 
@@ -591,7 +593,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         try:
             c_src = compile_source(src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
-                                   line_directives=not args.no_line)
+                                   line_directives=not args.no_line, strict=args.strict)
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, rel, src)
             return 1

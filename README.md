@@ -5,7 +5,7 @@
 > 一句话概括：把数据流写在字面上的 C。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-199%20%2F%2040%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-200%20%2F%2041%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -192,7 +192,7 @@ VS Code 需要额外的客户端扩展；本仓库的 `editors/vscode/` 只含�
 | 有符号溢出 | 常量折叠拦常量，变量运算不拦 |
 | 外部头结构体 | 用 `x!` 手工登记字段；登记错了只有 `t!` + `offsetof` 断言能抓 |
 | 指针参数长度 | 参数来源未知，越界不查 |
-| 跨文件分析 | 指针来源与逃逸只在单个翻译单元内有效 |
+| 跨文件分析 | 指针来源与逃逸只在单个翻译单元内有效；`--strict` 会把无法证明来源的参数访问拒掉，默认放行 |
 
 ### 四个实测
 
@@ -396,6 +396,7 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 | `--force` | 配合 `--init`：覆盖已存在的文件 |
 | `--lsp` | 启动 LSP（stdio JSON-RPC） |
 | `--lsp-completion` | 配合 `--lsp`：开启片段补全（默认关闭） |
+| `--strict` | 拒绝来源无法证明的参数下标/解引用，而不是静默放行 |
 | `--no-line` | 不生成 `#line`：交付给 C 用户的源更像普通 C（报错指向 `.c`） |
 | `--bounds-check` | 运行期数组下标检查（越界 `abort()`） |
 | `--define NAME=VALUE` | 预定义宏常量，可重复 |
@@ -494,7 +495,7 @@ int main(void) {
 
 ## 测试矩阵
 
-199 项 / 40 层，每层一个主题：
+200 项 / 41 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -515,11 +516,12 @@ int main(void) {
 | 37–38 | 差分执行（C vs Sigil-C） / 随机程序执行比对 |
 | 39 | stdin 驱动的程序 |
 | 40 | 遮蔽作用域的来源还原 |
+| 41 | `--strict` 拒绝无法证明的参数访问 |
 
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 199 项 / 40 层，需要 gcc
+python3 test_matrix.py        # 200 项 / 41 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -527,7 +529,7 @@ python3 test_matrix.py        # 199 项 / 40 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 199 项测试
+python tools/check.py            # py_compile → ruff → mypy → 200 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -566,7 +568,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 
 - **维护模式**：1.1 是最后一个功能版本；之后只修缺陷、补文档，不新增印记或工具。
 - 版本 **1.1**，tag `v1.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.1) 已发布；语法冻结（v1.x 只加不改）。
-- 199 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 200 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - 已有：54 个印记、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建、栈/堆三写法。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理。
 

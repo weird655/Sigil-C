@@ -346,6 +346,12 @@ p* i4 bad(v.) {
 
 挡不住的：堆、空指针、未初始化、窄化、有符号溢出、跨文件。见 README「它不挡什么」。
 
+参数进来时来源未知，默认**不查也不报**；加 `--strict` 会把「无法证明来源的参数下标/解引用」直接拒掉：
+
+```text
+error: Cannot prove the bounds of parameter 'p' on subscript (cross-function provenance is not tracked)
+```
+
 ---
 
 ## 3.6 三级指针：一个内存池

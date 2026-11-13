@@ -60,6 +60,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--cc", default="gcc", help="C compiler used by --build (default: gcc)")
     ap.add_argument("--cflags", default="-std=c99 -Wall -Wextra -Werror -pedantic",
                     help="compiler flags used by --build")
+    ap.add_argument("--strict", action="store_true",
+                    help="reject pointer subscripts/derefs whose provenance cannot be proven")
+
     ap.add_argument("--no-line", action="store_true",
                     help="omit #line directives so the generated C reads like ordinary C")
 
@@ -89,7 +92,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ap.error("input is required unless --build DIR is given")
 
     if args.check:
-        return _check_targets(args.input, defines, json_out=args.json)
+        return _check_targets(args.input, defines, json_out=args.json, strict=args.strict)
 
     in_path = args.input
     out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".c")
@@ -104,7 +107,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check,
-                               defines=defines, line_directives=not args.no_line)
+                               defines=defines, line_directives=not args.no_line,
+                               strict=args.strict)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(c_src)
         print(f"Compiled {in_path} -> {out_path}")

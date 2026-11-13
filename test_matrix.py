@@ -2198,6 +2198,19 @@ i4 main(v.) {
 
     assert_ok("40. scope", "tutorial references 01-20 and has no broken snippet braces", tutorial_doc_consistency)
 
+    # Layer 41: --strict refuses unprovable parameter access
+    def test_strict_provenance():
+        src = "i4 first(p* u4 p) { r; (i4)p[0]; }"
+        compile_source(src, "strict.sigil")  # 默认模式接受
+        try:
+            compile_source(src, "strict.sigil", strict=True)
+        except SemanticError as e:
+            assert "Cannot prove the bounds of parameter 'p'" in str(e), e
+        else:
+            raise AssertionError("strict mode accepted a parameter subscript")
+
+    assert_ok("41. strict", "--strict rejects indexing a parameter with unknown provenance", test_strict_provenance)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2205,7 +2218,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 40-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 41-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
