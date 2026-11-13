@@ -431,6 +431,7 @@ int main(void) {
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
 | 贡献指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 环境、一键检查、加印记清单、发布流程 |
 | 架构 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 分层、依赖方向、预算、非目标 |
+| 汇编实验 | [Sigil-ASM](https://github.com/weird655/Sigil-ASM) | 独立的 `.sigil → x86-64` 概念验证，与 Sigil-C 分仓 |
 
 > 文件名是英文，第一列是中文名——按中文找即可。
 
