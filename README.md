@@ -587,3 +587,5 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 > 代码用 MIT 是软件惯例（含免责条款、无 copyleft、与 C / Python 生态兼容）；文档用 CC BY 是因为它本来就是写给读的。
 
 > 这是一种深奥难懂的语言——它的语法和汇编一样简单。
+
+最后的话：[MEMORIAL.md](MEMORIAL.md)。
