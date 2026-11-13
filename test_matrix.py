@@ -1611,6 +1611,8 @@ int main(void) {
             "19_arena": "x=42 off=4",
             "20_soa": "sum=3.0 last_next=4",
             "21_qsort": "1 1 3 4 5",
+            "22_control_flow": "bits=4\nacc=8\nonce=1\nswitch=6\nnested=22\n"
+                               "label=2 generic=1 align=8 inline=3 handle=1",
         }
         tut = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
         for name, expect in cases.items():
@@ -2198,12 +2200,34 @@ i4 main(v.) {
         with open(tut, encoding="utf-8") as f:
             text = f.read()
         assert "}; }" not in text, "stray extra brace in a tutorial snippet"
-        for i in range(1, 22):
+        for i in range(1, 23):
             assert f"{i:02d}_" in text, f"tutorial does not reference example {i:02d}"
         for part in ("Part 0", "Part 1", "Part 2", "Part 3", "Part 4", "Part 5", "Part 6", "Part 7"):
             assert part in text, part
 
-    assert_ok("40. scope", "tutorial references 01-20 and has no broken snippet braces", tutorial_doc_consistency)
+        all_sigils = [
+            "i?", "e:", "w~", "f~", "d~", "s?", "k:", "d:", "r;", "b!", "c^",
+            "s{", "u{", "e{", "w!", "p*", "c@", "v@", "r@", "a&", "f^",
+            "b.", "v.", "z?", "g?", "a?", "o!", "s@", "a@", "i@", "x!",
+            "m,", "m+", "m-", "m*", "m/", "g!", "l!", "t!", "d!",
+            "&^", "|^", "^^", "~^", "&.", "|.", "!.", "=?", "!?", "->",
+            "<<", ">>", "<=", ">=",
+        ]
+        used = set()
+        example_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")
+        for name in sorted(os.listdir(example_dir)):
+            if not name.endswith(".sigil"):
+                continue
+            path = os.path.join(example_dir, name)
+            with open(path, encoding="utf-8") as f:
+                src = f.read()
+            for tok in Lexer(src, path).tokenize():
+                if tok.value in all_sigils:
+                    used.add(tok.value)
+        missing = [sigil for sigil in all_sigils if sigil not in used]
+        assert not missing, f"tutorial examples never use: {missing}"
+
+    assert_ok("40. scope", "tutorial references 01-22 and every sigil appears in an example", tutorial_doc_consistency)
 
     # Layer 41: --strict refuses unprovable parameter access
     def test_strict_provenance():

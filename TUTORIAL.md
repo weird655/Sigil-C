@@ -580,6 +580,41 @@ qsort(a& a[0], 5, z? i4, cmp);
 
 ---
 
+## 4.9 控制流梯度：一个例子把剩下的印记跑完
+
+第 22 例 `22_control_flow.sigil` 专门覆盖前面没出现在教程里的印记：
+
+| 印记 | 例子里的行为 |
+|---|---|
+| `f~` | 三段分号 for：`f~ (init; cond; step)` |
+| `d~` | do-while：条件在循环体**之后**求值 |
+| `s?` / `k:` / `d:` | switch，`k: 2:` 不写 `b!`，穿透到 `k: 3:` |
+| `b!` / `c^` | `b!` 只跳出最近一层；`c^` 跳过本轮 |
+| `g!` / `l!` | 回跳标签，带一个计数器避免死循环 |
+| `g?` | 转译期按静态类型选分支 |
+| `a?` | `alignof(i8)` |
+| `i@` / `s@` | `s@ i@` 的 static inline |
+| `x!` | 用 libc 的 `fpos_t` 注册外部类型 |
+| `m/` | 除法赋值 |
+| `\|^` `^^` `<<` `>>` | 位或 / 位异或 / 左移 / 右移 |
+| `\|.` `!.` `!?` | 逻辑或 / 逻辑非 / 不等于 |
+| `d!` | 不可达分支里的陷阱 |
+
+输出：
+
+```text
+bits=4
+acc=8
+once=1
+switch=6
+nested=22
+label=2 generic=1 align=8 inline=3 handle=1
+```
+
+`b!` 在内层循环里只跳出内层，外层的 `+10` 仍会执行——这是最容易读错的一处。
+
+---
+
 # Part 5 · 进阶
 
 ## 5.1 递归
@@ -784,6 +819,7 @@ sigilc --build src -o app --emit-header
 | 19 Arena | `19_arena.sigil` |
 | 20 SoA | `20_soa.sigil` |
 | 21 qsort | `21_qsort.sigil` |
+| 22 控制流 | `22_control_flow.sigil` |
 
 ## C 对照速查
 
