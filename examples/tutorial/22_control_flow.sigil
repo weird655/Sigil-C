@@ -3,7 +3,7 @@
 /* 第 22 章：控制流梯度
    f~ 三段分号 / d~ 后置条件 / s? 穿透 / b! 只跳最近一层 / c^ 继续
    g! l! 回跳 / g? 转译期分派 / a? 对齐 / i@ inline / x! 外部类型
-   |^ ^^ << >> 位运算 / m/ 除法赋值 / |. !. 逻辑 / !? 不等于 / d! 陷阱 */
+   | ^ << >> 位运算 / m/ 除法赋值 / || ! 逻辑 / != 不等于 / d! 陷阱 */
 
 x! fpos_t;
 
@@ -11,15 +11,15 @@ s@ i@ i4 inline_helper_fragment(i4 v) { r; v + 1; }
 
 i4 main(v.) {
     o! u4 bits_fragment m, 0;
-    bits_fragment m, bits_fragment |^ 1;
-    bits_fragment m, bits_fragment ^^ 3;
+    bits_fragment m, bits_fragment | 1;
+    bits_fragment m, bits_fragment ^ 3;
     bits_fragment m, bits_fragment << 2;
     bits_fragment m, bits_fragment >> 1;
     printf("bits=%u\n", bits_fragment);
 
     o! i4 acc_fragment m, 0;
     f~ (o! i4 idx_fragment m, 0; idx_fragment < 5; idx_fragment m+ 1) {
-        i? (idx_fragment =? 2) { c^; }
+        i? (idx_fragment == 2) { c^; }
         acc_fragment m+ idx_fragment;
     }
     printf("acc=%d\n", acc_fragment);
@@ -41,7 +41,7 @@ i4 main(v.) {
     o! i4 nested_fragment m, 0;
     f~ (o! i4 i2_fragment m, 0; i2_fragment < 2; i2_fragment m+ 1) {
         f~ (o! i4 j2_fragment m, 0; j2_fragment < 3; j2_fragment m+ 1) {
-            i? (j2_fragment =? 1) { b!; }
+            i? (j2_fragment == 1) { b!; }
             nested_fragment m+ 1;
         }
         nested_fragment m+ 10;
@@ -59,12 +59,12 @@ i4 main(v.) {
     o! i4 inline_fragment m, inline_helper_fragment(label_fragment);
 
     label_fragment m/ 1;
-    i? (label_fragment > 0 |. !.false) { label_fragment m+ 0; }
-    i? (label_fragment !? 0) { label_fragment m+ 0; }
+    i? (label_fragment > 0 || !false) { label_fragment m+ 0; }
+    i? (label_fragment != 0) { label_fragment m+ 0; }
     i? (label_fragment < 0) { d!; }
 
     printf("label=%d generic=%d align=%u inline=%d handle=%d\n",
            label_fragment, generic_fragment, (u4)align_fragment, inline_fragment,
-           handle_fragment =? 0);
+           handle_fragment == 0);
     r; 0;
 }

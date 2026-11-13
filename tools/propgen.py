@@ -19,7 +19,7 @@ sys.path.insert(0, ROOT)
 import sigilc  # noqa: E402
 
 LITERALS = ["0", "1", "2", "3", "7", "13", "255", "1000"]
-BINOPS = ["m+", "m-", "m*", "m/", "m%", "&^", "|^", "^^", "<<", ">>"]
+BINOPS = ["m+", "m-", "m*", "m/", "m%", "&", "|", "^", "<<", ">>"]
 
 
 def gen_expr(rng, depth, names):
@@ -28,10 +28,10 @@ def gen_expr(rng, depth, names):
         return rng.choice(LITERALS) if rng.random() < 0.6 else rng.choice(names)
     pick = rng.random()
     if pick < 0.45:
-        op = rng.choice(["+", "-", "*", "&^", "|^", "^^"])
+        op = rng.choice(["+", "-", "*", "&", "|", "^"])
         return f"({gen_expr(rng, depth - 1, names)} {op} {gen_expr(rng, depth - 1, names)})"
     if pick < 0.55:
-        return f"(~^{gen_expr(rng, depth - 1, names)})"
+        return f"(~{gen_expr(rng, depth - 1, names)})"
     if pick < 0.65:
         return f"(-{gen_expr(rng, depth - 1, names)})"
     if pick < 0.78:
@@ -39,7 +39,7 @@ def gen_expr(rng, depth, names):
         return f"({gen_expr(rng, depth - 1, names)} {rng.choice(['/', '%'])} {rng.choice(['1', '2', '3', '7'])})"
     if pick < 0.9:
         return f"((i4)({gen_expr(rng, depth - 1, names)}))"
-    return f"(({gen_expr(rng, depth - 1, names)} !? 0) ? {gen_expr(rng, depth - 1, names)} : {gen_expr(rng, depth - 1, names)})"
+    return f"(({gen_expr(rng, depth - 1, names)} != 0) ? {gen_expr(rng, depth - 1, names)} : {gen_expr(rng, depth - 1, names)})"
 
 
 def gen_program(rng):
@@ -50,7 +50,7 @@ def gen_program(rng):
     for _ in range(rng.randrange(0, 4)):
         lines.append(f"    {rng.choice(names)} m, {gen_expr(rng, 2, names)};")
     if rng.random() < 0.5:
-        lines.append(f"    i? ({rng.choice(names)} !? 0) {{ {rng.choice(names)} m, {gen_expr(rng, 2, names)}; }}")
+        lines.append(f"    i? ({rng.choice(names)} != 0) {{ {rng.choice(names)} m, {gen_expr(rng, 2, names)}; }}")
     lines.append(f"    r; {gen_expr(rng, 3, names)};")
     return "i4 main(v.) {\n" + "\n".join(lines) + "\n}\n"
 

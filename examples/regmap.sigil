@@ -31,12 +31,12 @@ u{ CtrlReg {
     CtrlBits bits;
 };
 
-t! (offsetof(Uart, data) =? 4, "data register must sit at offset 4");
-t! (offsetof(Uart, ctrl) =? 12, "ctrl register must sit at offset 12");
-t! (z? Uart =? 16, "Uart block must be 16 bytes");
-t! (z? CtrlReg =? 4, "CtrlReg must overlay 4 bytes");
+t! (offsetof(Uart, data) == 4, "data register must sit at offset 4");
+t! (offsetof(Uart, ctrl) == 12, "ctrl register must sit at offset 12");
+t! (z? Uart == 16, "Uart block must be 16 bytes");
+t! (z? CtrlReg == 4, "CtrlReg must overlay 4 bytes");
 
-b. tx_ready(p* c@ Uart u) { r; (u->status &^ STATUS_TX) !? 0; }
+b. tx_ready(p* c@ Uart u) { r; (u->status & STATUS_TX) != 0; }
 
 v. write_ctrl(p* Uart u, u4 raw) { u->ctrl m, raw; }
 

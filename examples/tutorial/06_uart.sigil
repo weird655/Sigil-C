@@ -24,9 +24,9 @@ u{ CtrlReg {                 /* raw 与 bits 共用 4 字节 */
     CtrlBits bits;
 };
 
-t! (offsetof(Uart, data) =? 4, "data register must sit at offset 4");
-t! (offsetof(Uart, ctrl) =? 8, "ctrl register must sit at offset 8");
-t! (z? Uart =? 12, "Uart block must be 12 bytes");
+t! (offsetof(Uart, data) == 4, "data register must sit at offset 4");
+t! (offsetof(Uart, ctrl) == 8, "ctrl register must sit at offset 8");
+t! (z? Uart == 12, "Uart block must be 12 bytes");
 
 v. uart_init(p* Uart u) {
     u->status m, 0x2;

@@ -29,7 +29,7 @@ def gen_expr(rng, depth, names, values):
     pick = rng.random()
     if pick < 0.15:
         text, value = gen_expr(rng, depth - 1, names, values)
-        return f"(~^{text})", (~value) & 0xFFFFFFFF
+        return f"(~{text})", (~value) & 0xFFFFFFFF
     left, lv = gen_expr(rng, depth - 1, names, values)
     right, rv = gen_expr(rng, depth - 1, names, values)
     if pick < 0.35:
@@ -37,10 +37,10 @@ def gen_expr(rng, depth, names, values):
     if pick < 0.55:
         return f"({left} * {right})", lv * rv
     if pick < 0.7:
-        return f"({left} &^ {right})", lv & rv
+        return f"({left} & {right})", lv & rv
     if pick < 0.85:
-        return f"({left} |^ {right})", lv | rv
-    return f"({left} ^^ {right})", lv ^ rv
+        return f"({left} | {right})", lv | rv
+    return f"({left} ^ {right})", lv ^ rv
 
 
 def gen_program(rng):

@@ -4,7 +4,7 @@
 
 i4 main(v.) {
     o! p* FILE f m, fopen("tut14.txt", "w");
-    i? (f =? NULL) { printf("open failed\n"); r; 1; }
+    i? (f == NULL) { printf("open failed\n"); r; 1; }
     fprintf(f, "hello %d\n", 42);
     fclose(f);
 

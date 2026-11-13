@@ -34,7 +34,7 @@ o! (f^(p* Ctx, i4) -> v.)[4] TABLE m, { on_none, on_key, on_tick, on_quit };
 
 v. dispatch(p* Ctx c, Event ev, i4 arg) {
     o! i4 idx m, (i4)ev;
-    i? (idx >= 0 &. idx < MAX_EVENTS) { TABLE[idx](c, arg); }
+    i? (idx >= 0 && idx < MAX_EVENTS) { TABLE[idx](c, arg); }
 }
 
 i4 main(v.) {
@@ -50,7 +50,7 @@ i4 main(v.) {
     dispatch(p@ c, EV_NONE, 0);
     dispatch(p@ c, EV_QUIT, 0);
 
-    i? (!.c.running) {
+    i? (!c.running) {
         printf("quit after %u ticks, %u keys, last='%c'\n", c.ticks, c.keys, c.last);
     }
     r; 0;

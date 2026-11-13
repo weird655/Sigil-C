@@ -22,14 +22,14 @@ u{ FrameHeader {
     FrameFlags bits;
 };
 
-t! (z? FrameHeader =? 2, "frame header must overlay 2 bytes");
+t! (z? FrameHeader == 2, "frame header must overlay 2 bytes");
 
 o! u1[16] STREAM m, {
     0x00, 0x31, 'A', 'B', 'C',
     0x80, 0x22, 'h', 'i',
 };
 
-u2 be16(p* c@ u1 p) { r; (u2)(((u4)p[0] << 8) |^ (u4)p[1]); }
+u2 be16(p* c@ u1 p) { r; (u2)(((u4)p[0] << 8) | (u4)p[1]); }
 
 i4 main(v.) {
     o! u4 n m, 9;

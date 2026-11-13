@@ -17,8 +17,8 @@ s{ Ring {
 };
 
 b. ring_push(p* Ring rb, u1 v) {
-    o! u4 next m, (rb->head + 1) % CAP;
-    i? (next =? rb->tail) {          /* 满：丢帧，不覆盖 */
+    o! u4 next m, (rb->head + 1) mod CAP;
+    i? (next == rb->tail) {          /* 满：丢帧，不覆盖 */
         rb->dropped m+ 1;
         r; false;
     }
@@ -28,9 +28,9 @@ b. ring_push(p* Ring rb, u1 v) {
 }
 
 b. ring_pop(p* Ring rb, p* u1 out) {
-    i? (rb->tail =? rb->head) { r; false; }   /* 空 */
+    i? (rb->tail == rb->head) { r; false; }   /* 空 */
     p* out m, rb->data[rb->tail];
-    rb->tail m, (rb->tail + 1) % CAP;
+    rb->tail m, (rb->tail + 1) mod CAP;
     r; true;
 }
 

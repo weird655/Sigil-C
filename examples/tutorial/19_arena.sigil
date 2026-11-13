@@ -15,7 +15,7 @@ v. arena_init(p* Arena a, p* u1 base, u4 cap) {
 }
 
 p* u1 arena_alloc(p* Arena a, u4 size, u4 align) {
-    o! u4 aligned m, (a->off + align - 1) &^ ~^(align - 1);
+    o! u4 aligned m, (a->off + align - 1) & ~(align - 1);
     o! u4 next m, aligned + size;
     i? (next > a->cap) { r; NULL; }
     a->off m, next;
@@ -30,7 +30,7 @@ i4 main(v.) {
     arena_init(p@ a, p@ buf[0], 64);
 
     o! p* i4 x m, (p* i4)arena_alloc(p@ a, 4, 4);
-    i? (x =? NULL) { r; 1; }
+    i? (x == NULL) { r; 1; }
     p* x m, 42;
     printf("x=%d off=%u\n", p* x, a.off);
 

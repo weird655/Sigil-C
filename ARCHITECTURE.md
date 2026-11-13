@@ -24,7 +24,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 
 | 模块 | 职责 | 允许依赖 |
 |---|---|---|
-| `lexer.py` | Token、54 个印记表、DFA | 无 |
+| `lexer.py` | Token、45 个印记表 + 运算符表、DFA | 无 |
 | `version.py` | 版本号唯一来源 | 无 |
 | `preamble.py` | 生成文件开头的可移植宏 | `version` |
 | `type_system.py` | `TypeNode`、类型等价、C 声明符 | `lexer` |

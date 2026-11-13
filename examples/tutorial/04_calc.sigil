@@ -11,7 +11,7 @@ i4 do_sub(i4 a, i4 b) { r; a - b; }
 i4 do_mul(i4 a, i4 b) { r; a * b; }
 
 i4 do_div(i4 a, i4 b) {
-    i? (b =? 0) { r; 0; }         /* 除零返回 0，不崩 */
+    i? (b == 0) { r; 0; }         /* 除零返回 0，不崩 */
     r; a / b;
 }
 

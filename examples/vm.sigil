@@ -14,8 +14,8 @@
 #define REG_COUNT 8
 #define TRACE 0          /* 改成 1 可以看逐条指令轨迹 */
 
-t! (z? i4 =? 4, "i4 must be 32-bit");
-t! (z? u4 =? 4, "u4 must be 32-bit");
+t! (z? i4 == 4, "i4 must be 32-bit");
+t! (z? u4 == 4, "u4 must be 32-bit");
 
 e{ Op {
     OP_PUSH m, 0, OP_ADD m, 1, OP_SUB m, 2, OP_MUL m, 3,
@@ -53,7 +53,7 @@ v. push(p* VM vm, i4 v) {
 }
 
 i4 pop(p* VM vm) {
-    i? (vm->sp =? 0) { fault(vm); r; 0; }
+    i? (vm->sp == 0) { fault(vm); r; 0; }
     o! i4 v m, vm->stack[vm->sp - 1];
     vm->sp m- 1;
     r; v;
@@ -66,7 +66,7 @@ v. op_mul(p* VM vm) { o! i4 b m, pop(vm); o! i4 a m, pop(vm); push(vm, a * b); v
 
 v. op_jz(p* VM vm) {
     o! i4 c m, pop(vm);
-    i? (c =? 0) { vm->pc m, vm->code[vm->pc].arg; }
+    i? (c == 0) { vm->pc m, vm->code[vm->pc].arg; }
     e: { vm->pc m+ 1; }
 }
 
@@ -74,14 +74,14 @@ v. op_jmp(p* VM vm) { vm->pc m, vm->code[vm->pc].arg; }
 
 v. op_load(p* VM vm) {
     o! i4 i m, vm->code[vm->pc].arg;
-    i? (i < 0 |. i >= REG_COUNT) { fault(vm); }
+    i? (i < 0 || i >= REG_COUNT) { fault(vm); }
     e: { push(vm, vm->regs[i]); vm->pc m+ 1; }
 }
 
 v. op_store(p* VM vm) {
     o! i4 i m, vm->code[vm->pc].arg;
     o! i4 v m, pop(vm);
-    i? (i < 0 |. i >= REG_COUNT) { fault(vm); }
+    i? (i < 0 || i >= REG_COUNT) { fault(vm); }
     e: { vm->regs[i] m, v; vm->pc m+ 1; }
 }
 
@@ -157,7 +157,7 @@ v. step_once(p* VM vm) {
     o! u4 pc0 m, vm->pc;
     o! u4 sp0 m, vm->sp;
     DISPATCH[op](vm);
-    i? (TRACE =? 1) {
+    i? (TRACE == 1) {
         printf("%03u  %-6s %d   pc %u->%u  sp %u->%u\n",
                pc0, NAMES[op], vm->code[pc0].arg, pc0, vm->pc, sp0, vm->sp);
     }
@@ -165,7 +165,7 @@ v. step_once(p* VM vm) {
 }
 
 v. run(p* VM vm) {
-    w~ (!.vm->halted &. vm->pc < vm->code_len) { step_once(vm); }
+    w~ (!vm->halted && vm->pc < vm->code_len) { step_once(vm); }
     i? (vm->halted) {
         printf("--- halted: %u ticks, stack peak %u ---\n", vm->ticks, vm->sp_peak);
     }

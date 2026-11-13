@@ -8,7 +8,7 @@ s{ Flags {
     u4 c w! 5;
 };
 
-t! (z? Flags =? 4, "Flags must fit in one u4");
+t! (z? Flags == 4, "Flags must fit in one u4");
 
 i4 main(v.) {
     o! Flags f;

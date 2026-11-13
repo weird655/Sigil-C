@@ -498,11 +498,11 @@ class Parser:
                 return PointerType(line=expr.line, col=expr.col, pointee=sub_t)
             if expr.op == '!':
                 if not self._is_scalar_type(sub_t):
-                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Logical NOT ('!.') requires scalar operand")
+                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Logical NOT ('!') requires scalar operand")
                 return BaseType(line=expr.line, col=expr.col, c_name='bool')
             if expr.op == '~':
                 if not self._is_int_type(sub_t):
-                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Bitwise NOT ('~^') requires integer operand")
+                    raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Bitwise NOT ('~') requires integer operand")
                 return sub_t
             if expr.op in ('+', '-'):
                 if not self._is_numeric_type(sub_t):
@@ -2434,7 +2434,8 @@ class Parser:
             right = self.parse_unary()
             self._check_not_void_expr(node, op_tok)
             self._check_not_void_expr(right, op_tok)
-            node = BinaryExpr(line=op_tok.line, col=op_tok.col, op=op_tok.value, left=node, right=right)
+            op = '%' if op_tok.kind == 'PERCENT' else op_tok.value
+            node = BinaryExpr(line=op_tok.line, col=op_tok.col, op=op, left=node, right=right)
         return node
 
     def _check_not_void_expr(self, expr: ExprNode, op_tok: Token):

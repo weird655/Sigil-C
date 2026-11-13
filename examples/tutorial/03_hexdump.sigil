@@ -24,9 +24,9 @@ v. dump(p* c@ u1 buf, u4 n) {
 
         printf(" |");
         i m, 0;
-        w~ (i < 16 &. off + i < n) {     /* &. 逻辑与，短路 */
+        w~ (i < 16 && off + i < n) {     /* && 逻辑与，短路 */
             o! u1 c m, buf[off + i];
-            i? (c >= 0x20 &. c < 0x7f) { printf("%c", (c1)c); }
+            i? (c >= 0x20 && c < 0x7f) { printf("%c", (c1)c); }
             e: { printf("."); }          /* 不可打印字节显示点 */
             i m+ 1;
         }

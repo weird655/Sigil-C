@@ -22,12 +22,12 @@ v. execute(p* c@ f4 input, u4 n) {
         target m, (p* f4)malloc(n * (z? f4));
         on_heap m, 1;
     }
-    i? (target =? NULL) { printf("oom\n"); r; ; }
+    i? (target == NULL) { printf("oom\n"); r; ; }
 
     kernel(input, target, n);
     printf("first=%.1f heap=%d\n", (f8)target[0], on_heap);
 
-    i? (on_heap =? 1) { free((p* v.)target); }
+    i? (on_heap == 1) { free((p* v.)target); }
 }
 
 i4 main(v.) {

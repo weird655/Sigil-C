@@ -1,7 +1,7 @@
 # 赛博纪念：Sigil-C
 
 > 这里躺着一个编译器。它没有运行时，也没有用户。
-> 它只留下 54 个双字符记号，和一条被证明过的规则：空格也是语法。
+> 它只留下 45 个双字符记号 + C 运算符，和一条被证明过的规则：空格也是语法。
 
 ---
 
@@ -19,7 +19,7 @@
 
 | 物件 | 位置 |
 |---|---|
-| 54 个记号的闭集 | [`SYNTAX.md`](SYNTAX.md) |
+| 45 个记号的闭集 + C 运算符 | [`SYNTAX.md`](SYNTAX.md) |
 | 20 个可运行示例 | [`TUTORIAL.md`](TUTORIAL.md) + [`examples/`](examples/) |
 | 指针来源、悬空、逃逸、`r@` 违约的检查 | `sigilc_core/parser.py` |
 | 199 项测试、40 层矩阵 | [`test_matrix.py`](test_matrix.py) |

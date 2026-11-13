@@ -84,7 +84,7 @@ def run_test_matrix():
     assert_raises("1. Lexer", "Reject malformed float '1.2.3'", LexerError, "f4 x m, 1.2.3;")
     assert_raises("1. Lexer", "Reject malformed number '123abc'", LexerError, "i4 x m, 123abc;")
     assert_raises("1. Lexer", "Reject raw '=' operator", LexerError, "i4 x = 1;")
-    assert_raises("1. Lexer", "Reject raw '|' operator", LexerError, "i4 x m, 1 | 2;")
+    assert_raises("1. Lexer", "Reject raw '#' operator", LexerError, "i4 x m, 1 # 2;")
     assert_raises("1. Lexer", "Reject out-of-range octal escape \"\\400\"", LexerError, r"c1 c m, '\400';")
     assert_raises("1. Lexer", "Reject invalid digit '9' in C99 octal integer constant '09'", LexerError, "i4 x m, 09;")
 
@@ -121,8 +121,8 @@ def run_test_matrix():
                 k: '\n': { r; 1; }
                 k: '\101': { r; 2; }
                 k: 077: { o! i4 local_tmp m, 10; r; local_tmp; }
-                k: (0 &. (1 / 0)): { o! i4 local_tmp m, 20; r; local_tmp; }
-                d: { i? (null_p =? 0) { r; (i4)w.u; } }
+                k: (0 && (1 / 0)): { o! i4 local_tmp m, 20; r; local_tmp; }
+                d: { i? (null_p == 0) { r; (i4)w.u; } }
             }
             r; 0;
         }
@@ -224,8 +224,8 @@ def run_test_matrix():
                   "s{ Incomplete; v. f(v.) { o! Incomplete x; }")
     assert_raises("4. Semantic", "Reject taking address ('p@') of rvalue expression", SemanticError,
                   "v. f(i4 x) { o! p* i4 p m, p@ (x + 1); }")
-    assert_raises("4. Semantic", "Reject bitwise operator '&^' on floating-point operand", SemanticError,
-                  "v. f(f4 x) { o! i4 y m, x &^ 1; }")
+    assert_raises("4. Semantic", "Reject bitwise operator '&' on floating-point operand", SemanticError,
+                  "v. f(f4 x) { o! i4 y m, x & 1; }")
     assert_raises("4. Semantic", "Reject binary pointer addition (p + q)", SemanticError,
                   "v. f(p* i4 p, p* i4 q) { o! p* i4 r m, p + q; }")
     assert_raises("4. Semantic", "Reject binary pointer addition (p + 1) on incomplete struct pointer", SemanticError,
@@ -354,8 +354,8 @@ i4 main(v.) {
     v.y m, 2;
 
     o! i4 res m, dot_product(p@ u, p@ v);
-    /* &. 为逻辑与 (&&)，&^ 为按位与 (&)，=? 为相等比较 (==) */
-    i? (res > 0 &. (res &^ 1) =? 0) {
+    /* && 为逻辑与 (&&)，& 为按位与 (&)，== 为相等比较 (==) */
+    i? (res > 0 && (res & 1) == 0) {
         printf("dot = %d\n", (int)res);
     }
     r; 0;
@@ -696,7 +696,7 @@ int main(void) {
         i4 main(v.) {
             o! b. ok m, true;
             o! b. no m, false;
-            i? (ok &. !.no) { r; 0; }
+            i? (ok && !no) { r; 0; }
             r; 1;
         }
         """
@@ -716,7 +716,7 @@ int main(void) {
         i4 main(v.) {
             o! p* u4 p m, NULL;
             o! f^(v.) -> u4 cb m, NULL;
-            i? (p =? NULL) { i? (cb =? NULL) { r; 0; } }
+            i? (p == NULL) { i? (cb == NULL) { r; 0; } }
             r; 1;
         }
         """
@@ -815,7 +815,7 @@ int main(void) {
             o! Ctrl c;
             c.enable m, 1;
             c.mode m, 5;
-            i? (c.enable =? 1) { r; (i4)(z? Ctrl) + (i4)c.mode; }
+            i? (c.enable == 1) { r; (i4)(z? Ctrl) + (i4)c.mode; }
             r; 1;
         }
         """
@@ -841,7 +841,7 @@ int main(void) {
         sigil = """
         i4 trace_write(p* c@ c1 fmt, ...) { r; (i4)(p* fmt); }
         i4 main(v.) {
-            i? (trace_write("x", 1, 2) =? 120) { r; 0; }
+            i? (trace_write("x", 1, 2) == 120) { r; 0; }
             r; 1;
         }
         """
@@ -859,7 +859,7 @@ int main(void) {
                   SemanticError, "i4 f(...) { r; 0; } i4 main(v.) { r; 0; }")
 
     def test_static_assert_pass():
-        sigil = 't! (z? u4 =? 4, "u4 must be 4 bytes"); i4 main(v.) { r; 0; }'
+        sigil = 't! (z? u4 == 4, "u4 must be 4 bytes"); i4 main(v.) { r; 0; }'
         with open("sa_ok.c", "w") as f:
             f.write(compile_source(sigil, "sa_ok.sigil"))
         subprocess.run(
@@ -871,7 +871,7 @@ int main(void) {
     assert_ok("10. control", "t! emits a compile-time assertion that holds", test_static_assert_pass)
 
     def test_static_assert_fail():
-        sigil = 't! (z? u4 =? 5, "u4 is not 5 bytes"); i4 main(v.) { r; 0; }'
+        sigil = 't! (z? u4 == 5, "u4 is not 5 bytes"); i4 main(v.) { r; 0; }'
         with open("sa_bad.c", "w") as f:
             f.write(compile_source(sigil, "sa_bad.sigil"))
         rc = subprocess.run(
@@ -962,7 +962,7 @@ int main(void) {
             r; n;
         }
         i4 main(v.) {
-            i? (f(1) =? 11) { i? (f(3) =? 99) { r; 0; } }
+            i? (f(1) == 11) { i? (f(3) == 99) { r; 0; } }
             r; 1;
         }
         """
@@ -1184,7 +1184,7 @@ int main(void) {
             o! u4 sum m, 0;
             o! u4 i m, 0;
             w~ (i < TABLE_N) { sum m+ t[i]; i m+ 1; }
-            t! (offsetof(Row, value) =? 4, "value offset");
+            t! (offsetof(Row, value) == 4, "value offset");
             r; (i4)(sum * SCALE) + (i4)offsetof(Row, value);
         }
         """
@@ -1300,13 +1300,13 @@ int main(void) {
         u4 family_of(p* c@ sockaddr_fake sa) { r; (u4)sa->sin_family; }
 
         i4 main(v.) {
-            t! (offsetof(sockaddr_fake, sin_addr) =? 4, "layout drift");
+            t! (offsetof(sockaddr_fake, sin_addr) == 4, "layout drift");
             o! sockaddr_fake sa;
             sa.sin_family m, 2;
             sa.sin_port m, 80;
             sa.sin_addr m, 0x7f000001;
             o! p* pthread_fake h m, NULL;
-            i? (h =? NULL) { r; (i4)(family_of(p@ sa) + (u4)(z? sockaddr_fake)); }
+            i? (h == NULL) { r; (i4)(family_of(p@ sa) + (u4)(z? sockaddr_fake)); }
             r; 1;
         }
         """
@@ -1837,7 +1837,7 @@ int main(void) {
 
     # Layer 28: rare sigils a? (alignof) and d! (trap)
     def test_alignof_sigil():
-        sigil = 't! (a? u8 =? 8, "u8 align");\ni4 main(v.) { r; (i4)(a? u8) - 8; }\n'
+        sigil = 't! (a? u8 == 8, "u8 align");\ni4 main(v.) { r; (i4)(a? u8) - 8; }\n'
         with open("alignof.c", "w") as f:
             f.write(compile_source(sigil, "alignof.sigil"))
         subprocess.run(
@@ -1849,7 +1849,7 @@ int main(void) {
     assert_ok("28. sigils", "a? queries alignment as a constant", test_alignof_sigil)
 
     def test_trap_sigil():
-        c_src = compile_source("i4 main(v.) { i? (1 =? 2) { d!; } r; 0; }", "trap.sigil")
+        c_src = compile_source("i4 main(v.) { i? (1 == 2) { d!; } r; 0; }", "trap.sigil")
         assert "SIGIL_TRAP();" in c_src, c_src
         with open("trap.c", "w") as f:
             f.write(c_src)
@@ -2099,12 +2099,12 @@ i4 main(v.) {
 
 i4 main(v.) {
     o! p* FILE f m, fopen("out.txt", "w");
-    i? (f =? NULL) { r; 1; }
+    i? (f == NULL) { r; 1; }
     fprintf(f, "hello %d\\n", 42);
     fclose(f);
 
     o! p* FILE g m, fopen("out.txt", "r");
-    i? (g =? NULL) { r; 2; }
+    i? (g == NULL) { r; 2; }
     o! c1[16] buf;
     fgets(p@ buf[0], 16, g);
     fclose(g);
@@ -2152,13 +2152,13 @@ i4 main(v.) {
     o! c1[128] line;
     o! i4 words m, 0;
     o! i4 in_word m, 0;
-    w~ (fgets(p@ line[0], 128, stdin) !? NULL) {
+    w~ (fgets(p@ line[0], 128, stdin) != NULL) {
         o! i4 i m, 0;
-        w~ ((i4)line[i] !? 0) {
-            i? (isspace(line[i]) !? 0) {
+        w~ ((i4)line[i] != 0) {
+            i? (isspace(line[i]) != 0) {
                 in_word m, 0;
             } e: {
-                i? (in_word =? 0) { words m+ 1; in_word m, 1; }
+                i? (in_word == 0) { words m+ 1; in_word m, 1; }
             }
             i m+ 1;
         }
@@ -2210,8 +2210,8 @@ i4 main(v.) {
             "s{", "u{", "e{", "w!", "p*", "c@", "v@", "r@", "p@", "f^",
             "b.", "v.", "z?", "g?", "a?", "o!", "s@", "a@", "i@", "x!",
             "m,", "m+", "m-", "m*", "m/", "g!", "l!", "t!", "d!",
-            "&^", "|^", "^^", "~^", "&.", "|.", "!.", "=?", "!?", "->",
-            "<<", ">>", "<=", ">=",
+            "&", "|", "^", "~", "&&", "||", "!", "==", "!=", "->",
+            "<<", ">>", "<=", ">=", "mod",
         ]
         used = set()
         example_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples", "tutorial")

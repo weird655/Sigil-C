@@ -113,19 +113,19 @@ i4 main(v.) {
 
 | 类别 | Sigil-C 写法 |
 |---|---|
-| 算术 | `+ - * / %` |
-| 比较 | `=?`（等于） `!?`（不等于） `< <= > >=` |
-| 逻辑 | `&.`（与） `\|.`（或） `!.`（非） |
-| 位运算 | `&^` `\|^` `^^` `~^` |
+| 算术 | `+ - * / mod` |
+| 比较 | `==`（等于） `!=`（不等于） `< <= > >=` |
+| 逻辑 | `&&`（与） `\|\|`（或） `!`（非） |
+| 位运算 | `&` `\|` `^` `~` |
 | 移位 | `<<` `>>` |
 | 赋值 | `m,` `m+` `m-` `m*` `m/` |
 | 成员 | `.` `->` |
 
 ```sigil
-i? (a =? b &. c !? 0) { x m, a |^ b; }
+i? (a == b && c != 0) { x m, a | b; }
 ```
 
-**为什么**：`&` 和 `|` 在 C 里同时是位运算和逻辑运算，单字符没法区分；Sigil-C 用第二个字符表态——`&^` 位与、`&.` 逻辑与。
+**为什么**：`&` 和 `|` 在 C 里同时是位运算和逻辑运算，单字符没法区分；Sigil-C 用第二个字符表态——`&` 位与、`&&` 逻辑与。
 
 ## 1.4 判断
 
@@ -256,7 +256,7 @@ s{ Flags {
     u4 c w! 5;
 };
 
-t! (z? Flags =? 4, "Flags must fit in one u4");
+t! (z? Flags == 4, "Flags must fit in one u4");
 ```
 
 - `w!N` 是指定位宽
@@ -495,7 +495,7 @@ printf("%d %u %s %c %.2f\n", n, (u4)n, "ok", 'A', 1.5);
 
 ```sigil
 o! p* FILE f m, fopen("out.txt", "w");
-i? (f =? NULL) { r; 1; }
+i? (f == NULL) { r; 1; }
 fprintf(f, "hello %d\n", 42);
 fclose(f);
 ```
@@ -532,7 +532,7 @@ o! p* v. raw m, (p* v.)p@ n;
 
 ```sigil
 i4 rc m, do_work();
-i? (rc !? 0) { printf("failed: %d\n", rc); r; rc; }
+i? (rc != 0) { printf("failed: %d\n", rc); r; rc; }
 ```
 
 不可恢复时 `d!;` 立即终止（GCC/Clang `__builtin_trap()`，其他后端 `abort()`），在 `s?` 里算终止语句，不会补 fallthrough。
@@ -596,8 +596,8 @@ qsort(p@ a[0], 5, z? i4, cmp);
 | `i@` / `s@` | `s@ i@` 的 static inline |
 | `x!` | 用 libc 的 `fpos_t` 注册外部类型 |
 | `m/` | 除法赋值 |
-| `\|^` `^^` `<<` `>>` | 位或 / 位异或 / 左移 / 右移 |
-| `\|.` `!.` `!?` | 逻辑或 / 逻辑非 / 不等于 |
+| `\|` `^` `<<` `>>` | 位或 / 位异或 / 左移 / 右移 |
+| `\|\|` `!` `!=` | 逻辑或 / 逻辑非 / 不等于 |
 | `d!` | 不可达分支里的陷阱 |
 
 输出：
@@ -623,7 +623,7 @@ label=2 generic=1 align=8 inline=3 handle=1
 
 ```sigil
 i4 is_odd(i4 n);
-i4 is_even(i4 n) { r; (n =? 0) ? 1 : is_odd(n - 1); }
+i4 is_even(i4 n) { r; (n == 0) ? 1 : is_odd(n - 1); }
 ```
 
 ## 5.2 可变参数
@@ -671,7 +671,7 @@ i? (n > STACK_THRESHOLD) { target m, (p* f4)malloc(n * (z? f4)); }
 
 ```sigil
 p* u1 arena_alloc(p* Arena a, u4 size, u4 align) {
-    o! u4 aligned m, (a->off + align - 1) &^ ~^(align - 1);
+    o! u4 aligned m, (a->off + align - 1) & ~(align - 1);
     o! u4 next m, aligned + size;
     i? (next > a->cap) { r; NULL; }
     a->off m, next;
@@ -791,7 +791,7 @@ sigilc --build src -o app --emit-header
 类型：`s{` `u{` `e{` `w!` `p*` `c@` `v@` `r@` `p@` `f^` `b.` `v.` `z?` `a?`
 声明：`o!` `s@` `a@` `i@` `x!`
 赋值：`m,` `m+` `m-` `m*` `m/`
-运算符：`=?` `!?` `&.` `|.` `!.` `|^` `&^` `^^` `~^` `->` `<<` `>>` `<=` `>=`
+运算符：`==` `!=` `&&` `||` `!` `|` `&` `^` `~` `->` `<<` `>>` `<=` `>=`
 语句：`t!` `g!` `l!` `d!`
 
 ## B 示例索引
@@ -832,9 +832,9 @@ sigilc --build src -o app --emit-header
 | `return x;` | `r; x;` |
 | `*p` | `p* p` |
 | `&x` | `p@ x` |
-| `x == y` | `x =? y` |
-| `x && y` | `x &. y` |
-| `x & y` | `x &^ y` |
+| `x == y` | `x == y` |
+| `x && y` | `x && y` |
+| `x & y` | `x & y` |
 | `sizeof(T)` | `z? T` |
 | `struct X {}` | `s{ X { ... };` |
 | `unsigned int` | `u4` |

@@ -33,12 +33,10 @@ EXTERNAL_C_SPELLING: Dict[str, str] = {}
 
 SIGIL_OPERATORS = {
     'm,': 'OP_ASSIGN',      'm+': 'OP_ADD_ASSIGN',  'm-': 'OP_SUB_ASSIGN',
-    'm*': 'OP_MUL_ASSIGN',  'm/': 'OP_DIV_ASSIGN',  '=?': 'OP_EQ',
-    '!?': 'OP_NE',          '&.': 'OP_LAND',        '|.': 'OP_LOR',
-    '!.': 'OP_LNOT',        '|^': 'OP_BOR',         '&^': 'OP_BAND',
-    '^^': 'OP_BXOR',        '~^': 'OP_BNOT',        '->': 'ARROW',
-    '<<': 'OP_SHL',         '>>': 'OP_SHR',         '<=': 'OP_LE',
-    '>=': 'OP_GE',
+    'm*': 'OP_MUL_ASSIGN',  'm/': 'OP_DIV_ASSIGN',  '==': 'OP_EQ',
+    '!=': 'OP_NE',          '&&': 'OP_LAND',        '||': 'OP_LOR',
+    '->': 'ARROW',          '<<': 'OP_SHL',         '>>': 'OP_SHR',
+    '<=': 'OP_LE',          '>=': 'OP_GE',
 }
 
 BASIC_TYPES = {
@@ -381,6 +379,8 @@ class Lexer:
                 word = ''.join(ident_buf)
                 if word in ('true', 'false'):
                     tokens.append(Token('BOOL_LIT', word, s_line, s_col, s_byte))
+                elif word == 'mod':
+                    tokens.append(Token('PERCENT', word, s_line, s_col, s_byte))
                 elif word == 'NULL':
                     tokens.append(Token('NULL_LIT', word, s_line, s_col, s_byte))
                 elif word in BASIC_TYPES:
@@ -403,7 +403,9 @@ class Lexer:
                 '{': 'LBRACE', '}': 'RBRACE', ';': 'SEMI',   ',': 'COMMA',
                 '.': 'DOT',    '?': 'QUESTION', ':': 'COLON',
                 '+': 'PLUS',   '-': 'MINUS',  '*': 'STAR',   '/': 'SLASH',
-                '%': 'PERCENT','<': 'LT',     '>': 'GT',
+                '%': 'PERCENT', '<': 'LT',     '>': 'GT',
+                '&': 'OP_BAND', '|': 'OP_BOR', '^': 'OP_BXOR',
+                '~': 'OP_BNOT', '!': 'OP_LNOT',
             }
             if ch in single_map:
                 self._advance()

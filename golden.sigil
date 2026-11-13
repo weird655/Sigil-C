@@ -6,7 +6,7 @@ o! p* c@ c1 G_TAG m, "Sigil-C v3.0.0 Verified";
 
 e{ OpMode {
     MODE_IDLE m, 0,
-    MODE_ADVECT m, (8 % 3) - 1,
+    MODE_ADVECT m, (8 mod 3) - 1,
     MODE_HEX_TEST m, 0xFE
 };
 
@@ -36,7 +36,7 @@ i4 sample_callback(u4 id, i4 delta) {
 
 /*
  * 严格全网格质量守恒平流扩散核函数:
- * 1. 拒绝读写缓冲区别名重叠 (src =? dst 返回 -1);
+ * 1. 拒绝读写缓冲区别名重叠 (src == dst 返回 -1);
  * 2. 乘法前显式扩宽为 (u4)w * (u4)h，防止 16 位无符号数提升为有符号 int 后溢出;
  * 3. 缓冲区采用 u4 (uint32_t) 存储浓度，彻底杜绝多源扇入 (4 * 255) 的 uint8_t 回绕;
  * 4. 遍历全网格 [0..h-1][0..w-1]，采用无通量反射/钳制边界条件 (Clamped Reflective Boundary)，
@@ -48,7 +48,7 @@ i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
     o! u2 w m, ctx->width;
     o! u2 h m, ctx->height;
 
-    i? (src =? dst |. w =? 0 |. h =? 0) {
+    i? (src == dst || w == 0 || h == 0) {
         r; -1;
     }
 
@@ -69,8 +69,8 @@ i4 step_scent_advection_conserved(p* ScentGridContext ctx, OpMode mode) {
                     o! u4 scent m, src[idx];
                     i? (scent > 0) {
                         o! u1 dir m, ctx->wind_dir[idx];
-                        o! i4 dx m, (dir =? 1 |. dir =? 2) ? 1 : ((dir =? 4) ? -1 : 0);
-                        o! i4 dy m, (dir =? 2 |. dir =? 3) ? 1 : ((dir =? 5) ? -1 : 0);
+                        o! i4 dx m, (dir == 1 || dir == 2) ? 1 : ((dir == 4) ? -1 : 0);
+                        o! i4 dy m, (dir == 2 || dir == 3) ? 1 : ((dir == 5) ? -1 : 0);
 
                         o! i4 raw_nx m, (i4)x + dx;
                         o! i4 raw_ny m, (i4)y + dy;
