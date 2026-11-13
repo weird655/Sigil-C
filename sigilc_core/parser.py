@@ -3,6 +3,7 @@
 import re
 from typing import Dict, List, Optional, Set, Tuple
 
+from . import provenance
 from .lexer import (
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
@@ -108,6 +109,10 @@ class Parser:
         self.cur_escape: Set[str] = set()
         self.escape_params: Dict[str, Set[str]] = {}
         self.func_param_names: Dict[str, List[str]] = {}
+        self.func_summaries: Dict[str, provenance.FuncProvSummary] = {}
+        self.cur_summary: Optional[provenance.FuncProvSummary] = None
+        self.cur_params: List[str] = []
+        self._summary_stack: List[Tuple[object, List[str]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
@@ -743,6 +748,9 @@ class Parser:
         """指针来源：(基对象, 元素个数, 相对基对象的偏移, 基对象作用域深度)。推不出来返回 None。"""
         if expr is None:
             return None
+        call_prov = getattr(expr, "_call_prov", None)
+        if call_prov is not None:
+            return call_prov
         if isinstance(expr, IdentExpr):
             return self.prov.get(expr.name)
         if isinstance(expr, CastExpr):
@@ -1885,7 +1893,9 @@ class Parser:
             for _pt, pname in params:
                 self.local_objects.add(pname)
                 self.param_names.add(pname)
+            provenance.begin_function(self, params)
             body = self.parse_block(create_new_scope=False)
+            provenance.end_function(self, name_tok.value)
             self.scopes.pop()
             self.escape_params[name_tok.value] = self.cur_escape
             self.cur_func_name = prev_cur_name
@@ -2034,7 +2044,9 @@ class Parser:
                 raise SemanticError(
                     f"{self.filename}:{tok.line}:{tok.col}: Returning the address of local object '{bad}' would dangle "
                     f"after return")
-            return ReturnStmt(line=tok.line, col=tok.col, expr=expr)
+            ret_stmt = ReturnStmt(line=tok.line, col=tok.col, expr=expr)
+            provenance.note_return(self, ret_stmt)
+            return ret_stmt
 
         if tok.kind == 'KW_BREAK':
             self._eat('KW_BREAK')
@@ -2326,7 +2338,10 @@ class Parser:
                                 pv.depth)
                         else:
                             self.prov.pop(lhs.name, None)
-            return AssignStmt(line=op_tok.line, col=op_tok.col, op=ASSIGN_TOKENS[op_tok.kind], target=lhs, value=rhs)
+            assign_stmt = AssignStmt(line=op_tok.line, col=op_tok.col, op=ASSIGN_TOKENS[op_tok.kind],
+                                     target=lhs, value=rhs)
+            provenance.note_assign(self, assign_stmt)
+            return assign_stmt
         self._infer_expr_type(lhs)
         return ExprStmt(line=tok.line, col=tok.col, expr=lhs)
 
@@ -2550,6 +2565,7 @@ class Parser:
                     self.pending_calls.append(
                         (node.name, [(a, self._prov_of(a)) for a in args], node.line, node.col))
                 node = CallExpr(line=tok.line, col=tok.col, callee=node, args=args)
+                provenance.apply_call(self, node)
             else:
                 break
         return node

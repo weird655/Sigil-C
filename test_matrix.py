@@ -2016,7 +2016,8 @@ int main(void) {
             "preamble": {"version"},
             "type_system": {"lexer"},
             "nodes": {"type_system"},
-            "parser": {"lexer", "nodes", "type_system"},
+            "provenance": {"nodes"},
+            "parser": {"lexer", "nodes", "provenance", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
@@ -2038,13 +2039,17 @@ int main(void) {
                         assert alias.name.split(".")[0] in stdlib, (name, alias.name)
                 elif isinstance(node, _ast.ImportFrom):
                     if node.level == 1:
-                        assert node.module in deps, (name, node.module, deps)
+                        if node.module is None:  # from . import x
+                            for alias in node.names:
+                                assert alias.name in deps, (name, alias.name, deps)
+                        else:
+                            assert node.module in deps, (name, node.module, deps)
                     else:
                         assert (node.module or "").split(".")[0] in stdlib, (name, node.module)
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "parser", "codegen", "api", "cli", "__init__"]
+                 "provenance", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
@@ -2052,6 +2057,7 @@ int main(void) {
         total = sum(sizes.values())
         assert total <= 5200, (total, sizes)
         assert sizes["parser"] <= 2600, sizes["parser"]
+        assert sizes["provenance"] <= 400, sizes["provenance"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -2211,6 +2217,44 @@ i4 main(v.) {
 
     assert_ok("41. strict", "--strict rejects indexing a parameter with unknown provenance", test_strict_provenance)
 
+    # Layer 42: interprocedural provenance summaries
+    def test_cross_function_prov():
+        src = """p* u4 add2(p* u4 p) { r; p + 2; }
+
+i4 main(v.) {
+    o! u4[5] a m, { 0, 0, 0, 0, 0 };
+    o! p* u4 q m, add2(a& a[0]);
+    q[3] m, 1;
+    r; 0;
+}
+"""
+        try:
+            compile_source(src, "summary.sigil")
+        except SemanticError as e:
+            assert "reaches element 5" in str(e), e
+        else:
+            raise AssertionError("return-source summary did not propagate the offset")
+
+        src2 = """v. retarget(p* p* u4 dst, p* u4 src) { p* dst m, src; }
+
+i4 main(v.) {
+    o! u4[5] a m, { 1, 2, 3, 4, 5 };
+    o! u4[2] b m, { 0, 0 };
+    o! p* u4 q m, a& b[0];
+    retarget(a& q, a& a[0]);
+    q[5] m, 9;
+    r; 0;
+}
+"""
+        try:
+            compile_source(src2, "summary2.sigil")
+        except SemanticError as e:
+            assert "reaches element 5" in str(e), e
+        else:
+            raise AssertionError("out-param summary did not update the caller")
+
+    assert_ok("42. provenance", "cross-function summaries track returned and out-written sources", test_cross_function_prov)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2218,7 +2262,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 41-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 42-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
