@@ -368,10 +368,13 @@ class Lexer:
                     if depth < 1:
                         raise LexerError(f"{self.filename}:{s_line}:{s_col}: Pointer depth {depth} must be at least 1")
                     suffix = self._peek(j)
-                    kind = 'KW_PTR' if suffix == '*' else 'KW_ADDR'
+                    if suffix == '@':
+                        raise LexerError(
+                            f"{self.filename}:{s_line}:{s_col}: address-of has no multi-level form; "
+                            f"write p@ once (use pN* to dereference)")
                     self._advance(j + 1)
                     for _ in range(depth):
-                        tokens.append(Token(kind, 'p' + suffix, s_line, s_col, s_byte))
+                        tokens.append(Token('KW_PTR', 'p*', s_line, s_col, s_byte))
                     continue
 
             two_char = ch + nxt

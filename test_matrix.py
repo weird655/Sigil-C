@@ -2329,10 +2329,10 @@ i4 main(v.) {
         assert "int32_t **q" in c_src, c_src
         try:
             compile_source("i4 main(v.) { o! i4 x m, 1; r; p2@ x; }", "multiptr2.sigil")
-        except SemanticError as e:
-            assert "rvalue" in str(e), e
+        except LexerError as e:
+            assert "multi-level" in str(e), e
         else:
-            raise AssertionError("p2@ should expand to two address-of operators")
+            raise AssertionError("p2@ should be rejected by the lexer")
         try:
             compile_source("i4 main(v.) { o! p0* u4 q; r; 0; }", "multiptr3.sigil")
         except LexerError as e:
@@ -2346,7 +2346,7 @@ i4 main(v.) {
         else:
             raise AssertionError("p65* should be rejected")
 
-    assert_ok("44. multiptr", "pN* / pN@ expand to N levels; total depth is capped at 64", test_multiptr)
+    assert_ok("44. multiptr", "pN* expands to N levels, pN@ is rejected; total depth is capped at 64", test_multiptr)
 
     # === end of tests: new layers go above this line ===
 
