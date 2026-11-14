@@ -356,7 +356,7 @@ i4 main(v.) {
     o! i4 res m, dot_product(p@ u, p@ v);
     /* && 为逻辑与 (&&)，& 为按位与 (&)，== 为相等比较 (==) */
     i? (res > 0 && (res & 1) == 0) {
-        printf("dot = %d\n", (int)res);
+        printf("dot = %d\n", (i4)res);
     }
     r; 0;
 }
@@ -2357,8 +2357,23 @@ i4 main(v.) {
             assert "assignment is 'm,'" in str(e), e
         else:
             raise AssertionError("raw '=' should point at m, and ==")
+        for bad_src, needle in (
+            ("return 0;", "write 'r;'"),
+            ("i4 main(v.) { if (1) { } r; 0; }", "write 'i?'"),
+            ("i4 main(v.) { while (0) { } r; 0; }", "write 'w~'"),
+            ("void f(v.) { }", "write 'v.'"),
+            ("struct S { i4 x; };", "write 's{'"),
+            ("unsigned u;", "u1/u2/u4/u8"),
+            ("int x;", "write i4"),
+        ):
+            try:
+                compile_source(bad_src, "ckw.sigil")
+            except (SemanticError, ParseError) as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError(f"{bad_src} should map to the Sigil-C spelling")
 
-    assert_ok("44. multiptr", "pN* expands, pN@ and raw '=' are explained; total depth is capped at 64", test_multiptr)
+    assert_ok("44. multiptr", "pN* expands, C keywords are mapped, pN@ and raw '=' are explained; depth capped at 64", test_multiptr)
 
     # === end of tests: new layers go above this line ===
 

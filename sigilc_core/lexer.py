@@ -39,12 +39,44 @@ SIGIL_OPERATORS = {
     '<=': 'OP_LE',          '>=': 'OP_GE',
 }
 
+C_KEYWORD_HINTS = {
+    'return': "write 'r;' for return",
+    'if': "write 'i?' for if",
+    'else': "write 'e:' for else",
+    'while': "write 'w~' for while",
+    'for': "write 'f~' for for",
+    'do': "write 'd~' for do",
+    'switch': "write 's?' for switch",
+    'case': "write 'k:' for case",
+    'default': "write 'd:' for default",
+    'break': "write 'b!' for break",
+    'continue': "write 'c^' for continue",
+    'struct': "write 's{' for struct",
+    'union': "write 'u{' for union",
+    'enum': "write 'e{' for enum",
+    'void': "write 'v.' for void",
+    'const': "write 'c@' for const",
+    'volatile': "write 'v@' for volatile",
+    'unsigned': "write u1/u2/u4/u8 for a fixed-width unsigned type",
+    'signed': "write i1/i2/i4/i8 for a fixed-width signed type",
+    'int': "write i4 for a fixed 32-bit int",
+    'char': "write c1 for a character",
+    'float': "write f4 for a 32-bit float",
+    'double': "write f8 for a 64-bit float",
+    'long': "has no fixed width; use a fixed-width type",
+    'short': "has no fixed width; use a fixed-width type",
+}
+
+def c_keyword_hint(name: str) -> str:
+    hint = C_KEYWORD_HINTS.get(name.lower())
+    return f"; {hint}" if hint else ""
+
+
 BASIC_TYPES = {
     'i1': 'int8_t',   'i2': 'int16_t',   'i4': 'int32_t',   'i8': 'int64_t',
     'u1': 'uint8_t',  'u2': 'uint16_t',  'u4': 'uint32_t',  'u8': 'uint64_t',
     'ui1': 'uint8_t', 'ui2': 'uint16_t', 'ui4': 'uint32_t', 'ui8': 'uint64_t',
     'f4': 'float',    'f8': 'double',    'fl': 'long double', 'x4': 'int32_t', 'c1': 'char',
-    'int': 'int',     'char': 'char',    'float': 'float',  'double': 'double',
     'size_t': 'size_t', 'ptrdiff_t': 'ptrdiff_t',
     'intptr_t': 'intptr_t', 'uintptr_t': 'uintptr_t',
     'int8_t': 'int8_t', 'int16_t': 'int16_t', 'int32_t': 'int32_t', 'int64_t': 'int64_t',

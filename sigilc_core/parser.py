@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from . import provenance
 from .lexer import (
+    c_keyword_hint,
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
     ATTR_NOARGS,
@@ -295,7 +296,7 @@ class Parser:
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
-        raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'")
+        raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'{c_keyword_hint(name)}")
 
     def _register_symbol(self, name: str, t: TypeNode, tok: Token):
         if name in self.scopes[-1]:
@@ -1318,7 +1319,7 @@ class Parser:
             if is_volatile:
                 base_node = with_volatile(base_node)
         else:
-            raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Expected type specifier, got '{tok.value}'")
+            raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Expected type specifier, got '{tok.value}'{c_keyword_hint(tok.value)}")
 
         if is_restrict:
             if isinstance(base_node, PointerType):
@@ -1402,7 +1403,7 @@ class Parser:
                 top_nodes.append(self.parse_top_decl_or_func(attrs=attrs))
             else:
                 tok = self._cur()
-                raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'")
+                raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'{c_keyword_hint(tok.value)}")
         self._check_calls()
         return top_nodes
 

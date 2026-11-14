@@ -14,6 +14,8 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 
 * **多指针缩写**：`pN*` = N 个 `p*`，N ≥ 1，连续指针总深度上限 64；`pN@` 被词法层拒绝（取地址只有一层）；`p2* u4`、`p2* q`、`p2@ q` 均可写。第 44 层。
 
+* **C 关键字不再静默**：`return` `if` `while` `for` `void` `struct` `unsigned` 等 C 关键字会报错并给出 Sigil-C 写法；`int/char/float/double` 的 C99 别名移除，统一走 `i4/c1/f4/f8`，与 `unsigned/signed/long/short` 一致。第 44 层扩展。
+
 **交付与工具**
 
 * `--no-line`：生成的 C 不再每行插 `#line`，给 C 用户交付可读源；默认仍带。

@@ -254,7 +254,7 @@ p * q;        /* 表达式：p 乘 q */
 
 ### 4.1 基础标量类型（`BASIC_TYPES`）
 
-Sigil-C 推荐使用 `<stdint.h>` 定宽整数类型，同时兼容识别标准 C99 类型名（`int`, `char`, `float`, `double`, `size_t`, `ptrdiff_t`, `intptr_t`, `uintptr_t`, `int8_t`..`uint64_t`）：
+Sigil-C 只接受定宽类型与 `size_t` / `ptrdiff_t` / `intptr_t` / `uintptr_t`（以及 `int8_t`..`uint64_t`）。C 标量关键字 `int` `char` `float` `double` `unsigned` `signed` `long` `short` 不再静默接受：它们会报错并提示对应的定宽写法（`i4` / `c1` / `f4` / `f8` / `u1`..`u8` / `i1`..`i8`）。控制流与声明关键字（`return` `if` `while` `struct` 等）同样会映射到 Sigil-C 印记：
 
 | Sigil-C 类型 | 展开后的 C99 类型 | 位宽、ABI 前提与词法/语义规则 |
 | :--- | :--- | :--- |
