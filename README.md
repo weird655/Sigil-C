@@ -32,6 +32,23 @@
 - **写操作带牌**：所有状态修改都经 `m` 家族，且不能藏在表达式里——副作用可枚举。
 - **生成物可退出**：纯 C99 + `#line`，随时可以丢掉转译器只留生成代码；
   要交给 C 程序员时加 `--no-line`，每行不再插 `#line`。
+  
+
+## 文档
+
+| 中文名 | 文件 | 内容 |
+|---|---|---|
+| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，22 个可运行示例 |
+| 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
+| 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
+| 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+| 贡献指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 环境、一键检查、加印记清单、发布流程 |
+| 架构 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 分层、依赖方向、预算、非目标 |
+| 汇编实验 | [Sigil-ASM](https://github.com/weird655/Sigil-ASM) | 独立的 `.sigil → x86-64` 概念验证，与 Sigil-C 分仓 |
+
+> 文件名是英文，第一列是中文名——按中文找即可。
+
+---
 
 
 
@@ -420,22 +437,6 @@ int main(void) {
 ```
 
 `s@` 修饰的符号是文件内部链接，不会进头文件。**C 用户不需要安装转译器。**
-
----
-
-## 文档
-
-| 中文名 | 文件 | 内容 |
-|---|---|---|
-| 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，22 个可运行示例 |
-| 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
-| 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
-| 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
-| 贡献指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 环境、一键检查、加印记清单、发布流程 |
-| 架构 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 分层、依赖方向、预算、非目标 |
-| 汇编实验 | [Sigil-ASM](https://github.com/weird655/Sigil-ASM) | 独立的 `.sigil → x86-64` 概念验证，与 Sigil-C 分仓 |
-
-> 文件名是英文，第一列是中文名——按中文找即可。
 
 ---
 
