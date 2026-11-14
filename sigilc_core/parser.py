@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from . import provenance
 from .lexer import (
-    c_keyword_hint,
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
     ATTR_NOARGS,
@@ -19,6 +18,7 @@ from .lexer import (
     INT_C_TYPES,
     NUMERIC_C_TYPES,
     Token,
+    c_keyword_hint,
 )
 from .nodes import (
     ASSIGN_TOKENS,
