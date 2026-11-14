@@ -38,8 +38,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="write the shared Sigil-C C prelude (macros) to PATH")
     ap.add_argument("--prelude", metavar="NAME",
                     help="include NAME instead of inlining the prelude macro block in generated files")
-    ap.add_argument("--bounds-check", action="store_true",
-                    help="emit #define SIGIL_BOUNDS_CHECK 1 so array subscripts are bounds-checked at run time")
+    ap.add_argument("--bounds-check", dest="bounds_check", action="store_true", default=True,
+                    help="runtime array bounds checks (default: enabled)")
+    ap.add_argument("--no-bounds-check", dest="bounds_check", action="store_false",
+                    help="disable runtime bounds checks (release builds)")
     ap.add_argument("--define", metavar="NAME=VALUE", action="append", default=[],
                     help="predefine a macro constant (repeatable), like #define NAME VALUE")
     ap.add_argument("--lsp", action="store_true", help="run a minimal LSP server on stdio")

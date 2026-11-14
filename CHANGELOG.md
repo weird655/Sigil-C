@@ -16,6 +16,9 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 
 * **C 关键字不再静默**：`return` `if` `while` `for` `void` `struct` `unsigned` 等 C 关键字会报错并给出 Sigil-C 写法；`int/char/float/double` 的 C99 别名移除，统一走 `i4/c1/f4/f8`，与 `unsigned/signed/long/short` 一致。第 44 层扩展。
 
+* **`--bounds-check` 默认开启**：CLI 默认插入运行期下标检查，`--no-bounds-check` 关闭；`compile_source` API 仍默认关闭，保持测试与嵌入可控。
+* **文档收口**：`--no-line` 注明注释不随行；`--strict` 标明研究开关（22 个教程示例中 5 个会失败）；`SYNTAX 5.9` 提醒不要用 `pN` 命名变量；`MEMORIAL` 更新维护状态。
+
 **交付与工具**
 
 * `--no-line`：生成的 C 不再每行插 `#line`，给 C 用户交付可读源；默认仍带。

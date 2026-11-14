@@ -365,9 +365,10 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 | `--force` | 配合 `--init`：覆盖已存在的文件 |
 | `--lsp` | 启动 LSP（stdio JSON-RPC） |
 | `--lsp-completion` | 配合 `--lsp`：开启片段补全（默认关闭） |
-| `--strict` | 拒绝来源无法证明的参数下标/解引用，而不是静默放行 |
-| `--no-line` | 不生成 `#line`：交付给 C 用户的源更像普通 C（报错指向 `.c`） |
-| `--bounds-check` | 运行期数组下标检查（越界 `abort()`） |
+| `--strict` | 拒绝来源无法证明的参数下标/解引用。研究开关：22 个教程示例里 5 个用了参数下标，会失败；默认关闭 |
+| `--no-line` | 不生成 `#line`：交付源更像普通 C（报错指向 `.c`；注释不随行） |
+| `--bounds-check` | 运行期数组下标检查（默认开启，越界 `abort()`） |
+| `--no-bounds-check` | 关闭运行期下标检查（release 用） |
 | `--define NAME=VALUE` | 预定义宏常量，可重复 |
 | `--emit-prelude PATH` | 导出共享宏前导头 |
 | `--prelude NAME` | 改用 `#include "NAME"`，不内联宏 |
