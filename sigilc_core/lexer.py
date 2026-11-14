@@ -365,8 +365,8 @@ class Lexer:
                 if self._peek(j) in ('*', '@'):
                     digits = self.src[self.pos + 1:self.pos + j]
                     depth = int(digits)
-                    if not 1 <= depth <= 15:
-                        raise LexerError(f"{self.filename}:{s_line}:{s_col}: Pointer depth {depth} is outside 1..15")
+                    if depth < 1:
+                        raise LexerError(f"{self.filename}:{s_line}:{s_col}: Pointer depth {depth} must be at least 1")
                     suffix = self._peek(j)
                     kind = 'KW_PTR' if suffix == '*' else 'KW_ADDR'
                     self._advance(j + 1)
@@ -429,6 +429,16 @@ class Lexer:
                 continue
 
             raise LexerError(f"{self.filename}:{s_line}:{s_col}: Unexpected character {repr(ch)}")
+
+        run = 0
+        for tok in tokens:
+            if tok.kind in ('KW_PTR', 'KW_ADDR'):
+                run += 1
+                if run > 64:
+                    raise LexerError(
+                        f"{self.filename}:{tok.line}:{tok.col}: Consecutive pointer depth exceeds 64")
+            else:
+                run = 0
 
         tokens.append(Token('EOF', '', self.line, self.col, self.byte_offset))
         return tokens

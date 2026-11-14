@@ -2333,15 +2333,20 @@ i4 main(v.) {
             assert "rvalue" in str(e), e
         else:
             raise AssertionError("p2@ should expand to two address-of operators")
-        for bad in ("p0*", "p16*"):
-            try:
-                compile_source(f"i4 main(v.) {{ o! {bad} u4 q; r; 0; }}", "multiptr3.sigil")
-            except LexerError as e:
-                assert "1..15" in str(e), e
-            else:
-                raise AssertionError(f"{bad} should be rejected")
+        try:
+            compile_source("i4 main(v.) { o! p0* u4 q; r; 0; }", "multiptr3.sigil")
+        except LexerError as e:
+            assert "at least 1" in str(e), e
+        else:
+            raise AssertionError("p0* should be rejected")
+        try:
+            compile_source("i4 main(v.) { o! p65* u4 q; r; 0; }", "multiptr4.sigil")
+        except LexerError as e:
+            assert "exceeds 64" in str(e), e
+        else:
+            raise AssertionError("p65* should be rejected")
 
-    assert_ok("44. multiptr", "pN* / pN@ expand to N levels; depth is 1..15", test_multiptr)
+    assert_ok("44. multiptr", "pN* / pN@ expand to N levels; total depth is capped at 64", test_multiptr)
 
     # === end of tests: new layers go above this line ===
 
