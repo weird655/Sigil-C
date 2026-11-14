@@ -2316,6 +2316,33 @@ i4 main(v.) {
 
     assert_ok("43. contracts", "calls must satisfy a callee's requires_len; --strict rejects unknown", test_contract_length)
 
+    # Layer 44: pN* / pN@ multi-pointer shorthand
+    def test_multiptr():
+        ok = """i4 main(v.) {
+    o! i4 x m, 42;
+    o! p* i4 p m, p@ x;
+    o! p2* i4 q m, p@ p;
+    r; p2* q;
+}
+"""
+        c_src = compile_source(ok, "multiptr.sigil")
+        assert "int32_t **q" in c_src, c_src
+        try:
+            compile_source("i4 main(v.) { o! i4 x m, 1; r; p2@ x; }", "multiptr2.sigil")
+        except SemanticError as e:
+            assert "rvalue" in str(e), e
+        else:
+            raise AssertionError("p2@ should expand to two address-of operators")
+        for bad in ("p0*", "p16*"):
+            try:
+                compile_source(f"i4 main(v.) {{ o! {bad} u4 q; r; 0; }}", "multiptr3.sigil")
+            except LexerError as e:
+                assert "1..15" in str(e), e
+            else:
+                raise AssertionError(f"{bad} should be rejected")
+
+    assert_ok("44. multiptr", "pN* / pN@ expand to N levels; depth is 1..15", test_multiptr)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2323,7 +2350,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 43-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 44-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

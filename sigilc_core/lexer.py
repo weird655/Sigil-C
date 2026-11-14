@@ -358,6 +358,22 @@ class Lexer:
                 tokens.append(Token('KW_ALIGN', ''.join(num_buf), s_line, s_col, s_byte))
                 continue
 
+            if ch == 'p' and nxt.isdigit():
+                j = 1
+                while self._peek(j).isdigit():
+                    j += 1
+                if self._peek(j) in ('*', '@'):
+                    digits = self.src[self.pos + 1:self.pos + j]
+                    depth = int(digits)
+                    if not 1 <= depth <= 15:
+                        raise LexerError(f"{self.filename}:{s_line}:{s_col}: Pointer depth {depth} is outside 1..15")
+                    suffix = self._peek(j)
+                    kind = 'KW_PTR' if suffix == '*' else 'KW_ADDR'
+                    self._advance(j + 1)
+                    for _ in range(depth):
+                        tokens.append(Token(kind, 'p' + suffix, s_line, s_col, s_byte))
+                    continue
+
             two_char = ch + nxt
             if two_char in SIGIL_KEYWORDS:
                 if two_char in ("v.", "b.") and (self._peek(2).isalnum() or self._peek(2) == "_"):
