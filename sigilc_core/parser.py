@@ -487,7 +487,13 @@ class Parser:
                     return sub_t.pointee
                 if isinstance(sub_t, ArrayType):
                     return sub_t.element_type
-                raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference non-pointer type")
+                hint = ""
+                shorthand = getattr(expr, "shorthand", None)
+                if shorthand is not None:
+                    hint = (f"; '{shorthand}' is multi-pointer shorthand (N levels of p*), "
+                            f"not multiplication — for multiplication write '{shorthand[:-1]} * ...'")
+                raise SemanticError(
+                    f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference non-pointer type{hint}")
             if expr.op == '&':
                 self._check_restricted_base(expr.operand)
                 if isinstance(expr.operand, MemberExpr) and self._member_is_bitfield(expr.operand):
@@ -2493,6 +2499,8 @@ class Parser:
             self._eat()
             operand = self.parse_unary()
             node = UnaryExpr(line=tok.line, col=tok.col, op=unary_map[tok.kind], operand=operand)
+            if tok.kind == 'KW_PTR' and tok.value[:1] == 'p' and tok.value[1:-1].isdigit():
+                setattr(node, "shorthand", tok.value)
             self._infer_expr_type(node)
             return node
         return self.parse_postfix()

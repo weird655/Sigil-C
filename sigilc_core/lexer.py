@@ -372,9 +372,10 @@ class Lexer:
                         raise LexerError(
                             f"{self.filename}:{s_line}:{s_col}: address-of has no multi-level form; "
                             f"write p@ once (use pN* to dereference)")
+                    label = 'p' + digits + '*'
                     self._advance(j + 1)
                     for _ in range(depth):
-                        tokens.append(Token('KW_PTR', 'p*', s_line, s_col, s_byte))
+                        tokens.append(Token('KW_PTR', label, s_line, s_col, s_byte))
                     continue
 
             two_char = ch + nxt
@@ -431,6 +432,10 @@ class Lexer:
                 tokens.append(Token(single_map[ch], ch, s_line, s_col, s_byte))
                 continue
 
+            if ch == '=':
+                raise LexerError(
+                    f"{self.filename}:{s_line}:{s_col}: '=' is not an operator; "
+                    f"assignment is 'm,', equality is '=='")
             raise LexerError(f"{self.filename}:{s_line}:{s_col}: Unexpected character {repr(ch)}")
 
         run = 0

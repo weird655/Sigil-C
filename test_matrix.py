@@ -2345,8 +2345,20 @@ i4 main(v.) {
             assert "exceeds 64" in str(e), e
         else:
             raise AssertionError("p65* should be rejected")
+        try:
+            compile_source("i4 main(v.) { o! i4 p2 m, 3; o! i4 x m, p2* 2; r; 0; }", "multiptr5.sigil")
+        except SemanticError as e:
+            assert "multi-pointer shorthand" in str(e) and "p2 * ..." in str(e), e
+        else:
+            raise AssertionError("p2* x should explain the multiplication alternative")
+        try:
+            compile_source("i4 main(v.) { o! i4 x = 1; r; 0; }", "eq.sigil")
+        except LexerError as e:
+            assert "assignment is 'm,'" in str(e), e
+        else:
+            raise AssertionError("raw '=' should point at m, and ==")
 
-    assert_ok("44. multiptr", "pN* expands to N levels, pN@ is rejected; total depth is capped at 64", test_multiptr)
+    assert_ok("44. multiptr", "pN* expands, pN@ and raw '=' are explained; total depth is capped at 64", test_multiptr)
 
     # === end of tests: new layers go above this line ===
 

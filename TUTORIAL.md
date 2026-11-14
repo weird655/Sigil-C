@@ -310,6 +310,8 @@ printf("%d\n", p2* q);  /* **q == 7 */
 
 `p2*` 是印记，`p2 * q` 是变量 `p2` 乘 `q`，空格不能省。
 
+少打空格时，报错会直接说：`'p2*' is multi-pointer shorthand ... for multiplication write 'p2 * ...'`，而不是只丢一句“不能解引用非指针”。裸 `=` 也会提示：赋值是 `m,`，相等是 `==`。
+
 ## 3.2 指针算术与数组
 
 ```sigil
