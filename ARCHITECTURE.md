@@ -95,7 +95,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 
  retrofit 进现有 codegen 等于改所有局部包的降级、所有返回路径和 ABI。它不是"加个 flag"，是"换一台配电柜"。所以只能作为原始第一版留在档案里。
 
-### v1 的设计（如果当年做了）
+### v1 的设
 
 - 活跃帧 token 用一个 32 层的 LIFO 栈：`uint32_t frames[32]`，128 字节
 - 文件级包 token = 0，访问零检查
@@ -106,15 +106,11 @@ cli → api → codegen → parser → nodes → type_system → lexer
 - 退出：pop 自己的 token；递归/嵌套只影响自己
 - `longjmp`、多线程、裸 `p*` 仍是洞；文档要标
 
-### 为什么最后没上
+### 为什么
 
 - 128 字节不大，但每个含局部包的函数都要 prologue/epilogue，所有 return 都要改道
 - 它把"飞线"变成"带保险丝的飞线"，复杂度和维护成本都上一个台阶
 - Layer 2 最终选择了**裸危险**：不给生命周期、不升堆、不加 token；悬垂就是悬垂
-
-### 第一个交流电
-
-> 配电箱 v1 是 AC-1：图纸画好了，灯泡没亮过。它没有进编译器，只进了博物馆。
 
 ### 当前真实状态
 
