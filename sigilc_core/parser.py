@@ -3,7 +3,7 @@
 import re
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import packages, provenance
+from . import confine, packages, provenance
 from .lexer import (
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
@@ -115,6 +115,7 @@ class Parser:
         self.cur_params: List[str] = []
         self._summary_stack: List[Tuple[object, List[str]]] = []
         self.pkgs = packages.PackageTable()
+        self.confine = confine.Confinement()
         self.pending_slots: List[StmtNode] = []
         self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
@@ -1354,6 +1355,12 @@ class Parser:
     def parse_program(self) -> List[StmtNode]:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
+            if self._cur().kind == 'GROUP':
+                confine.parse_group(self)
+                continue
+            if self._cur().kind == 'LOCK':
+                confine.parse_lockdown(self)
+                continue
             if self._cur().kind == 'PKG1':
                 slot_node = packages.parse_decl(self)
                 if slot_node is not None:
@@ -2604,6 +2611,7 @@ class Parser:
         if tok.kind == 'IDENT' and tok.value == 'offsetof' and self.tokens[self.pos + 1].kind == 'LPAREN':
             return self.parse_offsetof()
         if tok.kind in ('PKG1', 'PKG2'):
+            self.confine.check(self, tok.value, tok)
             return packages.parse_use(self, tok)
         if tok.kind == 'IDENT':
             self._eat('IDENT')

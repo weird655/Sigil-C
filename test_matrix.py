@@ -2020,9 +2020,10 @@ int main(void) {
             "preamble": {"version"},
             "type_system": {"lexer"},
             "nodes": {"type_system"},
+            "confine": {"nodes"},
             "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
-            "parser": {"lexer", "nodes", "packages", "provenance", "type_system"},
+            "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
@@ -2054,16 +2055,17 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
+                 "confine", "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5500, (total, sizes)
+        assert total <= 5700, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 300, sizes["packages"]
+        assert sizes["confine"] <= 250, sizes["confine"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -2498,6 +2500,58 @@ i4 main(v.) {
 
     assert_ok("46. pkgfuzz", "300 random package programs: compile or reject, never crash", test_pkg_fuzz)
 
+    # Layer 47: confinement groups and lockdown masks
+    def test_confinement():
+        ok = """o! i4 g m, 1;
+!/[0]/! = f1, f2, f3;
+![101]! !/[0]/! {
+    !1! X;
+    !1! = g;
+}
+i4 f1(v.) { r; !/1/!; }
+i4 f3(v.) { r; !/1/!; }
+"""
+        compile_source(ok, "confine.sigil")
+        bad = """o! i4 g m, 1;
+!/[0]/! = f1, f2, f3;
+![101]! !/[0]/! {
+    !1! X;
+    !1! = g;
+}
+i4 f2(v.) { r; !/1/!; }
+"""
+        try:
+            compile_source(bad, "confine2.sigil")
+        except SemanticError as e:
+            assert "confined" in str(e), e
+        else:
+            raise AssertionError("f2 should be blocked by mask 101")
+        try:
+            compile_source("!/[0]/! = f1, f2, f3; ![11]! !/[0]/! { }", "confine3.sigil")
+        except SemanticError as e:
+            assert "bit(s)" in str(e), e
+        else:
+            raise AssertionError("mask length mismatch should fail")
+        nested = """o! i4 g m, 1;
+!/[0]/! = f1, f2;
+!/[1]/! = !/[0]/!, f3;
+![101]! !/[1]/! {
+    !1! X;
+    !1! = g;
+}
+i4 f1(v.) { r; !/1/!; }
+i4 f3(v.) { r; !/1/!; }
+"""
+        compile_source(nested, "confine4.sigil")
+        try:
+            compile_source("!/[0]/! = !/[1]/!; !/[1]/! = !/[0]/!; ![11]! !/[0]/! { }", "confine5.sigil")
+        except SemanticError as e:
+            assert "itself" in str(e), e
+        else:
+            raise AssertionError("group cycle should fail")
+
+    assert_ok("47. confine", "groups, mask bits, nested groups and lockdown denial", test_confinement)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2505,7 +2559,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 46-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 47-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
