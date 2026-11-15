@@ -1,4 +1,4 @@
-"""Confinement groups and lockdown blocks for the dangerous !n! feature.
+"""Confinement groups and lockdown blocks for the rewiring (flying-wire) layer.
 
 Short groups `!/[id]/! m, f1, f2;` use a binary mask (`![101]!`).
 Long groups `!/[[id]]/! m, f1, f2, ...;` are immutable and select members by
