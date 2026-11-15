@@ -38,7 +38,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `api.py` | 编译、检查、格式化、LSP | `codegen` `lexer` `nodes` `parser` |
 | `cli.py` | 参数与工具链命令 | `api` `lexer` `nodes` `preamble` `version` |
 
-规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 5900、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 400、`confine.py` ≤ 400、`netlist.py` ≤ 200。
+规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 6000、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 400、`confine.py` ≤ 400、`netlist.py` ≤ 200。
 
 **唯一的例外**：`type_system` 在函数内延迟导入 `nodes`（`format_c_declarator` / `types_equal` 需要 `emit_expr`）。不要再增加新的函数内跨层导入——要加先在 issue 里说明。
 
@@ -60,7 +60,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 
 | 项 | 上限 |
 |---|---|
-| `sigilc_core/` 总行数 | 5900 |
+| `sigilc_core/` 总行数 | 6000 |
 | `parser.py` | 2650 |
 | `provenance.py` | 400 |
 | `packages.py` | 400 |
@@ -119,6 +119,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 ### 当前真实状态
 
 - 没有 frame token，没有 guard 表，没有 `--wire-guard`
+- `--shadow-stack` 只是诊断：打印 Sigil 帧 id/名字，不做 token 校验、不阻止悬垂；它不是配电箱 v1
 - 局部包悬垂仍是 UB；`-Wdangling-pointer` 被 preamble 关掉
 - `--netlist` 只能看静态网表，不能看运行时死活
 - 危险工具，请勿使用

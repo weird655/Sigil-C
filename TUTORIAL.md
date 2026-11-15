@@ -951,7 +951,55 @@ LOCK <- base
 
 ---
 
-# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
+## 3.13 trap 诊断：原生栈与影子栈
+
+> **危险工具，请勿使用。** 两个开关默认关，且互斥；它们只负责"死得明白"。
+
+### A：`--trap-trace`
+
+```bash
+python3 sigilc.py wire.sigil --trap-trace
+```
+
+trap 时打印 C 层调用栈：
+
+```text
+sigil-trap: native stack (6 frames)
+  00007FF7C5291501
+  00007FF7C5291595
+```
+
+glibc 用 `backtrace()`，Windows 用 `CaptureStackBackTrace`；不需要函数插桩。
+
+### B：`--shadow-stack`
+
+```bash
+python3 sigilc.py wire.sigil --shadow-stack
+```
+
+trap 时打印 Sigil 活跃帧：
+
+```text
+sigil-shadow: aborting
+live frames: [1] main [2] helper
+```
+
+- 每个函数入口 push，返回时 cleanup pop
+- 只有帧 id + 函数名，**没有 token、没有悬垂检查**
+- GCC/Clang 专用；其他编译器退化为空宏
+
+### 两者关系
+
+| 开关 | 看什么 | 代价 |
+|---|---|---|
+| `--trap-trace` | C 原生调用栈 | 一个宏替换 |
+| `--shadow-stack` | Sigil 帧 | 每个函数 prologue + cleanup |
+
+不能同时开。`--shadow-stack` 不是配电箱 v1：它不阻止悬垂，只告诉你死在哪层。
+
+---
+
+# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
 
 ## 4.1 输入输出
 

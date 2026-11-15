@@ -607,6 +607,43 @@ X <- base
 
 ---
 
+### 5.16 两种 trap 诊断：`--trap-trace` / `--shadow-stack`
+
+> **危险工具，请勿使用。** 两者都是调试开关，默认关闭，且**互斥**。
+
+```bash
+python3 sigilc.py wire.sigil --trap-trace      # A：原生栈
+python3 sigilc.py wire.sigil --shadow-stack    # B：Sigil 帧
+```
+
+**A：原生 backtrace**
+
+```text
+sigil-trap: native stack (6 frames)
+  00007FF7C5291501
+  ...
+```
+
+- 不改 codegen，只把 `SIGIL_TRAP()` 换成打印 + abort
+- glibc 用 `backtrace()`，Windows 用 `CaptureStackBackTrace`
+- 打印的是 C 层调用栈，不是 Sigil 帧；符号需求依平台
+
+**B：Sigil 影子栈**
+
+```text
+sigil-shadow: aborting
+live frames: [1] main [2] helper
+```
+
+- 每个函数入口 `SIGIL_FRAME_SCOPE("name")`，靠 GCC/Clang 的 cleanup 属性在返回时 pop
+- 打印 Sigil 函数名 + 帧 id
+- **没有 token，没有 liveness 检查**；它不是配电箱 v1，不会阻止悬垂
+- GCC/Clang 专用；其他编译器退化为空宏
+
+两者不能同时开：`--trap-trace` 和 `--shadow-stack` 同时出现直接报错。
+
+---
+
 ## 6. 赋值印记（`ASSIGN_TOKENS`）
 
 裸 `=` 在词法阶段被拒绝，所有赋值与初始化统一使用双字符印记，且仅允许作为独立语句、`f~` 初始化子句或 `f~` 步进子句出现：

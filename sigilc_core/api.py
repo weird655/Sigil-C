@@ -16,12 +16,16 @@ from .parser import Parser
 
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
-                   line_directives: bool = True, strict: bool = False) -> str:
+                   line_directives: bool = True, strict: bool = False,
+                   trap_trace: bool = False, shadow_stack: bool = False) -> str:
+    if trap_trace and shadow_stack:
+        raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
-                         cli_defines=defines, line_directives=line_directives).generate(ast)
+                         cli_defines=defines, line_directives=line_directives,
+                         trap_trace=trap_trace, shadow_stack=shadow_stack).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None,
                  strict: bool = False) -> None:

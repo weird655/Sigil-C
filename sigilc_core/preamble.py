@@ -72,10 +72,72 @@ C99_HEADER_BODY = """#include <stdint.h>
   #define SIGIL_FALLTHROUGH() ((void)0)
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-  #define SIGIL_TRAP() __builtin_trap()
+#if defined(SIGIL_TRAP_TRACE)
+  #include <stdio.h>
+  #if defined(__GLIBC__)
+    #include <execinfo.h>
+    static void sigil_trap_trace_fn(void) {
+      void *bt[32];
+      int n = backtrace(bt, 32);
+      fprintf(stderr, "sigil-trap: native stack\\n");
+      backtrace_symbols_fd(bt, n, 2);
+      abort();
+    }
+    #define SIGIL_TRAP() sigil_trap_trace_fn()
+  #elif defined(_WIN32)
+    #include <windows.h>
+    static void sigil_trap_trace_fn(void) {
+      void *bt[32];
+      USHORT n = CaptureStackBackTrace(0, 32, bt, NULL);
+      fprintf(stderr, "sigil-trap: native stack (%u frames)\\n", (unsigned)n);
+      {
+        unsigned i;
+        for (i = 0; i < n; i++)
+          fprintf(stderr, "  %p\\n", bt[i]);
+      }
+      abort();
+    }
+    #define SIGIL_TRAP() sigil_trap_trace_fn()
+  #else
+    #define SIGIL_TRAP() abort()
+  #endif
+#elif defined(SIGIL_SHADOW_STACK)
+  #include <stdio.h>
+  typedef struct { unsigned id; const char *name; } SigilFrame;
+  static SigilFrame sigil_frames[64];
+  static unsigned sigil_top;
+  static unsigned sigil_next = 1;
+  static inline void sigil_frame_enter(const char *name) {
+    if (sigil_top >= 64) {
+      fprintf(stderr, "sigil-shadow: frame stack overflow\\n");
+      abort();
+    }
+    sigil_frames[sigil_top].id = sigil_next++;
+    sigil_frames[sigil_top].name = name;
+    sigil_top++;
+  }
+  static inline void sigil_frame_exit(void) { if (sigil_top) sigil_top--; }
+  static void sigil_frame_dump(void) {
+    unsigned i;
+    fprintf(stderr, "sigil-shadow: aborting\\n");
+    fprintf(stderr, "live frames:");
+    for (i = 0; i < sigil_top; i++)
+      fprintf(stderr, " [%u] %s", sigil_frames[i].id, sigil_frames[i].name);
+    fprintf(stderr, "\\n");
+  }
+  #if defined(__GNUC__) || defined(__clang__)
+    static inline void sigil_frame_cleanup(void *p) { (void)p; sigil_frame_exit(); }
+    #define SIGIL_FRAME_SCOPE(name) __attribute__((cleanup(sigil_frame_cleanup))) int sigil_frame_guard_ = (sigil_frame_enter(name), 0)
+  #else
+    #define SIGIL_FRAME_SCOPE(name) ((void)0)
+  #endif
+  #define SIGIL_TRAP() (sigil_frame_dump(), abort())
 #else
-  #define SIGIL_TRAP() abort()
+  #if defined(__GNUC__) || defined(__clang__)
+    #define SIGIL_TRAP() __builtin_trap()
+  #else
+    #define SIGIL_TRAP() abort()
+  #endif
 #endif
 
 """

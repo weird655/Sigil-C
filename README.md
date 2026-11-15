@@ -375,6 +375,8 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 | `--header PATH` | 指定头文件路径（隐含 `--emit-header`；不能与 `--build` 同用） |
 | `--check PATH` | 只做检查，不写文件；PATH 可以是文件或目录 |
 | `--netlist` | 打印飞线网表（万用表），不写文件 |
+| `--trap-trace` | trap 时打印原生调用栈（glibc / Windows） |
+| `--shadow-stack` | trap 时打印 Sigil 活跃帧（帧 id + 函数名） |
 | `--json` | 配合 `--check`：输出结构化诊断 |
 | `--build [DIR]` | 转译 DIR 下所有 `.sigil` 并链接成一个可执行文件 |
 | `--run` | 配合 `--build`：构建后直接运行 |

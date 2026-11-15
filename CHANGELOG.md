@@ -1,6 +1,6 @@
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 209 项自动化测试矩阵覆盖明细。
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 210 项自动化测试矩阵覆盖明细。
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
@@ -32,6 +32,8 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 * **术语：重布线层 / 飞线层**：文档把 `!` 家族定义为 Layer 2 的编译期重布线层，底层仍是原 Sigil-C；它不是语法糖，飞线改网表而不是换写法。
 
 * **万用表 `--netlist`**：只读解析，不生成 C，打印 packages/links/groups/gates/landmines/confinement 六段网表；用于检查飞线通断、局部槽悬垂、地雷 armed/bound 状态。第 50 层。
+
+* **trap 诊断**：`--trap-trace` 打印原生调用栈（glibc/Windows），`--shadow-stack` 打印 Sigil 活跃帧（帧 id + 函数名，GCC/Clang cleanup 属性）；两者默认关、互斥，后者不是配电箱 v1，不做 liveness。第 51 层。
 
 **交付与工具**
 
@@ -103,7 +105,7 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 * **两个低频印记**：`a?`（`_Alignof`，结果 `size_t`，只接受完整对象类型，与 `a!N` 互为读写）与 `d!`（trap：GCC/Clang 用 `__builtin_trap()`，其他后端 `abort()`；在 `s?` 中视为终止，不再补 fallthrough）。闭集从 52 增至 54。第 28 层测试。
 * **工程修正**：代码许可证改为 MIT（文档保留 CC BY 4.0）；CI 增加 `windows-latest` job（`py_compile` + `--check` + 转译，有 gcc 时编译运行）；测试矩阵改为在独立临时目录运行，不再写工作区；补 LSP JSON-RPC framing 测试。第 29 层。
 * **质量门加厚**：`quality` job 增加确定性模糊测试（300 次变异，只允许三种编译错误）与性能基线（转译 `vm.sigil` 中位数上限 500ms）；第 30 层补 CLI 进程内测试（`--version/--check --json/--fmt/--init/--build/--emit-prelude`），覆盖率 80% → 86%（门槛 85%）。
-* 测试矩阵 **209 项 / 50 层**。
+* 测试矩阵 **210 项 / 51 层**。
 
 * **文档**：`p*` 的定位从「已知弱点」改为「书写纪律」——`p*` 紧邻才是指针，乘法必须写 `p * q`；`p*q` 会报 `Cannot dereference non-pointer type`，是编译期错误而不是静默歧义。
 

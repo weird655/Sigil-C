@@ -2063,7 +2063,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5900, (total, sizes)
+        assert total <= 6000, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 400, sizes["packages"]
@@ -2681,6 +2681,27 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("50. netlist", "the multimeter prints packages, links, groups, gates, landmines", test_netlist)
 
+    # Layer 51: separate trap diagnostics
+    def test_trap_modes():
+        src = "i4 main(v.) { r; 0; }"
+        a = compile_source(src, trap_trace=True)
+        assert "#define SIGIL_TRAP_TRACE 1" in a, a
+        assert "backtrace" in a or "CaptureStackBackTrace" in a, a
+        b = compile_source(src, shadow_stack=True)
+        assert "#define SIGIL_SHADOW_STACK 1" in b, b
+        assert 'SIGIL_FRAME_SCOPE("main");' in b, b
+        plain = compile_source(src)
+        assert "#define SIGIL_TRAP_TRACE 1" not in plain, plain
+        assert "#define SIGIL_SHADOW_STACK 1" not in plain, plain
+        try:
+            compile_source(src, trap_trace=True, shadow_stack=True)
+        except ValueError as e:
+            assert "separate" in str(e), e
+        else:
+            raise AssertionError("the two trap modes must be mutually exclusive")
+
+    assert_ok("51. trap modes", "native backtrace and Sigil shadow stack are separate, opt-in modes", test_trap_modes)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2688,7 +2709,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 50-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 51-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

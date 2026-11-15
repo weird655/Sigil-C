@@ -36,12 +36,15 @@ class CodeGenerator:
     def __init__(self, filename: str = "input.sigil", header_mode: bool = False,
                  prelude_include: Optional[str] = None, bounds_check: bool = False,
                  cli_defines: Optional[Dict[str, str]] = None,
-                 line_directives: bool = True):
+                 line_directives: bool = True, trap_trace: bool = False,
+                 shadow_stack: bool = False):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.line_directives = line_directives
         self.header_mode = header_mode
         self.prelude_include = prelude_include
         self.bounds_check = bounds_check
+        self.trap_trace = trap_trace
+        self.shadow_stack = shadow_stack
         self.cli_defines = cli_defines or {}
         self.lines: List[str] = []
 
@@ -72,6 +75,10 @@ class CodeGenerator:
     def generate(self, nodes: List[StmtNode]) -> str:
         if self.bounds_check:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
+        if self.trap_trace:
+            self.lines.append("#define SIGIL_TRAP_TRACE 1\n")
+        if self.shadow_stack:
+            self.lines.append("#define SIGIL_SHADOW_STACK 1\n")
         if self.prelude_include:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
@@ -175,6 +182,9 @@ class CodeGenerator:
                 self._emit(f"{storage}{attr_prefix}{fn_sig};", node.line)
             else:
                 self._emit(f"{storage}{attr_prefix}{fn_sig} {{", node.line)
+                if self.shadow_stack:
+                    safe_name = node.name.replace('\\', '\\\\').replace('"', '\\"')
+                    self._emit(f'SIGIL_FRAME_SCOPE("{safe_name}");', node.line, indent=1)
                 for s in node.body.stmts:
                     self.gen_stmt(s, indent=1)
                 self._emit("}", node.line)

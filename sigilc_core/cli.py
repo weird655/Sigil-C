@@ -67,6 +67,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--strict", action="store_true",
                     help="reject pointer subscripts/derefs whose provenance cannot be proven")
 
+    ap.add_argument("--trap-trace", action="store_true", help="on SIGIL_TRAP, print the native backtrace")
+    ap.add_argument("--shadow-stack", action="store_true", help="on SIGIL_TRAP, print live Sigil frames")
     ap.add_argument("--no-line", action="store_true",
                     help="omit #line directives so the generated C reads like ordinary C")
 
@@ -121,9 +123,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Prelude  {args.emit_prelude}")
 
     try:
+        if args.trap_trace and args.shadow_stack:
+            print("error: --trap-trace and --shadow-stack are separate modes; pick one", file=sys.stderr)
+            return 2
         c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check,
                                defines=defines, line_directives=not args.no_line,
-                               strict=args.strict)
+                               strict=args.strict, trap_trace=args.trap_trace,
+                               shadow_stack=args.shadow_stack)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(c_src)
         print(f"Compiled {in_path} -> {out_path}")
