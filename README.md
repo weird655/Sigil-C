@@ -2,7 +2,8 @@
 
 一个小实验项目：把 `.sigil` 转译成 ISO C99。45 个双字符记号 + C99 运算符，外加一些编译期检查。
 
-> 一句话概括：把数据流写在字面上的 C。
+> 概括：把数据流写在字面上的 C。
+> 太阳莓果设计。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
 [![tests](https://img.shields.io/badge/tests-201%20%2F%2042%20layers-brightgreen)](test_matrix.py)
