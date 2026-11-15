@@ -525,10 +525,6 @@ class Lexer:
                 tokens.append(Token(single_map[ch], ch, s_line, s_col, s_byte))
                 continue
 
-            if ch == '=' and tokens and tokens[-1].kind in ('PKG1', 'GROUP', 'LONG_GROUP'):
-                self._advance()
-                tokens.append(Token('PKG_BIND', '=', s_line, s_col, s_byte))
-                continue
             if ch == '=':
                 raise LexerError(
                     f"{self.filename}:{s_line}:{s_col}: '=' is not an operator; "

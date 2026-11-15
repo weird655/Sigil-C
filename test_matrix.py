@@ -2384,7 +2384,7 @@ i4 main(v.) {
     def test_packages():
         src = """o! i4 base m, 10;
 !1! CCB;
-!1! = base;
+!1! m, base;
 o! i4 other m, 0;
 !>2<! base other;
 
@@ -2400,7 +2400,7 @@ i4 main(v.) {
         assert "other = 7" not in c_src, c_src
         assert "int32_t base" in c_src, c_src
         try:
-            compile_source("!1! = base;", "pkg2.sigil")
+            compile_source("!1! m, base;", "pkg2.sigil")
         except SemanticError as e:
             assert "Bind" in str(e), e
         else:
@@ -2414,7 +2414,7 @@ i4 main(v.) {
         local_src = """i4 main(v.) {
     o! i4 a m, 1;
     o! i4 b m, 2;
-    !1! = a;
+    !1! m, a;
     !/1/! m, 9;
     !>2<! a b;
     b m, 5;
@@ -2426,8 +2426,8 @@ i4 main(v.) {
         assert "int32_t a" in c_local and "int32_t b" in c_local, c_local
         nest_src = """i4 main(v.) {
     o! i4 a m, 1;
-    !1! = a;
-    !2! = !/1/!;
+    !1! m, a;
+    !2! m, !/1/!;
     !/2/! m, 7;
     r; a;
 }
@@ -2436,9 +2436,9 @@ i4 main(v.) {
         assert "__sigil_pkg_2 = __sigil_pkg_1;" in c_nest, c_nest
         file_nest = """o! i4 a m, 1;
 !1! X;
-!1! = a;
+!1! m, a;
 !2! Y;
-!2! = !1!;
+!2! m, !1!;
 
 i4 main(v.) {
     !/2/! m, 5;
@@ -2483,9 +2483,9 @@ i4 main(v.) {
             else:
                 lines = ["i4 main(v.) {"]
                 lines += [f"    o! i4 {n} m, {rnd.randint(0, 9)};" for n in names]
-                lines.append("    !1! = " + rnd.choice(names) + ";")
+                lines.append("    !1! m, " + rnd.choice(names) + ";")
                 if rnd.random() < 0.7:
-                    lines.append("    !2! = !/1/!;")
+                    lines.append("    !2! m, !/1/!;")
                 for j in range(rnd.randint(0, 2)):
                     lines.append(f"    !>{j + 3}<! {rnd.choice(names)} {rnd.choice(names)};")
                 lines.append("    r; a;")
@@ -2503,20 +2503,20 @@ i4 main(v.) {
     # Layer 47: confinement groups and lockdown masks
     def test_confinement():
         ok = """o! i4 g m, 1;
-!/[0]/! = f1, f2, f3;
+!/[0]/! m, f1, f2, f3;
 ![101]! !/[0]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 f1(v.) { r; !/1/!; }
 i4 f3(v.) { r; !/1/!; }
 """
         compile_source(ok, "confine.sigil")
         bad = """o! i4 g m, 1;
-!/[0]/! = f1, f2, f3;
+!/[0]/! m, f1, f2, f3;
 ![101]! !/[0]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 f2(v.) { r; !/1/!; }
 """
@@ -2527,24 +2527,24 @@ i4 f2(v.) { r; !/1/!; }
         else:
             raise AssertionError("f2 should be blocked by mask 101")
         try:
-            compile_source("!/[0]/! = f1, f2, f3; ![11]! !/[0]/! { }", "confine3.sigil")
+            compile_source("!/[0]/! m, f1, f2, f3; ![11]! !/[0]/! { }", "confine3.sigil")
         except SemanticError as e:
             assert "bit(s)" in str(e), e
         else:
             raise AssertionError("mask length mismatch should fail")
         nested = """o! i4 g m, 1;
-!/[0]/! = f1, f2;
-!/[1]/! = !/[0]/!, f3;
+!/[0]/! m, f1, f2;
+!/[1]/! m, !/[0]/!, f3;
 ![101]! !/[1]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 f1(v.) { r; !/1/!; }
 i4 f3(v.) { r; !/1/!; }
 """
         compile_source(nested, "confine4.sigil")
         try:
-            compile_source("!/[0]/! = !/[1]/!; !/[1]/! = !/[0]/!; ![11]! !/[0]/! { }", "confine5.sigil")
+            compile_source("!/[0]/! m, !/[1]/!; !/[1]/! m, !/[0]/!; ![11]! !/[0]/! { }", "confine5.sigil")
         except SemanticError as e:
             assert "itself" in str(e), e
         else:
@@ -2555,10 +2555,10 @@ i4 f3(v.) { r; !/1/!; }
     # Layer 48: long groups select by position list
     def test_long_groups():
         ok = """o! i4 g m, 1;
-!/[[0]]/! = fn1, fn2, fn3, fn4, fn5, fn6, fn7, fn8, fn9, fn10;
+!/[[0]]/! m, fn1, fn2, fn3, fn4, fn5, fn6, fn7, fn8, fn9, fn10;
 ![1,3,5]! !/[[0]]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 fn1(v.) { r; !/1/!; }
 i4 fn3(v.) { r; !/1/!; }
@@ -2566,20 +2566,20 @@ i4 fn5(v.) { r; !/1/!; }
 """
         compile_source(ok, "long.sigil")
         star = """o! i4 g m, 1;
-!/[[0]]/! = fn1, fn2, fn3;
+!/[[0]]/! m, fn1, fn2, fn3;
 ![*]! !/[[0]]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 fn1(v.) { r; !/1/!; }
 i4 fn2(v.) { r; !/1/!; }
 """
         compile_source(star, "long2.sigil")
         denied = """o! i4 g m, 1;
-!/[[0]]/! = fn1, fn2, fn3;
+!/[[0]]/! m, fn1, fn2, fn3;
 ![1,3]! !/[[0]]/! {
     !1! X;
-    !1! = g;
+    !1! m, g;
 }
 i4 fn2(v.) { r; !/1/!; }
 """
@@ -2590,13 +2590,13 @@ i4 fn2(v.) { r; !/1/!; }
         else:
             raise AssertionError("fn2 should be blocked by ![1,3]!")
         try:
-            compile_source("!/[[0]]/! = fn1, fn2; ![3]! !/[[0]]/! { }", "long4.sigil")
+            compile_source("!/[[0]]/! m, fn1, fn2; ![3]! !/[[0]]/! { }", "long4.sigil")
         except SemanticError as e:
             assert "outside" in str(e), e
         else:
             raise AssertionError("position overflow should fail")
         try:
-            compile_source("!/[[0]]/! = fn1; !/[[0]]/! = fn2;", "long5.sigil")
+            compile_source("!/[[0]]/! m, fn1; !/[[0]]/! m, fn2;", "long5.sigil")
         except SemanticError as e:
             assert "already declared" in str(e), e
         else:

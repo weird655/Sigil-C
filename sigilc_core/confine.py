@@ -1,7 +1,7 @@
 """Confinement groups and lockdown blocks for the dangerous !n! feature.
 
-Short groups `!/[id]/! = f1, f2;` use a binary mask (`![101]!`).
-Long groups `!/[[id]]/! = f1, f2, ...;` are immutable and select members by
+Short groups `!/[id]/! m, f1, f2;` use a binary mask (`![101]!`).
+Long groups `!/[[id]]/! m, f1, f2, ...;` are immutable and select members by
 1-based position list (`![1,3,5]!`) or `![*]!` for all.
 """
 from typing import Dict, List, Optional, Set, Tuple
@@ -75,7 +75,7 @@ def _parse_members(parser, token_kind: str) -> List[Tuple[str, str]]:
 
 def parse_group(parser) -> None:
     tok = parser._eat('GROUP')
-    parser._eat('PKG_BIND')
+    parser._eat('OP_ASSIGN')
     members = _parse_members(parser, 'GROUP')
     if tok.value in parser.confine.groups or tok.value in parser.confine.long_groups:
         raise SemanticError(
@@ -85,7 +85,7 @@ def parse_group(parser) -> None:
 
 def parse_long_group(parser) -> None:
     tok = parser._eat('LONG_GROUP')
-    parser._eat('PKG_BIND')
+    parser._eat('OP_ASSIGN')
     members = _parse_members(parser, 'LONG_GROUP')
     if tok.value in parser.confine.groups or tok.value in parser.confine.long_groups:
         raise SemanticError(

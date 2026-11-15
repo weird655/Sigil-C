@@ -125,8 +125,8 @@ def _copy_slot(parser, dst: str, src: str, tok):
 def parse_decl(parser) -> Optional[VarDeclStmt]:
     tok = parser._eat()  # PKG1
     pid = tok.value
-    if parser._cur().kind == 'PKG_BIND':
-        parser._eat('PKG_BIND')
+    if parser._cur().kind == 'OP_ASSIGN':
+        parser._eat('OP_ASSIGN')
         if parser._cur().kind in ('PKG1', 'PKG2'):
             src_tok = parser._eat()
             parser._eat('SEMI')
@@ -173,7 +173,7 @@ def parse_decl(parser) -> Optional[VarDeclStmt]:
 
 def parse_bind_local(parser, tok):
     parser._eat('PKG1')
-    parser._eat('PKG_BIND')
+    parser._eat('OP_ASSIGN')
     pid = tok.value
     if parser._cur().kind in ('PKG1', 'PKG2'):
         src_tok = parser._eat()
