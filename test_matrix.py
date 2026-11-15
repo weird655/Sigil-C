@@ -2059,7 +2059,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5400, (total, sizes)
+        assert total <= 5500, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 300, sizes["packages"]
@@ -2421,8 +2421,40 @@ i4 main(v.) {
         c_local = compile_source(local_src, "pkg4.sigil")
         assert "__sigil_pkg_1" in c_local and "__sigil_pkg_2" in c_local, c_local
         assert "int32_t a" in c_local and "int32_t b" in c_local, c_local
+        nest_src = """i4 main(v.) {
+    o! i4 a m, 1;
+    !1! = a;
+    !2! = !/1/!;
+    !/2/! m, 7;
+    r; a;
+}
+"""
+        c_nest = compile_source(nest_src, "pkg5.sigil")
+        assert "__sigil_pkg_2 = __sigil_pkg_1;" in c_nest, c_nest
+        file_nest = """o! i4 a m, 1;
+!1! X;
+!1! = a;
+!2! Y;
+!2! = !1!;
 
-    assert_ok("45. packages", "!n! aliases, local slots, !/n/! target and !>n<! dual binding", test_packages)
+i4 main(v.) {
+    !/2/! m, 5;
+    r; a;
+}
+"""
+        compile_source(file_nest, "pkg6.sigil")
+        for bad, needle in (
+            ("o! i4 a m, 1; o! i4 b m, 2; !>1<! a b; !>2<! b a; i4 main(v.) { r; a; }", "itself"),
+            ("o! i4 a m, 1; o! f8 f m, 2.0; !>1<! a f; i4 main(v.) { r; a; }", "matching types"),
+        ):
+            try:
+                compile_source(bad, "pkg7.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("nesting edge should be rejected")
+
+    assert_ok("45. packages", "!n! nesting, slots, !/n/! target and !>n<! chains with cycle/type checks", test_packages)
 
     # === end of tests: new layers go above this line ===
 

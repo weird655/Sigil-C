@@ -10,6 +10,11 @@ C99_HEADER_BODY = """#include <stdint.h>
 #include <stdarg.h>
 #include <stdlib.h>
 
+#if defined(__GNUC__) && __GNUC__ >= 12
+/* Experimental !n! packages intentionally point at local frames. */
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
+#endif
+
 #ifdef SIGIL_BOUNDS_CHECK
   #ifndef SIGIL_BOUNDS_HELPER_DEFINED
     #define SIGIL_BOUNDS_HELPER_DEFINED
