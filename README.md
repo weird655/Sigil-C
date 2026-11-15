@@ -41,6 +41,7 @@
 | 中文名 | 文件 | 内容 |
 |---|---|---|
 | 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，22 个可运行示例 |
+| 设计档案 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 配电箱 v1 原始设计：未实现、不可补、无用户开关 |
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
