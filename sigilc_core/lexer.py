@@ -410,22 +410,35 @@ class Lexer:
                         tokens.append(Token('KW_PTR', label, s_line, s_col, s_byte))
                     continue
 
-            if ch == '!':
-                bangs = 0
-                while self._peek(bangs) == '!':
-                    bangs += 1
-                end = bangs
-                while self._peek(end).isdigit():
-                    end += 1
-                if bangs in (1, 2, 3) and end > bangs and self._peek(end) == '!':
-                    closing = 0
-                    while self._peek(end + closing) == '!':
-                        closing += 1
-                    if closing == bangs:
-                        digits = self.src[self.pos + bangs:self.pos + end]
-                        self._advance(end + bangs)
-                        tokens.append(Token(f'PKG{bangs}', digits, s_line, s_col, s_byte))
-                        continue
+            if ch == '!' and nxt == '/':
+                j = 2
+                while self._peek(j).isdigit():
+                    j += 1
+                if j > 2 and self._peek(j) == '/' and self._peek(j + 1) == '!':
+                    digits = self.src[self.pos + 2:self.pos + j]
+                    self._advance(j + 2)
+                    tokens.append(Token('PKG2', digits, s_line, s_col, s_byte))
+                    continue
+
+            if ch == '!' and nxt == '>':
+                j = 2
+                while self._peek(j).isdigit():
+                    j += 1
+                if j > 2 and self._peek(j) == '<' and self._peek(j + 1) == '!':
+                    digits = self.src[self.pos + 2:self.pos + j]
+                    self._advance(j + 2)
+                    tokens.append(Token('PKG3', digits, s_line, s_col, s_byte))
+                    continue
+
+            if ch == '!' and nxt.isdigit():
+                j = 1
+                while self._peek(j).isdigit():
+                    j += 1
+                if self._peek(j) == '!' and self._peek(j + 1) != '!':
+                    digits = self.src[self.pos + 1:self.pos + j]
+                    self._advance(j + 1)
+                    tokens.append(Token('PKG1', digits, s_line, s_col, s_byte))
+                    continue
 
             two_char = ch + nxt
             if two_char in SIGIL_KEYWORDS:

@@ -2383,11 +2383,11 @@ i4 main(v.) {
 !1! CCB;
 !1! = base;
 o! i4 other m, 0;
-!!!2!!! base other;
+!>2<! base other;
 
 i4 main(v.) {
     CCB m, 20;
-    !!1!! m+ 1;
+    !/1/! m+ 1;
     other m, 7;
     r; base;
 }
@@ -2403,13 +2403,13 @@ i4 main(v.) {
         else:
             raise AssertionError("binding an undeclared package should fail")
         try:
-            compile_source("i4 main(v.) { r; !!2!!; }", "pkg3.sigil")
+            compile_source("i4 main(v.) { r; !/2/!; }", "pkg3.sigil")
         except SemanticError as e:
             assert "not declared" in str(e), e
         else:
             raise AssertionError("unbound package should fail")
 
-    assert_ok("45. packages", "!n! aliases, !!n!! target and !!!n!!! global binding", test_packages)
+    assert_ok("45. packages", "!n! aliases, !/n/! target and !>n<! global binding", test_packages)
 
     # === end of tests: new layers go above this line ===
 

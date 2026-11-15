@@ -1,7 +1,7 @@
-"""Experimental cross-layer package aliases: `!n!`, `!!n!!`, `!!!n!!!`.
+"""Experimental cross-layer package aliases: `!n!`, `!/n/!`, `!>n<!`.
 
-Entertainment feature. `!n!` is a global alias slot; `!!n!!` is its target;
-`!!!n!!!` is a global bidirectional alias (both names share one storage).
+Entertainment feature. `!n!` is a global alias slot; `!/n/!` is its target;
+`!>n<!` is a global bidirectional alias (both names share one storage).
 No copies, no stack frames, no jumps. See SYNTAX.md.
 """
 from typing import Dict
