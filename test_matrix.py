@@ -2019,8 +2019,9 @@ int main(void) {
             "preamble": {"version"},
             "type_system": {"lexer"},
             "nodes": {"type_system"},
+            "packages": {"nodes"},
             "provenance": {"nodes"},
-            "parser": {"lexer", "nodes", "provenance", "type_system"},
+            "parser": {"lexer", "nodes", "packages", "provenance", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
@@ -2052,15 +2053,16 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "provenance", "parser", "codegen", "api", "cli", "__init__"]
+                 "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5200, (total, sizes)
-        assert sizes["parser"] <= 2600, sizes["parser"]
+        assert total <= 5300, (total, sizes)
+        assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
+        assert sizes["packages"] <= 300, sizes["packages"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -2375,6 +2377,40 @@ i4 main(v.) {
 
     assert_ok("44. multiptr", "pN* expands, C keywords are mapped, pN@ and raw '=' are explained; depth capped at 64", test_multiptr)
 
+    # Layer 45: experimental !n! package aliases
+    def test_packages():
+        src = """o! i4 base m, 10;
+!1! CCB;
+!1! = base;
+o! i4 other m, 0;
+!!!2!!! base other;
+
+i4 main(v.) {
+    CCB m, 20;
+    !!1!! m+ 1;
+    other m, 7;
+    r; base;
+}
+"""
+        c_src = compile_source(src, "pkg.sigil")
+        assert "CCB" not in c_src, c_src
+        assert "other = 7" not in c_src, c_src
+        assert "int32_t base" in c_src, c_src
+        try:
+            compile_source("!1! = base;", "pkg2.sigil")
+        except SemanticError as e:
+            assert "Bind" in str(e), e
+        else:
+            raise AssertionError("binding an undeclared package should fail")
+        try:
+            compile_source("i4 main(v.) { r; !!2!!; }", "pkg3.sigil")
+        except SemanticError as e:
+            assert "not declared" in str(e), e
+        else:
+            raise AssertionError("unbound package should fail")
+
+    assert_ok("45. packages", "!n! aliases, !!n!! target and !!!n!!! global binding", test_packages)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2382,7 +2418,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 44-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 45-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

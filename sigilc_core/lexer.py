@@ -410,6 +410,23 @@ class Lexer:
                         tokens.append(Token('KW_PTR', label, s_line, s_col, s_byte))
                     continue
 
+            if ch == '!':
+                bangs = 0
+                while self._peek(bangs) == '!':
+                    bangs += 1
+                end = bangs
+                while self._peek(end).isdigit():
+                    end += 1
+                if bangs in (1, 2, 3) and end > bangs and self._peek(end) == '!':
+                    closing = 0
+                    while self._peek(end + closing) == '!':
+                        closing += 1
+                    if closing == bangs:
+                        digits = self.src[self.pos + bangs:self.pos + end]
+                        self._advance(end + bangs)
+                        tokens.append(Token(f'PKG{bangs}', digits, s_line, s_col, s_byte))
+                        continue
+
             two_char = ch + nxt
             if two_char in SIGIL_KEYWORDS:
                 if two_char in ("v.", "b.") and (self._peek(2).isalnum() or self._peek(2) == "_"):
@@ -464,6 +481,10 @@ class Lexer:
                 tokens.append(Token(single_map[ch], ch, s_line, s_col, s_byte))
                 continue
 
+            if ch == '=' and tokens and tokens[-1].kind == 'PKG1':
+                self._advance()
+                tokens.append(Token('PKG_BIND', '=', s_line, s_col, s_byte))
+                continue
             if ch == '=':
                 raise LexerError(
                     f"{self.filename}:{s_line}:{s_col}: '=' is not an operator; "

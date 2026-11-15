@@ -3,7 +3,7 @@
 import re
 from typing import Dict, List, Optional, Set, Tuple
 
-from . import provenance
+from . import packages, provenance
 from .lexer import (
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
@@ -114,6 +114,7 @@ class Parser:
         self.cur_summary: Optional[provenance.FuncProvSummary] = None
         self.cur_params: List[str] = []
         self._summary_stack: List[Tuple[object, List[str]]] = []
+        self.pkgs = packages.PackageTable()
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
@@ -293,6 +294,7 @@ class Parser:
         return t.kind == 'IDENT' and t.value in self.user_types
 
     def _lookup_symbol(self, name: str, tok: Token) -> TypeNode:
+        name = self.pkgs.resolve(name)
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
@@ -1350,6 +1352,12 @@ class Parser:
     def parse_program(self) -> List[StmtNode]:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
+            if self._cur().kind == 'PKG1':
+                packages.parse_decl(self)
+                continue
+            if self._cur().kind == 'PKG3':
+                packages.parse_link(self)
+                continue
             attrs: List[Attribute] = []
             if self._cur().kind == 'KW_ATTR':
                 attrs = self.parse_attrs()
@@ -2584,10 +2592,13 @@ class Parser:
             return self.parse_va_arg()
         if tok.kind == 'IDENT' and tok.value == 'offsetof' and self.tokens[self.pos + 1].kind == 'LPAREN':
             return self.parse_offsetof()
+        if tok.kind in ('PKG1', 'PKG2'):
+            return packages.parse_use(self, tok)
         if tok.kind == 'IDENT':
             self._eat('IDENT')
-            self._lookup_symbol(tok.value, tok)
-            return IdentExpr(line=tok.line, col=tok.col, name=tok.value)
+            name = self.pkgs.resolve(tok.value)
+            self._lookup_symbol(name, tok)
+            return IdentExpr(line=tok.line, col=tok.col, name=name)
         if tok.kind == 'LPAREN':
             self._eat('LPAREN')
             e = self.parse_pure_expr()
