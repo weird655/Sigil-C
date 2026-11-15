@@ -2733,6 +2733,21 @@ i4 main(v.) { !/1/! m, 0xAB; r; (i4)(reg == 0x1122AB44); }
 !1! m, byte(f, 0);
 i4 main(v.) { !/1/! m, 0x80; r; (i4)(f > 1.0); }
 """, 1),
+            ("""o! u4 reg m, 0xFF;
+!1! F;
+!1! m, bit(reg, 3);
+i4 main(v.) { !/1/! m, 0; r; reg; }
+""", 0xF7),
+            ("""o! u4 reg m, 0;
+!1! F;
+!1! m, bits(reg, 0, 4);
+i4 main(v.) { !/1/! m, 5; !/1/! m- 2; r; reg; }
+""", 3),
+            ("""o! u8 reg m, 0;
+!1! F;
+!1! m, bits(reg, 32, 8);
+i4 main(v.) { !/1/! m, 0xAB; r; (i4)(!/1/! == 0xAB); }
+""", 1),
         )
         work = tempfile.mkdtemp(prefix="slice-")
         for idx, (src, expected) in enumerate(cases):
@@ -2758,6 +2773,7 @@ i4 main(v.) { r; 0; }
             ("o! f4 f m, 0; !1! F; !1! m, bit(f, 0); i4 main(v.) { r; 0; }", "integer target"),
             ("o! u4 r m, 0; !1! F; !1! m, bits(r, 30, 4); i4 main(v.) { r; 0; }", "exceeds"),
             ("o! u4 r m, 0; !1! F; !1! m, byte(r, 4); i4 main(v.) { r; 0; }", "outside"),
+            ("o! u4 r m, 0; !1! F; !1! m, bits(r, 0, 0); i4 main(v.) { r; 0; }", "positive"),
         ):
             try:
                 compile_source(bad, "slice_bad.sigil")
