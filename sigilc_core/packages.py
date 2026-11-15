@@ -1,6 +1,6 @@
 """Experimental package aliases: `!n!`, `!/n/!`, `!>n<!`.
 
-Entertainment feature. File-scope bindings are compile-time aliases; local
+Dangerous feature. File-scope bindings are compile-time aliases; local
 bindings use a global `void *` slot. Packages can be nested (a package bound
 to another package copies its binding), and `!>n<!` links form a global
 alias chain with type and cycle checks. No lifetime checks.
