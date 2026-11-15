@@ -35,6 +35,8 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 
 * **trap 诊断**：`--trap-trace` 打印原生调用栈（glibc/Windows），`--shadow-stack` 打印 Sigil 活跃帧（帧 id + 函数名，GCC/Clang cleanup 属性）；两者默认关、互斥，后者不是配电箱 v1，不做 liveness。第 51 层。
 
+* **位/字节切片语法定稿**：`bit(expr, k)`、`bits(expr, k, w)`、`byte(expr, i)`，`expr` 保留、全名不缩写；编译器尚未实现，文档标“语法定稿，未实现”。
+
 **交付与工具**
 
 * `--no-line`：生成的 C 不再每行插 `#line`，给 C 用户交付可读源；默认仍带。

@@ -999,7 +999,31 @@ live frames: [1] main [2] helper
 
 ---
 
-# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
+## 3.14 位/字节切片：`bit` / `bits` / `byte`（未实现）
+
+> **状态：语法定稿，编译器未实现。** 当前写 `bit(...)` 会被拒绝。
+
+```sigil
+!1! m, bit(ctrl, 3);      /* 第 3 位 */
+!2! m, bits(ctrl, 4, 3);  /* 4..6 三位 */
+!3! m, byte(reg, 1);      /* 第二个字节 */
+```
+
+- `bit(expr, k)` = `bits(expr, k, 1)`
+- `bits(expr, k, w)`：`k` 位偏移，`w` 位宽
+- `byte(expr, i)`：`i` 字节索引，整数上等价于 `bits(expr, 8*i, 8)`
+- `expr` 不省；不做 `expr.bit(k)` 接收者形式
+- `bit` / `bits` 只收整数 lvalue；`byte` 可收浮点（只按字节看）
+- `byte` 按内存字节序；写字节会改浮点对象表示
+- 不用 `b1t` / `b4s` / `b8e` / `b{N}s`；全名就是最终写法
+
+**能做：** 命名位域、寄存器映射、协议打包、字节视图、浮点拆字节。
+
+**不能做：** 原子读改写、自动内存屏障、跨端序转换、浮点直接位运算。
+
+---
+
+# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
 
 ## 4.1 输入输出
 
