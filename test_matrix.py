@@ -2718,8 +2718,8 @@ i4 main(v.) { !/1/! m, 5; r; reg; }
             ("""o! u4 reg m, 0x11223344;
 !1! F;
 !1! m, byte(reg, 1);
-i4 main(v.) { !/1/! m, 0xAB; r; reg; }
-""", 0x1122AB44),
+i4 main(v.) { !/1/! m, 0xAB; r; (i4)(reg == 0x1122AB44); }
+""", 1),
             ("""i4 main(v.) {
     o! u4 reg m, 0;
     !1! m, bits(reg, 4, 3);
@@ -2734,12 +2734,13 @@ i4 main(v.) { !/1/! m, 0xAB; r; reg; }
 i4 main(v.) { !/1/! m, 0x80; r; (i4)(f > 1.0); }
 """, 1),
         )
+        work = tempfile.mkdtemp(prefix="slice-")
         for src, expected in cases:
             c = compile_source(src, "slice.sigil")
-            path = os.path.join(os.getcwd(), "slice_probe.c")
+            path = os.path.join(work, "slice_probe.c")
             with open(path, "w", encoding="utf-8") as f:
                 f.write(c)
-            exe = os.path.join(os.getcwd(), "slice_probe.exe")
+            exe = os.path.join(work, "slice_probe.exe")
             b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
                                 path, "-o", exe], capture_output=True, text=True)
             assert b.returncode == 0, b.stderr
