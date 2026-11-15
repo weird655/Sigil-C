@@ -115,6 +115,7 @@ class Parser:
         self.cur_params: List[str] = []
         self._summary_stack: List[Tuple[object, List[str]]] = []
         self.pkgs = packages.PackageTable()
+        self.pending_slots: List[StmtNode] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
@@ -1353,7 +1354,9 @@ class Parser:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
             if self._cur().kind == 'PKG1':
-                packages.parse_decl(self)
+                slot_node = packages.parse_decl(self)
+                if slot_node is not None:
+                    top_nodes.append(slot_node)
                 continue
             if self._cur().kind == 'PKG3':
                 packages.parse_link(self)
@@ -1413,7 +1416,7 @@ class Parser:
                 tok = self._cur()
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'{c_keyword_hint(tok.value)}")
         self._check_calls()
-        return top_nodes
+        return self.pending_slots + top_nodes
 
     def _check_compound_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
         is_aggregate = isinstance(target, ArrayType) or (
@@ -1959,6 +1962,11 @@ class Parser:
 
     def parse_stmt(self) -> StmtNode:
         tok = self._cur()
+        if tok.kind == 'PKG1':
+            return packages.parse_bind_local(self, tok)
+        if tok.kind == 'PKG3':
+            return BlockStmt(line=tok.line, col=tok.col,
+                             stmts=packages.parse_link_local(self, tok))
         if tok.kind == 'PREPROC':
             ptok = self._eat('PREPROC')
             return PreprocNode(line=ptok.line, col=ptok.col, text=ptok.value)
@@ -2596,6 +2604,8 @@ class Parser:
             return packages.parse_use(self, tok)
         if tok.kind == 'IDENT':
             self._eat('IDENT')
+            if tok.value in self.pkgs.local_alias:
+                return packages.local_expr(self, tok.value, tok)
             name = self.pkgs.resolve(tok.value)
             self._lookup_symbol(name, tok)
             return IdentExpr(line=tok.line, col=tok.col, name=name)

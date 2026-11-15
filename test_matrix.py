@@ -2019,7 +2019,7 @@ int main(void) {
             "preamble": {"version"},
             "type_system": {"lexer"},
             "nodes": {"type_system"},
-            "packages": {"nodes"},
+            "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
             "parser": {"lexer", "nodes", "packages", "provenance", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
@@ -2059,7 +2059,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5300, (total, sizes)
+        assert total <= 5400, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 300, sizes["packages"]
@@ -2408,8 +2408,21 @@ i4 main(v.) {
             assert "not declared" in str(e), e
         else:
             raise AssertionError("unbound package should fail")
+        local_src = """i4 main(v.) {
+    o! i4 a m, 1;
+    o! i4 b m, 2;
+    !1! = a;
+    !/1/! m, 9;
+    !>2<! a b;
+    b m, 5;
+    r; a;
+}
+"""
+        c_local = compile_source(local_src, "pkg4.sigil")
+        assert "__sigil_pkg_1" in c_local and "__sigil_pkg_2" in c_local, c_local
+        assert "int32_t a" in c_local and "int32_t b" in c_local, c_local
 
-    assert_ok("45. packages", "!n! aliases, !/n/! target and !>n<! global binding", test_packages)
+    assert_ok("45. packages", "!n! aliases, local slots, !/n/! target and !>n<! dual binding", test_packages)
 
     # === end of tests: new layers go above this line ===
 
