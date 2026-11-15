@@ -256,3 +256,13 @@ def parse_link(parser) -> None:
             f"{parser.filename}:{left.line}:{left.col}: '!>{left.value}<!' needs matching types")
     parser.pkgs.add_alias(parser, parser.pkgs.resolve(left.value),
                           parser.pkgs.resolve(right.value), left)
+
+
+def begin_function(parser) -> None:
+    parser._pkg_saved.append((dict(parser.pkgs.local_alias), dict(parser.pkgs.local)))
+
+
+def end_function(parser) -> None:
+    local_alias, local = parser._pkg_saved.pop()
+    parser.pkgs.local_alias = local_alias
+    parser.pkgs.local = local

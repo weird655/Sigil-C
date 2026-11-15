@@ -116,6 +116,7 @@ class Parser:
         self._summary_stack: List[Tuple[object, List[str]]] = []
         self.pkgs = packages.PackageTable()
         self.pending_slots: List[StmtNode] = []
+        self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
@@ -1903,7 +1904,9 @@ class Parser:
                 self.local_objects.add(pname)
                 self.param_names.add(pname)
             provenance.begin_function(self, params)
+            packages.begin_function(self)
             body = self.parse_block(create_new_scope=False)
+            packages.end_function(self)
             provenance.end_function(self, name_tok.value)
             self.scopes.pop()
             self.escape_params[name_tok.value] = self.cur_escape

@@ -2,6 +2,7 @@
 import json
 import os
 import platform
+import random
 import shutil
 import subprocess
 import sys
@@ -2456,6 +2457,47 @@ i4 main(v.) {
 
     assert_ok("45. packages", "!n! nesting, slots, !/n/! target and !>n<! chains with cycle/type checks", test_packages)
 
+    # Layer 46: brute-force package generator
+    def test_pkg_fuzz():
+        rnd = random.Random(20261115)
+        names = ["a", "b", "c", "d"]
+        ok = 0
+        for i in range(300):
+            decls = [f"o! i4 {n} m, {rnd.randint(0, 9)};" for n in names]
+            if rnd.random() < 0.5:
+                pids = list(range(1, rnd.randint(2, 5)))
+                lines = list(decls)
+                for pid in pids:
+                    lines.append(f"!{pid}! P{pid};")
+                for pid in pids:
+                    if rnd.random() < 0.85:
+                        choices = list(names)
+                        if pid > 1:
+                            choices.append(f"!/{rnd.randint(1, pid - 1)}/!")
+                        lines.append(f"!{pid}! = {rnd.choice(choices)};")
+                for j in range(rnd.randint(0, 3)):
+                    lines.append(f"!>{j + 1}<! {rnd.choice(names)} {rnd.choice(names)};")
+                lines.append("i4 main(v.) { a m, 1; r; a; }")
+            else:
+                lines = ["i4 main(v.) {"]
+                lines += [f"    o! i4 {n} m, {rnd.randint(0, 9)};" for n in names]
+                lines.append("    !1! = " + rnd.choice(names) + ";")
+                if rnd.random() < 0.7:
+                    lines.append("    !2! = !/1/!;")
+                for j in range(rnd.randint(0, 2)):
+                    lines.append(f"    !>{j + 3}<! {rnd.choice(names)} {rnd.choice(names)};")
+                lines.append("    r; a;")
+                lines.append("}")
+            src = "\n".join(lines) + "\n"
+            try:
+                compile_source(src, f"pkgfuzz{i}.sigil")
+                ok += 1
+            except (SemanticError, ParseError, LexerError):
+                pass
+        assert ok > 0, "fuzz produced no valid program"
+
+    assert_ok("46. pkgfuzz", "300 random package programs: compile or reject, never crash", test_pkg_fuzz)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2463,7 +2505,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 45-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 46-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
