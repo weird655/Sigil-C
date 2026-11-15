@@ -2752,6 +2752,8 @@ i4 main(v.) { !/1/! m, 0x80; r; (i4)(f > 1.0); }
 i4 main(v.) { r; 0; }
 """, "slice.sigil")
         assert "[fields]" in nl and "bit(reg, k=3, w=1)" in nl, nl
+        assert "!1! F -> bit(reg, k=3, w=1)" in nl, nl
+        assert "!1! F -> (unbound)" not in nl, nl
         for bad, needle in (
             ("o! f4 f m, 0; !1! F; !1! m, bit(f, 0); i4 main(v.) { r; 0; }", "integer target"),
             ("o! u4 r m, 0; !1! F; !1! m, bits(r, 30, 4); i4 main(v.) { r; 0; }", "exceeds"),

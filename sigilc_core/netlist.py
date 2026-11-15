@@ -9,6 +9,13 @@ def _type_name(t) -> str:
     return t.__class__.__name__.lower()
 
 
+def _field_text(base_name: str, offset: int, width: int, byte_index) -> str:
+    if byte_index is not None:
+        return f"byte({base_name}, i={byte_index})"
+    kind = "bit" if width == 1 else "bits"
+    return f"{kind}({base_name}, k={offset}, w={width})"
+
+
 def render_netlist(parser) -> str:
     p = parser.pkgs
     c = parser.confine
@@ -17,7 +24,11 @@ def render_netlist(parser) -> str:
     seen = set()
     for pid, name in p.packages.items():
         seen.add(pid)
-        if name in p.targets:
+        if pid in p.fields:
+            base_name, offset, width, byte_index = p.fields[pid][4], p.fields[pid][1], p.fields[pid][2], p.fields[pid][3]
+            where = "local" if p.has_slot(pid) else "file"
+            lines.append(f"!{pid}! {name} -> {_field_text(base_name, offset, width, byte_index)}   [{where} field]")
+        elif name in p.targets:
             lines.append(f"!{pid}! {name} -> {p.targets[name]}   [file alias]")
         elif p.has_slot(pid):
             target = p.local.get(pid, "?")
@@ -25,9 +36,16 @@ def render_netlist(parser) -> str:
         else:
             lines.append(f"!{pid}! {name} -> (unbound)")
     for pid in sorted(set(p.slot_types) - seen):
+        if pid in p.fields:
+            continue
         target = p.local.get(pid, "?")
         tag = " [local slot]" if p.has_slot(pid) else " [type only]"
         lines.append(f"!{pid}! -> __sigil_pkg_{pid} (target {target}){tag}")
+    for pid, (base_type, offset, width, byte_index, base_name) in p.fields.items():
+        if pid in seen:
+            continue
+        where = "local" if p.has_slot(pid) else "file"
+        lines.append(f"!{pid}! -> {_field_text(base_name, offset, width, byte_index)}   [{where} field]")
     if len(lines) == 2:
         lines.append("(none)")
 
@@ -35,11 +53,7 @@ def render_netlist(parser) -> str:
     if p.fields:
         for pid, (base_type, offset, width, byte_index, base_name) in p.fields.items():
             where = "local" if p.has_slot(pid) else "file"
-            if byte_index is not None:
-                lines.append(f"!{pid}! byte({base_name}, i={byte_index}) [{where}]")
-            else:
-                kind = "bit" if width == 1 and byte_index is None else "bits"
-                lines.append(f"!{pid}! {kind}({base_name}, k={offset}, w={width}) [{where}]")
+            lines.append(f"!{pid}! {_field_text(base_name, offset, width, byte_index)} [{where}]")
     else:
         lines.append("(none)")
 
