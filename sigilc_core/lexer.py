@@ -410,6 +410,17 @@ class Lexer:
                         tokens.append(Token('KW_PTR', label, s_line, s_col, s_byte))
                     continue
 
+            if ch == '!' and nxt == '/' and self._peek(2) == '[' and self._peek(3) == '[':
+                j = 4
+                while self._peek(j) not in (']', ''):
+                    j += 1
+                if (self._peek(j) == ']' and self._peek(j + 1) == ']'
+                        and self._peek(j + 2) == '/' and self._peek(j + 3) == '!'):
+                    gid = self.src[self.pos + 4:self.pos + j]
+                    self._advance(j + 4)
+                    tokens.append(Token('LONG_GROUP', gid, s_line, s_col, s_byte))
+                    continue
+
             if ch == '!' and nxt == '/' and self._peek(2) == '[':
                 j = 3
                 while self._peek(j) not in (']', ''):
@@ -514,7 +525,7 @@ class Lexer:
                 tokens.append(Token(single_map[ch], ch, s_line, s_col, s_byte))
                 continue
 
-            if ch == '=' and tokens and tokens[-1].kind in ('PKG1', 'GROUP'):
+            if ch == '=' and tokens and tokens[-1].kind in ('PKG1', 'GROUP', 'LONG_GROUP'):
                 self._advance()
                 tokens.append(Token('PKG_BIND', '=', s_line, s_col, s_byte))
                 continue

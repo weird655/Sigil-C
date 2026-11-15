@@ -1355,6 +1355,9 @@ class Parser:
     def parse_program(self) -> List[StmtNode]:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
+            if self._cur().kind == 'LONG_GROUP':
+                confine.parse_long_group(self)
+                continue
             if self._cur().kind == 'GROUP':
                 confine.parse_group(self)
                 continue

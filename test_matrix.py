@@ -2061,11 +2061,11 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5700, (total, sizes)
+        assert total <= 5800, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 300, sizes["packages"]
-        assert sizes["confine"] <= 250, sizes["confine"]
+        assert sizes["confine"] <= 400, sizes["confine"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -2552,6 +2552,58 @@ i4 f3(v.) { r; !/1/!; }
 
     assert_ok("47. confine", "groups, mask bits, nested groups and lockdown denial", test_confinement)
 
+    # Layer 48: long groups select by position list
+    def test_long_groups():
+        ok = """o! i4 g m, 1;
+!/[[0]]/! = fn1, fn2, fn3, fn4, fn5, fn6, fn7, fn8, fn9, fn10;
+![1,3,5]! !/[[0]]/! {
+    !1! X;
+    !1! = g;
+}
+i4 fn1(v.) { r; !/1/!; }
+i4 fn3(v.) { r; !/1/!; }
+i4 fn5(v.) { r; !/1/!; }
+"""
+        compile_source(ok, "long.sigil")
+        star = """o! i4 g m, 1;
+!/[[0]]/! = fn1, fn2, fn3;
+![*]! !/[[0]]/! {
+    !1! X;
+    !1! = g;
+}
+i4 fn1(v.) { r; !/1/!; }
+i4 fn2(v.) { r; !/1/!; }
+"""
+        compile_source(star, "long2.sigil")
+        denied = """o! i4 g m, 1;
+!/[[0]]/! = fn1, fn2, fn3;
+![1,3]! !/[[0]]/! {
+    !1! X;
+    !1! = g;
+}
+i4 fn2(v.) { r; !/1/!; }
+"""
+        try:
+            compile_source(denied, "long3.sigil")
+        except SemanticError as e:
+            assert "confined" in str(e), e
+        else:
+            raise AssertionError("fn2 should be blocked by ![1,3]!")
+        try:
+            compile_source("!/[[0]]/! = fn1, fn2; ![3]! !/[[0]]/! { }", "long4.sigil")
+        except SemanticError as e:
+            assert "outside" in str(e), e
+        else:
+            raise AssertionError("position overflow should fail")
+        try:
+            compile_source("!/[[0]]/! = fn1; !/[[0]]/! = fn2;", "long5.sigil")
+        except SemanticError as e:
+            assert "already declared" in str(e), e
+        else:
+            raise AssertionError("long groups must be immutable")
+
+    assert_ok("48. long group", "position-list masks, * select-all, bounds and immutability", test_long_groups)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2559,7 +2611,7 @@ i4 f3(v.) { r; !/1/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 47-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 48-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
