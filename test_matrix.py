@@ -2735,12 +2735,12 @@ i4 main(v.) { !/1/! m, 0x80; r; (i4)(f > 1.0); }
 """, 1),
         )
         work = tempfile.mkdtemp(prefix="slice-")
-        for src, expected in cases:
+        for idx, (src, expected) in enumerate(cases):
             c = compile_source(src, "slice.sigil")
-            path = os.path.join(work, "slice_probe.c")
+            path = os.path.join(work, "slice_probe_%d.c" % idx)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(c)
-            exe = os.path.join(work, "slice_probe.exe")
+            exe = os.path.join(work, "slice_probe_%d.exe" % idx)
             b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
                                 path, "-o", exe], capture_output=True, text=True)
             assert b.returncode == 0, b.stderr
