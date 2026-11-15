@@ -18,6 +18,7 @@ from sigilc import (
     compile_header,
     compile_source,
     format_c_declarator,
+    netlist_source,
 )
 
 
@@ -2020,12 +2021,13 @@ int main(void) {
             "preamble": {"version"},
             "type_system": {"lexer"},
             "nodes": {"type_system"},
+            "netlist": set(),
             "confine": {"nodes"},
             "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
             "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
-            "api": {"codegen", "lexer", "nodes", "parser"},
+            "api": {"codegen", "lexer", "netlist", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
             "__init__": {"api", "cli", "codegen", "lexer", "nodes", "parser",
                          "preamble", "type_system", "version"},
@@ -2055,17 +2057,18 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "confine", "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
+                 "netlist", "confine", "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 5800, (total, sizes)
+        assert total <= 5900, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 400, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
+        assert sizes["netlist"] <= 200, sizes["netlist"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -2653,6 +2656,31 @@ i4 main(v.) { r; a; }""", "first"),
 
     assert_ok("49. landmine", "!n!! is single-binding; plain !n! keeps rebinding", test_landmine)
 
+    # Layer 50: netlist multimeter
+    def test_netlist():
+        src = """o! i4 base m, 1;
+!1! LOCK;
+!1! m, base;
+!/[0]/! m, f1, f2;
+![10]! !/[0]/! {
+    !2! X;
+    !2! m, base;
+}
+!3!! MINE;
+!3!! m, base;
+i4 f1(v.) { r; !/2/!; }
+"""
+        nl = netlist_source(src, "meter.sigil")
+        for needle in (
+            "[packages]", "!1! LOCK -> base", "[links]", "LOCK <- base",
+            "[groups]", "!/[0]/! = f1, f2", "[gates]", "![10]! !/[0]/! -> f1",
+            "[landmines]", "!3!! MINE armed at", "[confinement]", "!2! -> f1",
+        ):
+            assert needle in nl, (needle, nl)
+        assert "(none)" in netlist_source("i4 main(v.) { r; 0; }", "empty.sigil")
+
+    assert_ok("50. netlist", "the multimeter prints packages, links, groups, gates, landmines", test_netlist)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2660,7 +2688,7 @@ i4 main(v.) { r; a; }""", "first"),
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 49-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 50-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

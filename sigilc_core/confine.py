@@ -15,6 +15,7 @@ class Confinement:
         self.long_groups: Dict[str, List[Tuple[str, str]]] = {}
         self.confined: Dict[str, Set[str]] = {}
         self.frames: List[Set[str]] = []
+        self.gates: List[Tuple[int, int, str, str, str, List[str]]] = []
 
     def _expand(self, kind: str, gid: str, seen: Set[Tuple[str, str]]) -> List[str]:
         key = (kind, gid)
@@ -124,6 +125,9 @@ def parse_lockdown(parser) -> None:
                 f"{parser.filename}:{lock_tok.line}:{lock_tok.col}: Mask '![{mask}]!' needs "
                 f"{len(members)} bit(s)")
         allowed = {name for name, bit in zip(members, mask) if bit == '1'}
+    ordered = [name for name in members if name in allowed]
+    parser.confine.gates.append(
+        (lock_tok.line, lock_tok.col, target.kind, target.value, mask, ordered))
     outer = parser.confine.current_allowed()
     if outer is not None:
         allowed &= outer

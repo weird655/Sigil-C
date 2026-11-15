@@ -28,6 +28,7 @@ class PackageTable:
         self.local: Dict[str, str] = {}
         self.local_alias: Dict[str, str] = {}  # name -> package id
         self.armed: Set[str] = set()
+        self.arm_sites: Dict[str, Tuple[int, int]] = {}
         self.armed_bound: Dict[str, Tuple[int, int]] = {}
 
     def resolve(self, name: str) -> str:
@@ -204,6 +205,7 @@ def parse_decl(parser) -> Optional[VarDeclStmt]:
     parser.pkgs.packages[pid] = name_tok.value
     if armed:
         parser.pkgs.armed.add(pid)
+        parser.pkgs.arm_sites[pid] = (tok.line, tok.col)
     return None
 
 

@@ -1,0 +1,84 @@
+"""Human-readable netlist for the !...! rewiring layer (the multimeter)."""
+from typing import List
+
+
+def _type_name(t) -> str:
+    name = getattr(t, "c_name", None)
+    if name:
+        return str(name)
+    return t.__class__.__name__.lower()
+
+
+def render_netlist(parser) -> str:
+    p = parser.pkgs
+    c = parser.confine
+    lines: List[str] = [f"# Sigil-C netlist: {parser.filename}", ""]
+    lines.append("[packages]")
+    seen = set()
+    for pid, name in p.packages.items():
+        seen.add(pid)
+        if name in p.targets:
+            lines.append(f"!{pid}! {name} -> {p.targets[name]}   [file alias]")
+        elif p.has_slot(pid):
+            target = p.local.get(pid, "?")
+            lines.append(f"!{pid}! {name} -> __sigil_pkg_{pid} (target {target})   [local slot]")
+        else:
+            lines.append(f"!{pid}! {name} -> (unbound)")
+    for pid in sorted(set(p.slot_types) - seen):
+        target = p.local.get(pid, "?")
+        tag = " [local slot]" if p.has_slot(pid) else " [type only]"
+        lines.append(f"!{pid}! -> __sigil_pkg_{pid} (target {target}){tag}")
+    if len(lines) == 2:
+        lines.append("(none)")
+
+    lines += ["", "[links]"]
+    links = 0
+    for left, right in p.aliases.items():
+        lines.append(f"{left} <- {right}")
+        links += 1
+    for name, pid in p.local_alias.items():
+        lines.append(f"!{pid}! <- {name}   [local]")
+        links += 1
+    if not links:
+        lines.append("(none)")
+
+    lines += ["", "[groups]"]
+    groups = 0
+    for gid in c.groups:
+        lines.append(f"!/[{gid}]/! = {', '.join(c.expand_short(gid))}")
+        groups += 1
+    for gid in c.long_groups:
+        lines.append(f"!/[[{gid}]]/! = {', '.join(c.expand_long(gid))}")
+        groups += 1
+    if not groups:
+        lines.append("(none)")
+
+    lines += ["", "[gates]"]
+    if c.gates:
+        for line, col, kind, gid, mask, allowed in c.gates:
+            label = f"!/[[{gid}]]/!" if kind == 'LONG_GROUP' else f"!/[{gid}]/!"
+            lines.append(f"![{mask}]! {label} -> {', '.join(allowed) if allowed else '(none)'}")
+    else:
+        lines.append("(none)")
+
+    lines += ["", "[landmines]"]
+    if p.armed:
+        for pid in sorted(p.armed):
+            name = p.packages.get(pid, "?")
+            arm = p.arm_sites.get(pid)
+            bound = p.armed_bound.get(pid)
+            where = f"{arm[0]}:{arm[1]}" if arm else "?"
+            if bound:
+                lines.append(f"!{pid}!! {name} armed at {where}, bound at {bound[0]}:{bound[1]}")
+            else:
+                lines.append(f"!{pid}!! {name} armed at {where}, unbound")
+    else:
+        lines.append("(none)")
+
+    lines += ["", "[confinement]"]
+    if c.confined:
+        for pid, allowed in c.confined.items():
+            lines.append(f"!{pid}! -> {', '.join(sorted(allowed)) if allowed else '(none)'}")
+    else:
+        lines.append("(none)")
+    return "\n".join(lines) + "\n"

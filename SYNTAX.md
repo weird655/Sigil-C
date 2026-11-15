@@ -562,6 +562,51 @@ error: Landmine '!1!!' already armed at pkg.sigil:2:1 (second bind at pkg.sigil:
 
 ---
 
+### 5.15 万用表：`--netlist`
+
+> **危险工具，请勿使用。** 万用表只读网表，不执行程序。
+
+```bash
+python3 sigilc.py wire.sigil --netlist
+```
+
+输出：
+
+```text
+# Sigil-C netlist: wire.sigil
+
+[packages]
+!1! LOCK -> base   [file alias]
+!2! X -> base   [file alias]
+
+[links]
+LOCK <- base
+X <- base
+
+[groups]
+!/[0]/! = f1, f2
+
+[gates]
+![10]! !/[0]/! -> f1
+
+[landmines]
+!3!! MINE armed at 9:1, bound at 10:1
+
+[confinement]
+!2! -> f1
+```
+
+- `[packages]`：文件别名 / 局部槽 / 未绑定
+- `[links]`：`!>n<!` 的别名方向与局部焊接
+- `[groups]`：短集合与长集合展开后的成员
+- `[gates]`：mask / 位置列表实际放行了谁
+- `[landmines]`：地雷声明与上膛位置
+- `[confinement]`：域内包被哪些函数看见
+
+飞线农场最怕“能跑但没人知道为什么能跑”；这张表就是万用表。
+
+---
+
 ## 6. 赋值印记（`ASSIGN_TOKENS`）
 
 裸 `=` 在词法阶段被拒绝，所有赋值与初始化统一使用双字符印记，且仅允许作为独立语句、`f~` 初始化子句或 `f~` 步进子句出现：

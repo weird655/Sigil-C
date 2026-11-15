@@ -15,6 +15,7 @@ from .api import (
     _print_error,
     compile_header,
     compile_source,
+    netlist_source,
 )
 from .lexer import LexerError
 from .nodes import ParseError, SemanticError
@@ -34,6 +35,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="also emit a C header next to the output (same basename, .h)")
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
     ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
+    ap.add_argument("--netlist", action="store_true", help="print the !...! rewiring netlist; write nothing")
     ap.add_argument("--emit-prelude", metavar="PATH",
                     help="write the shared Sigil-C C prelude (macros) to PATH")
     ap.add_argument("--prelude", metavar="NAME",
@@ -92,6 +94,17 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not args.input:
         ap.error("input is required unless --build DIR is given")
+
+    if args.netlist:
+        src = ""
+        try:
+            with open(args.input, "r", encoding="utf-8") as f:
+                src = f.read()
+            sys.stdout.write(netlist_source(src, os.path.basename(args.input), defines, args.strict))
+        except (LexerError, ParseError, SemanticError) as e:
+            _print_error(e, os.path.basename(args.input), src)
+            return 1
+        return 0
 
     if args.check:
         return _check_targets(args.input, defines, json_out=args.json, strict=args.strict)

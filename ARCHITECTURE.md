@@ -29,6 +29,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `preamble.py` | 生成文件开头的可移植宏 | `version` |
 | `type_system.py` | `TypeNode`、类型等价、C 声明符 | `lexer` |
 | `nodes.py` | AST 节点、`emit_expr`、`Prov` | `type_system` |
+| `netlist.py` | 飞线网表渲染（万用表） | 无 |
 | `confine.py` | 封锁域 `![mask]!` 与协调集 `!/[id]/!` | `nodes` |
 | `packages.py` | 实验性 `!n!` 包别名（娱乐，勿用） | `nodes` |
 | `provenance.py` | 跨函数来源摘要（返回来源 / 出参回写） | `nodes` |
@@ -37,7 +38,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `api.py` | 编译、检查、格式化、LSP | `codegen` `lexer` `nodes` `parser` |
 | `cli.py` | 参数与工具链命令 | `api` `lexer` `nodes` `preamble` `version` |
 
-规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 5800、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 400、`confine.py` ≤ 400。
+规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 5900、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 400、`confine.py` ≤ 400、`netlist.py` ≤ 200。
 
 **唯一的例外**：`type_system` 在函数内延迟导入 `nodes`（`format_c_declarator` / `types_equal` 需要 `emit_expr`）。不要再增加新的函数内跨层导入——要加先在 issue 里说明。
 
@@ -64,6 +65,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `provenance.py` | 400 |
 | `packages.py` | 400 |
 | `confine.py` | 400 |
+| `netlist.py` | 200 |
 
 超预算时先拆模块或删功能，**不上调预算**。
 

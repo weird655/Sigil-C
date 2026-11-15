@@ -912,7 +912,46 @@ error: Landmine '!1!!' already armed at pkg.sigil:2:1 (second bind at pkg.sigil:
 
 ---
 
-# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
+## 3.12 万用表：`--netlist`
+
+> **危险工具，请勿使用。** 飞线多了，先量再焊。
+
+```bash
+python3 sigilc.py wire.sigil --netlist
+```
+
+它不生成 C，只打印这张网表：
+
+```text
+[packages]
+!1! LOCK -> base   [file alias]
+
+[links]
+LOCK <- base
+
+[groups]
+!/[0]/! = f1, f2
+
+[gates]
+![10]! !/[0]/! -> f1
+
+[landmines]
+!3!! MINE armed at 9:1, bound at 10:1
+
+[confinement]
+!2! -> f1
+```
+
+- 想知道“这根线还通不通”，看 `[links]` 和 `[gates]`
+- 想知道“谁还能碰这个包”，看 `[confinement]`
+- 想知道“这颗雷炸不炸”，看 `[landmines]` 的 armed/bound 位置
+- 想知道“槽是不是悬垂”，看 `[packages]` 的 local slot
+
+**先量通断，再谈跑通。**
+
+---
+
+# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
 
 ## 4.1 输入输出
 
