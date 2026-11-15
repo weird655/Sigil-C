@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from .nodes import (
     AssignStmt,
     Attribute,
+    BitSliceExpr,
     BlockStmt,
     DoWhileStmt,
     EnumDefNode,
@@ -27,6 +28,8 @@ from .nodes import (
     VaStmt,
     WhileStmt,
     emit_expr,
+    slice_mask,
+    slice_uint_type,
 )
 from .preamble import C99_HEADER, C99_HEADER_BODY
 from .type_system import format_c_declarator
@@ -204,6 +207,34 @@ class CodeGenerator:
             else:
                 self.gen_stmt(node, indent=0)
 
+    def _emit_slice_assign(self, s: AssignStmt, indent: int) -> None:
+        t = s.target
+        assert isinstance(t, BitSliceExpr)
+        base = emit_expr(t.base)
+        value = emit_expr(s.value)
+        typ = format_c_declarator(t.base_type)
+        if t.byte_index is not None:
+            idx = t.byte_index
+            if s.op == '=':
+                self._emit(f"((unsigned char *)&({base}))[{idx}] = (unsigned char)({value});", s.line, indent)
+            else:
+                op = s.op[:-1]
+                self._emit(
+                    f"((unsigned char *)&({base}))[{idx}] = "
+                    f"(unsigned char)(((unsigned char *)&({base}))[{idx}] {op} ({value}));", s.line, indent)
+            return
+        uint = slice_uint_type(t.base_type)
+        mask = slice_mask(t.width)
+        clear = f"~((({uint}){mask}) << {t.offset})"
+        if s.op == '=':
+            rhs = f"((({uint})({value}) & {mask}) << {t.offset})"
+        else:
+            op = s.op[:-1]
+            cur = f"((({uint})({base}) >> {t.offset}) & {mask})"
+            rhs = f"(((({cur}) {op} ({uint})({value})) & {mask}) << {t.offset})"
+        self._emit(
+            f"{base} = ({typ})(((({uint})({base})) & {clear}) | {rhs});", s.line, indent)
+
     def _format_inline_stmt(self, s: Optional[StmtNode]) -> str:
         if s is None:
             return ""
@@ -226,7 +257,10 @@ class CodeGenerator:
                 decl = f"{decl} {attr}"
             self._emit(f"{decl}{f' = {emit_expr(s.init_expr)}' if s.init_expr else ''};", s.line, indent)
         elif isinstance(s, AssignStmt):
-            self._emit(f"{emit_expr(s.target)} {s.op} {emit_expr(s.value)};", s.line, indent)
+            if isinstance(s.target, BitSliceExpr):
+                self._emit_slice_assign(s, indent)
+            else:
+                self._emit(f"{emit_expr(s.target)} {s.op} {emit_expr(s.value)};", s.line, indent)
         elif isinstance(s, ExprStmt):
             self._emit(f"{emit_expr(s.expr)};", s.line, indent)
         elif isinstance(s, ReturnStmt):

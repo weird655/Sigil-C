@@ -946,6 +946,7 @@ LOCK <- base
 - 想知道“谁还能碰这个包”，看 `[confinement]`
 - 想知道“这颗雷炸不炸”，看 `[landmines]` 的 armed/bound 位置
 - 想知道“槽是不是悬垂”，看 `[packages]` 的 local slot
+- 想知道“这个包切了哪几位”，看 `[fields]`
 
 **先量通断，再谈跑通。**
 
@@ -999,9 +1000,9 @@ live frames: [1] main [2] helper
 
 ---
 
-## 3.14 位/字节切片：`bit` / `bits` / `byte`（未实现）
+## 3.14 位/字节切片：`bit` / `bits` / `byte`
 
-> **状态：语法定稿，编译器未实现。** 当前写 `bit(...)` 会被拒绝。
+> **危险工具，请勿使用。** 已在第 52 层实现；读改写不是原子的，`volatile` 也不保证屏障。
 
 ```sigil
 !1! m, bit(ctrl, 3);      /* 第 3 位 */

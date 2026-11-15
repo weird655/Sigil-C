@@ -70,6 +70,15 @@ class MemberExpr(ExprNode):
     field: str
     is_arrow: bool
 
+
+@dataclass
+class BitSliceExpr(ExprNode):
+    base: ExprNode
+    base_type: TypeNode
+    offset: int = 0
+    width: int = 1
+    byte_index: Optional[int] = None
+
 @dataclass
 class StmtNode:
     line: int
@@ -247,6 +256,24 @@ class OffsetofExpr(ExprNode):
     target_type: TypeNode
     field: str
 
+_SLICE_BYTES = {
+    "uint8_t": 1, "int8_t": 1, "u1": 1, "i1": 1, "char": 1,
+    "uint16_t": 2, "int16_t": 2, "u2": 2, "i2": 2,
+    "uint32_t": 4, "int32_t": 4, "u4": 4, "i4": 4, "float": 4, "f4": 4,
+    "uint64_t": 8, "int64_t": 8, "u8": 8, "i8": 8, "double": 8, "f8": 8,
+}
+
+
+def slice_uint_type(t: TypeNode) -> str:
+    return "uint64_t" if _SLICE_BYTES.get(getattr(t, "c_name", ""), 4) >= 8 else "uint32_t"
+
+
+def slice_mask(width: int) -> str:
+    if width >= 64:
+        return "~0ULL"
+    return f"((1ULL << {width}) - 1)"
+
+
 def emit_expr(e: ExprNode) -> str:
     if isinstance(e, LiteralExpr):
         return e.code
@@ -285,6 +312,12 @@ def emit_expr(e: ExprNode) -> str:
         if e.bound is not None:
             return f"{emit_expr(e.base)}[SIGIL_IDX({emit_expr(e.index)}, {e.bound})]"
         return f"{emit_expr(e.base)}[{emit_expr(e.index)}]"
+    if isinstance(e, BitSliceExpr):
+        base = emit_expr(e.base)
+        if e.byte_index is not None:
+            return f"(((unsigned char *)&({base}))[{e.byte_index}])"
+        uint = slice_uint_type(e.base_type)
+        return f"((({uint})({base}) >> {e.offset}) & {slice_mask(e.width)})"
     if isinstance(e, MemberExpr):
         return f"{emit_expr(e.base)}{'->' if e.is_arrow else '.'}{e.field}"
     raise TypeError(f"Unknown ExprNode: {e}")

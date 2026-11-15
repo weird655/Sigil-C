@@ -9,6 +9,7 @@ from typing import Dict, Optional, Set, Tuple
 
 from .nodes import (
     AssignStmt,
+    BitSliceExpr,
     CastExpr,
     ExprStmt,
     IdentExpr,
@@ -27,6 +28,7 @@ class PackageTable:
         self.slot_types: Dict[str, object] = {}
         self.local: Dict[str, str] = {}
         self.local_alias: Dict[str, str] = {}  # name -> package id
+        self.fields: Dict[str, Tuple[object, int, int, Optional[int], str]] = {}
         self.armed: Set[str] = set()
         self.arm_sites: Dict[str, Tuple[int, int]] = {}
         self.armed_bound: Dict[str, Tuple[int, int]] = {}
@@ -136,6 +138,72 @@ def _copy_slot(parser, dst: str, src: str, tok):
                       value=IdentExpr(line=tok.line, col=tok.col, name=src_slot))
 
 
+_TYPE_BYTES = {
+    "uint8_t": 1, "int8_t": 1, "u1": 1, "i1": 1, "char": 1,
+    "uint16_t": 2, "int16_t": 2, "u2": 2, "i2": 2,
+    "uint32_t": 4, "int32_t": 4, "u4": 4, "i4": 4, "float": 4, "f4": 4,
+    "uint64_t": 8, "int64_t": 8, "u8": 8, "i8": 8, "double": 8, "f8": 8,
+}
+
+
+def _type_bytes(t) -> int:
+    return _TYPE_BYTES.get(getattr(t, "c_name", ""), 1)
+
+
+def _parse_slice_binding(parser, pid: str, tok, local: bool):
+    kind_tok = parser._eat('IDENT')
+    kind = kind_tok.value
+    parser._eat('LPAREN')
+    base_tok = parser._eat('IDENT')
+    base_type = parser._lookup_symbol(base_tok.value, base_tok)
+    c_name = getattr(base_type, "c_name", "")
+    if kind in ('bit', 'bits') and not (c_name.startswith('i') or c_name.startswith('u')):
+        raise SemanticError(
+            f"{parser.filename}:{kind_tok.line}:{kind_tok.col}: '{kind}' needs an integer target, got '{c_name}'")
+    parser._eat('COMMA')
+    first = parser.parse_pure_expr()
+    first_val = parser._eval_const_int_expr(first)
+    if first_val is None:
+        raise SemanticError(
+            f"{parser.filename}:{kind_tok.line}:{kind_tok.col}: '{kind}' offset/index must be a constant")
+    bits = _type_bytes(base_type) * 8
+    if kind == 'byte':
+        if not 0 <= first_val < _type_bytes(base_type):
+            raise SemanticError(
+                f"{parser.filename}:{kind_tok.line}:{kind_tok.col}: byte index {first_val} outside 0..{_type_bytes(base_type) - 1}")
+        offset = 0
+        width = 8
+        byte_index = first_val
+    else:
+        offset = first_val
+        if kind == 'bit':
+            width = 1
+        else:
+            parser._eat('COMMA')
+            w_expr = parser.parse_pure_expr()
+            w_val = parser._eval_const_int_expr(w_expr)
+            if w_val is None or w_val <= 0:
+                raise SemanticError(
+                    f"{parser.filename}:{kind_tok.line}:{kind_tok.col}: 'bits' width must be a positive constant")
+            width = w_val
+        if offset < 0 or width <= 0 or offset + width > bits:
+            raise SemanticError(
+                f"{parser.filename}:{kind_tok.line}:{kind_tok.col}: slice {offset}+{width} exceeds {bits} bits")
+        byte_index = None
+    parser._eat('RPAREN')
+    parser._eat('SEMI')
+    parser.pkgs.fields[pid] = (base_type, offset, width, byte_index, base_tok.value)
+    if local:
+        parser.pkgs.slot_types[pid] = base_type
+        slot = _ensure_slot(parser, pid, tok)
+        addr = UnaryExpr(line=tok.line, col=tok.col, op='&',
+                         operand=IdentExpr(line=base_tok.line, col=base_tok.col, name=base_tok.value))
+        cast = CastExpr(line=tok.line, col=tok.col, target_type=_void_ptr(tok.line, tok.col), operand=addr)
+        return AssignStmt(line=tok.line, col=tok.col, op='=',
+                          target=IdentExpr(line=tok.line, col=tok.col, name=slot), value=cast)
+    return None
+
+
 def _landmine_bind(parser, pid: str, tok) -> None:
     first = parser.pkgs.armed_bound.get(pid)
     if first is not None:
@@ -162,6 +230,13 @@ def parse_decl(parser) -> Optional[VarDeclStmt]:
         elif pid in parser.pkgs.armed:
             raise SemanticError(
                 f"{parser.filename}:{tok.line}:{tok.col}: Landmine '!{pid}!!' must be bound with '!{pid}!! m, target;'")
+        cur = parser._cur()
+        if (cur.kind == 'IDENT' and cur.value in ('bit', 'bits', 'byte')
+                and parser.tokens[parser.pos + 1].kind == 'LPAREN'):
+            if pid not in parser.pkgs.packages:
+                raise SemanticError(
+                    f"{parser.filename}:{tok.line}:{tok.col}: Bind '!{pid}!' with '!{pid}! NAME;' first")
+            return _parse_slice_binding(parser, pid, tok, local=False)
         if parser._cur().kind in ('PKG1', 'PKG2'):
             src_tok = parser._eat()
             parser._eat('SEMI')
@@ -225,6 +300,10 @@ def parse_bind_local(parser, tok):
     elif pid in parser.pkgs.armed:
         raise SemanticError(
             f"{parser.filename}:{tok.line}:{tok.col}: Landmine '!{pid}!!' must be bound with '!{pid}!! m, target;'")
+    cur = parser._cur()
+    if (cur.kind == 'IDENT' and cur.value in ('bit', 'bits', 'byte')
+            and parser.tokens[parser.pos + 1].kind == 'LPAREN'):
+        return _parse_slice_binding(parser, pid, tok, local=True)
     if parser._cur().kind in ('PKG1', 'PKG2'):
         src_tok = parser._eat()
         parser._eat('SEMI')
@@ -286,6 +365,17 @@ def parse_link_local(parser, tok):
 def parse_use(parser, tok):
     parser._eat()
     pid = tok.value
+    if pid in parser.pkgs.fields:
+        base_type, offset, width, byte_index, base_name = parser.pkgs.fields[pid]
+        if parser.pkgs.has_slot(pid):
+            ptr_t = PointerType(line=tok.line, col=tok.col, pointee=base_type)
+            base = UnaryExpr(line=tok.line, col=tok.col, op='*',
+                             operand=CastExpr(line=tok.line, col=tok.col, target_type=ptr_t,
+                                              operand=IdentExpr(line=tok.line, col=tok.col, name=_slot(pid))))
+        else:
+            base = IdentExpr(line=tok.line, col=tok.col, name=base_name)
+        return BitSliceExpr(line=tok.line, col=tok.col, base=base, base_type=base_type,
+                            offset=offset, width=width, byte_index=byte_index)
     if parser.pkgs.has_slot(pid):
         return _deref(parser, pid, tok)
     return IdentExpr(line=tok.line, col=tok.col,

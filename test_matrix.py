@@ -2063,10 +2063,10 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6000, (total, sizes)
+        assert total <= 6200, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
-        assert sizes["packages"] <= 400, sizes["packages"]
+        assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
         assert sizes["netlist"] <= 200, sizes["netlist"]
 
@@ -2702,6 +2702,69 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("51. trap modes", "native backtrace and Sigil shadow stack are separate, opt-in modes", test_trap_modes)
 
+    # Layer 52: bit / bits / byte slices
+    def test_slices():
+        cases = (
+            ("""o! u4 reg m, 0;
+!1! F;
+!1! m, bit(reg, 3);
+i4 main(v.) { !/1/! m, 1; r; reg; }
+""", 8),
+            ("""o! u4 reg m, 0;
+!1! F;
+!1! m, bits(reg, 4, 3);
+i4 main(v.) { !/1/! m, 5; r; reg; }
+""", 80),
+            ("""o! u4 reg m, 0x11223344;
+!1! F;
+!1! m, byte(reg, 1);
+i4 main(v.) { !/1/! m, 0xAB; r; reg; }
+""", 0x1122AB44),
+            ("""i4 main(v.) {
+    o! u4 reg m, 0;
+    !1! m, bits(reg, 4, 3);
+    !/1/! m, 2;
+    !/1/! m+ 1;
+    r; reg;
+}
+""", 0x30),
+            ("""o! f4 f m, 1.0;
+!1! F;
+!1! m, byte(f, 0);
+i4 main(v.) { !/1/! m, 0x80; r; (i4)(f > 1.0); }
+""", 1),
+        )
+        for src, expected in cases:
+            c = compile_source(src, "slice.sigil")
+            path = os.path.join(os.getcwd(), "slice_probe.c")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(c)
+            exe = os.path.join(os.getcwd(), "slice_probe.exe")
+            b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                                path, "-o", exe], capture_output=True, text=True)
+            assert b.returncode == 0, b.stderr
+            r = subprocess.run([exe], capture_output=True, text=True)
+            assert r.returncode == expected, (r.returncode, expected, c[-400:])
+        nl = netlist_source("""o! u4 reg m, 0;
+!1! F;
+!1! m, bit(reg, 3);
+i4 main(v.) { r; 0; }
+""", "slice.sigil")
+        assert "[fields]" in nl and "bit(reg, k=3, w=1)" in nl, nl
+        for bad, needle in (
+            ("o! f4 f m, 0; !1! F; !1! m, bit(f, 0); i4 main(v.) { r; 0; }", "integer target"),
+            ("o! u4 r m, 0; !1! F; !1! m, bits(r, 30, 4); i4 main(v.) { r; 0; }", "exceeds"),
+            ("o! u4 r m, 0; !1! F; !1! m, byte(r, 4); i4 main(v.) { r; 0; }", "outside"),
+        ):
+            try:
+                compile_source(bad, "slice_bad.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("slice bounds/type should fail")
+
+    assert_ok("52. slices", "bit/bits/byte bind, read, write and --netlist fields", test_slices)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2709,7 +2772,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 51-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 52-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

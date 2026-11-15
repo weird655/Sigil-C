@@ -31,6 +31,18 @@ def render_netlist(parser) -> str:
     if len(lines) == 2:
         lines.append("(none)")
 
+    lines += ["", "[fields]"]
+    if p.fields:
+        for pid, (base_type, offset, width, byte_index, base_name) in p.fields.items():
+            where = "local" if p.has_slot(pid) else "file"
+            if byte_index is not None:
+                lines.append(f"!{pid}! byte({base_name}, i={byte_index}) [{where}]")
+            else:
+                kind = "bit" if width == 1 and byte_index is None else "bits"
+                lines.append(f"!{pid}! {kind}({base_name}, k={offset}, w={width}) [{where}]")
+    else:
+        lines.append("(none)")
+
     lines += ["", "[links]"]
     links = 0
     for left, right in p.aliases.items():

@@ -27,6 +27,7 @@ from .nodes import (
     AssignStmt,
     Attribute,
     BinaryExpr,
+    BitSliceExpr,
     BlockStmt,
     CallExpr,
     CaseClause,
@@ -456,6 +457,10 @@ class Parser:
         if isinstance(expr, IdentExpr):
             return self._lookup_symbol(expr.name, Token('IDENT', expr.name, expr.line, expr.col, 0))
 
+        if isinstance(expr, BitSliceExpr):
+            if expr.byte_index is not None:
+                return BaseType(line=expr.line, col=expr.col, c_name='uint8_t')
+            return expr.base_type
         if isinstance(expr, CastExpr):
             src_t = self._infer_expr_type(expr.operand)
             dst_t = expr.target_type
@@ -666,7 +671,7 @@ class Parser:
         return BaseType(line=expr.line, col=expr.col, c_name='int32_t')
 
     def _check_modifiable_lvalue(self, expr: ExprNode, op_tok: Token):
-        if not isinstance(expr, (IdentExpr, IndexExpr, MemberExpr)) and not (isinstance(expr, UnaryExpr) and expr.op == '*'):
+        if not isinstance(expr, (IdentExpr, IndexExpr, MemberExpr, BitSliceExpr)) and not (isinstance(expr, UnaryExpr) and expr.op == '*'):
             raise SemanticError(f"{self.filename}:{op_tok.line}:{op_tok.col}: Left-hand side of '{op_tok.value}' is not a modifiable lvalue")
 
         lhs_t = self._infer_expr_type(expr)
