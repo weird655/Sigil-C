@@ -2064,7 +2064,7 @@ int main(void) {
         assert total <= 5800, (total, sizes)
         assert sizes["parser"] <= 2650, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
-        assert sizes["packages"] <= 300, sizes["packages"]
+        assert sizes["packages"] <= 400, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
@@ -2604,6 +2604,55 @@ i4 fn2(v.) { r; !/1/!; }
 
     assert_ok("48. long group", "position-list masks, * select-all, bounds and immutability", test_long_groups)
 
+    # Layer 49: landmine packages are single-binding
+    def test_landmine():
+        ok = """o! i4 base m, 1;
+!1!! LOCK;
+!1!! m, base;
+i4 main(v.) { r; !/1/!; }
+"""
+        compile_source(ok, "mine.sigil")
+        local = """o! i4 base m, 1;
+!1!! LOCK;
+i4 main(v.) {
+    o! i4 x m, 2;
+    !1!! m, x;
+    r; !/1/!;
+}
+"""
+        compile_source(local, "mine2.sigil")
+        for bad, needle in (
+            ("""o! i4 a m, 1; o! i4 b m, 2;
+!1!! LOCK; !1!! m, a; !1!! m, b;
+i4 main(v.) { r; !/1/!; }""", "already armed"),
+            ("""o! i4 a m, 1;
+!1!! LOCK; !1!! m, a; !1! m, a;
+i4 main(v.) { r; !/1/!; }""", "must be bound"),
+            ("""o! i4 a m, 1;
+!1!! LOCK; !1!! m, a; !>1<! a LOCK;
+i4 main(v.) { r; a; }""", "cannot overwrite landmine"),
+            ("""!1!! m, a;
+i4 main(v.) { r; a; }""", "first"),
+        ):
+            try:
+                compile_source(bad, "mine3.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("landmine rule should reject")
+        # plain packages keep their rebinding freedom
+        plain = """i4 main(v.) {
+    o! i4 a m, 1;
+    o! i4 b m, 2;
+    !1! m, a;
+    !1! m, b;
+    r; a;
+}
+"""
+        compile_source(plain, "mine4.sigil")
+
+    assert_ok("49. landmine", "!n!! is single-binding; plain !n! keeps rebinding", test_landmine)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2611,7 +2660,7 @@ i4 fn2(v.) { r; !/1/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 48-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 49-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

@@ -882,7 +882,35 @@ i4 fn2(v.) { r; !/1/!; }   /* 编译错误：confined */
 
 ---
 
-# Part 4# Part 4# Part 4# Part 4 · 系统
+## 3.11 地雷包：`!n!!`
+
+> **危险工具，请勿使用。** 地雷包保证唯一绑定，不保证生命周期。
+
+```sigil
+!1!! LOCK;
+!1!! m, base;
+
+i4 main(v.) {
+    r; !/1/!;       /* 正常读 */
+}
+```
+
+再绑一次：
+
+```text
+error: Landmine '!1!!' already armed at pkg.sigil:2:1 (second bind at pkg.sigil:4:1)
+```
+
+- `!n!!` = 地雷包：一次绑定，第二次踩雷
+- 普通 `!n!` = 自由包：可重绑、可覆盖
+- `!>k<!` 想焊走地雷名字也炸：`cannot overwrite landmine`
+- 局部地雷包出函数照样悬垂；地雷只管唯一性
+
+**拆雷方式：编译。编译不过就是雷没拆。**
+
+---
+
+# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
 
 ## 4.1 输入输出
 

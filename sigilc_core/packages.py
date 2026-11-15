@@ -5,7 +5,7 @@ bindings use a global `void *` slot. Packages can be nested (a package bound
 to another package copies its binding), and `!>n<!` links form a global
 alias chain with type and cycle checks. No lifetime checks.
 """
-from typing import Dict, Optional
+from typing import Dict, Optional, Set, Tuple
 
 from .nodes import (
     AssignStmt,
@@ -27,6 +27,8 @@ class PackageTable:
         self.slot_types: Dict[str, object] = {}
         self.local: Dict[str, str] = {}
         self.local_alias: Dict[str, str] = {}  # name -> package id
+        self.armed: Set[str] = set()
+        self.armed_bound: Dict[str, Tuple[int, int]] = {}
 
     def resolve(self, name: str) -> str:
         seen = set()
@@ -54,6 +56,17 @@ class PackageTable:
 
     def has_slot(self, pid: str) -> bool:
         return pid in self.slot_types and self.slot_types[pid] is not None
+
+    def armed_name(self, name: str):
+        resolved = self.resolve(name)
+        for pid in self.armed:
+            pname: Optional[str] = self.packages.get(pid)
+            if pname is None:
+                continue
+            if pname == name or self.targets.get(pname) == resolved:
+                return pid
+        linked = self.local_alias.get(name)
+        return linked if linked in self.armed else None
 
     def target(self, parser, pid: str, tok):
         if self.has_slot(pid):
@@ -122,11 +135,32 @@ def _copy_slot(parser, dst: str, src: str, tok):
                       value=IdentExpr(line=tok.line, col=tok.col, name=src_slot))
 
 
+def _landmine_bind(parser, pid: str, tok) -> None:
+    first = parser.pkgs.armed_bound.get(pid)
+    if first is not None:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: Landmine '!{pid}!!' already armed at "
+            f"{first[0]}:{first[1]} (second bind at {tok.line}:{tok.col})")
+    parser.pkgs.armed_bound[pid] = (tok.line, tok.col)
+
+
 def parse_decl(parser) -> Optional[VarDeclStmt]:
-    tok = parser._eat()  # PKG1
+    tok = parser._eat()  # PKG1 / PKG1_ARMED
     pid = tok.value
+    armed = tok.kind == 'PKG1_ARMED'
     if parser._cur().kind == 'OP_ASSIGN':
         parser._eat('OP_ASSIGN')
+        if armed:
+            if pid not in parser.pkgs.packages:
+                raise SemanticError(
+                    f"{parser.filename}:{tok.line}:{tok.col}: Bind '!{pid}!!' with '!{pid}!! NAME;' first")
+            if pid not in parser.pkgs.armed:
+                raise SemanticError(
+                    f"{parser.filename}:{tok.line}:{tok.col}: '!{pid}!!' was not declared as a landmine")
+            _landmine_bind(parser, pid, tok)
+        elif pid in parser.pkgs.armed:
+            raise SemanticError(
+                f"{parser.filename}:{tok.line}:{tok.col}: Landmine '!{pid}!!' must be bound with '!{pid}!! m, target;'")
         if parser._cur().kind in ('PKG1', 'PKG2'):
             src_tok = parser._eat()
             parser._eat('SEMI')
@@ -168,13 +202,27 @@ def parse_decl(parser) -> Optional[VarDeclStmt]:
         raise SemanticError(
             f"{parser.filename}:{tok.line}:{tok.col}: Package '!{pid}!' is already declared")
     parser.pkgs.packages[pid] = name_tok.value
+    if armed:
+        parser.pkgs.armed.add(pid)
     return None
 
 
 def parse_bind_local(parser, tok):
-    parser._eat('PKG1')
+    parser._eat()
     parser._eat('OP_ASSIGN')
     pid = tok.value
+    armed = tok.kind == 'PKG1_ARMED'
+    if armed:
+        if pid not in parser.pkgs.packages:
+            raise SemanticError(
+                f"{parser.filename}:{tok.line}:{tok.col}: Bind '!{pid}!!' with '!{pid}!! NAME;' first")
+        if pid not in parser.pkgs.armed:
+            raise SemanticError(
+                f"{parser.filename}:{tok.line}:{tok.col}: '!{pid}!!' was not declared as a landmine")
+        _landmine_bind(parser, pid, tok)
+    elif pid in parser.pkgs.armed:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: Landmine '!{pid}!!' must be bound with '!{pid}!! m, target;'")
     if parser._cur().kind in ('PKG1', 'PKG2'):
         src_tok = parser._eat()
         parser._eat('SEMI')
@@ -214,6 +262,9 @@ def parse_link_local(parser, tok):
     if not types_equal(left_type, right_type):
         raise SemanticError(
             f"{parser.filename}:{tok.line}:{tok.col}: '!>{pid}<!' needs matching types")
+    if parser.pkgs.armed_name(right.value) is not None:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: '!>{pid}<!' cannot overwrite landmine '{right.value}'")
     parser.pkgs.slot_types[pid] = left_type
     parser.pkgs.local_alias[right.value] = pid
     slot = _ensure_slot(parser, pid, tok)
@@ -249,6 +300,9 @@ def parse_link(parser) -> None:
     left = parser._eat('IDENT')
     right = parser._eat('IDENT')
     parser._eat('SEMI')
+    if parser.pkgs.armed_name(right.value) is not None:
+        raise SemanticError(
+            f"{parser.filename}:{left.line}:{left.col}: '!>{left.value}<!' cannot overwrite landmine '{right.value}'")
     left_type = parser._lookup_symbol(left.value, left)
     right_type = parser._lookup_symbol(right.value, right)
     if not types_equal(left_type, right_type):

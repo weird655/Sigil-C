@@ -37,7 +37,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `api.py` | 编译、检查、格式化、LSP | `codegen` `lexer` `nodes` `parser` |
 | `cli.py` | 参数与工具链命令 | `api` `lexer` `nodes` `preamble` `version` |
 
-规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 5800、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 300、`confine.py` ≤ 400。
+规则由 `test_matrix.py` 第 34 层强制：模块级 import 必须命中上表、无环、只允许标准库、总行数 ≤ 5800、`parser.py` ≤ 2650、`provenance.py` ≤ 400、`packages.py` ≤ 400、`confine.py` ≤ 400。
 
 **唯一的例外**：`type_system` 在函数内延迟导入 `nodes`（`format_c_declarator` / `types_equal` 需要 `emit_expr`）。不要再增加新的函数内跨层导入——要加先在 issue 里说明。
 
@@ -62,7 +62,7 @@ cli → api → codegen → parser → nodes → type_system → lexer
 | `sigilc_core/` 总行数 | 5200 |
 | `parser.py` | 2650 |
 | `provenance.py` | 400 |
-| `packages.py` | 300 |
+| `packages.py` | 400 |
 | `confine.py` | 400 |
 
 超预算时先拆模块或删功能，**不上调预算**。

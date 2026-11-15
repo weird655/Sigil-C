@@ -465,6 +465,11 @@ class Lexer:
                 j = 1
                 while self._peek(j).isdigit():
                     j += 1
+                if self._peek(j) == '!' and self._peek(j + 1) == '!' and self._peek(j + 2) != '!':
+                    digits = self.src[self.pos + 1:self.pos + j]
+                    self._advance(j + 2)
+                    tokens.append(Token('PKG1_ARMED', digits, s_line, s_col, s_byte))
+                    continue
                 if self._peek(j) == '!' and self._peek(j + 1) != '!':
                     digits = self.src[self.pos + 1:self.pos + j]
                     self._advance(j + 1)

@@ -1364,7 +1364,7 @@ class Parser:
             if self._cur().kind == 'LOCK':
                 confine.parse_lockdown(self)
                 continue
-            if self._cur().kind == 'PKG1':
+            if self._cur().kind in ('PKG1', 'PKG1_ARMED'):
                 slot_node = packages.parse_decl(self)
                 if slot_node is not None:
                     top_nodes.append(slot_node)
@@ -1975,7 +1975,7 @@ class Parser:
 
     def parse_stmt(self) -> StmtNode:
         tok = self._cur()
-        if tok.kind == 'PKG1':
+        if tok.kind in ('PKG1', 'PKG1_ARMED'):
             return packages.parse_bind_local(self, tok)
         if tok.kind == 'PKG3':
             return BlockStmt(line=tok.line, col=tok.col,
