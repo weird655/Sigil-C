@@ -29,7 +29,7 @@ python3 sigilc.py --build examples/tutorial -o app --run
 需要 Python 3.10+ 与 gcc（clang 也可）。仓库里没有依赖要装：
 
 ```bash
-python3 sigilc.py --version          # Sigil-C 1.2.1
+python3 sigilc.py --version          # Sigil-C 1.2.2
 python3 sigilc.py --check src        # 只检查，不写文件
 python3 sigilc.py --build src -o app --run
 ```
@@ -499,7 +499,7 @@ checksum=1012
 
 ## 3.7 重布线层 / 飞线层：`!n!` 包别名
 
-> **Layer 2 实验，不在 Core v1 兼容承诺内。**
+> **Layer 2 实验：允许使用，但不纳入 Core v1 冻结。**
 >
 > **危险工具，请勿使用。** `!` 家族是 Layer 2 的**重布线层（飞线层）**，底层仍是原 Sigil-C。飞线改连接，不改芯片。
 

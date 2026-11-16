@@ -1,4 +1,4 @@
-"""Layer 2 experimental, excluded from the Core v1 compatibility promise.
+"""Layer 2 experimental: allowed, but not part of the Core v1 freeze.
 
 Package aliases: `!n!`, `!/n/!`, `!>n<!`.
 
