@@ -622,6 +622,13 @@ def _project_namespace(rel: str) -> str:
     return m.group(1) if m else ""
 
 
+_PROJECT_NS_RE = re.compile(r"^[a-z][a-z0-9_]{0,7}$")
+_PROJECT_MAX_NAMESPACES = 16
+_PROJECT_MAX_PACKAGES = 64
+_PROJECT_MAX_PACKAGE_ID = 99
+_PROJECT_MAX_EXPORTS = 32
+
+
 def _project_package_ids(src: str) -> List[str]:
     """Package IDs declared in one source (not references like !/1/!)."""
     seen = set()
@@ -685,11 +692,44 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                       f"({bucket[pid]} and {rel})", file=sys.stderr)
                 return 1
             bucket[pid] = rel
+    namespaces = set()
+    total_packages = 0
+    for rel, text in sources_text.items():
+        ns = _project_namespace(rel)
+        if ns:
+            if not _PROJECT_NS_RE.fullmatch(ns):
+                print(f"error: namespace '!{ns}!' in {rel} is invalid "
+                      f"(1-8 chars, lowercase [a-z][a-z0-9_]*)", file=sys.stderr)
+                return 1
+            namespaces.add(ns)
+        ids = _project_package_ids(text)
+        total_packages += len(ids)
+        for pid in ids:
+            if not pid.isdigit() or int(pid) > _PROJECT_MAX_PACKAGE_ID:
+                print(f"error: package !{pid}! in {rel} exceeds the budget "
+                      f"(IDs must be 0-{_PROJECT_MAX_PACKAGE_ID})", file=sys.stderr)
+                return 1
+            if pid != str(int(pid)):
+                print(f"error: package !{pid}! in {rel} has a non-canonical ID "
+                      f"(leading zero)", file=sys.stderr)
+                return 1
+    if len(namespaces) > _PROJECT_MAX_NAMESPACES:
+        print(f"error: too many namespaces ({len(namespaces)} > "
+              f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
+        return 1
+    if total_packages > _PROJECT_MAX_PACKAGES:
+        print(f"error: too many packages ({total_packages} > "
+              f"{_PROJECT_MAX_PACKAGES})", file=sys.stderr)
+        return 1
     exports: Dict[str, str] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
         for pid, target in _project_package_bindings(text).items():
             exports[f"{ns}.{pid}" if ns else pid] = target
+    if len(exports) > _PROJECT_MAX_EXPORTS:
+        print(f"error: too many exported packages ({len(exports)} > "
+              f"{_PROJECT_MAX_EXPORTS})", file=sys.stderr)
+        return 1
     map_path = os.path.join(out_dir, "packages.txt")
     os.makedirs(out_dir, exist_ok=True)
     with open(map_path, "w", encoding="utf-8", newline="\n") as f:

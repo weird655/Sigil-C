@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.5 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.6 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2909,6 +2909,46 @@ i4 main(v.) {
 
     assert_ok("56. pkg namespace", "!name! registers !1! as name.1; !name!1! calls across files; duplicates fail", test_package_namespace)
 
+    # Layer 57: strict package naming budgets
+    def test_package_limits():
+        def build(work):
+            return subprocess.run(
+                [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                 "--build", work, "-o", os.path.join(work, "app")],
+                capture_output=True, text=True)
+
+        bad = tempfile.mkdtemp(prefix="pkgbad-")
+        os.makedirs(os.path.join(bad, "src"))
+        with open(os.path.join(bad, "src", "!VeryLongName!.sigil"), "w", encoding="utf-8") as f:
+            f.write("!1! P;\n")
+        r = build(os.path.join(bad, "src"))
+        assert r.returncode != 0 and "namespace" in r.stderr, r.stderr
+
+        bad2 = tempfile.mkdtemp(prefix="pkgid-")
+        os.makedirs(os.path.join(bad2, "src"))
+        with open(os.path.join(bad2, "src", "!math!.sigil"), "w", encoding="utf-8") as f:
+            f.write("!100! P;\n")
+        r = build(os.path.join(bad2, "src"))
+        assert r.returncode != 0 and "0-99" in r.stderr, r.stderr
+
+        many = tempfile.mkdtemp(prefix="pkgmany-")
+        os.makedirs(os.path.join(many, "src"))
+        with open(os.path.join(many, "src", "!math!.sigil"), "w", encoding="utf-8") as f:
+            for i in range(65):
+                f.write(f"!{i}! A{i};\n")
+        r = build(os.path.join(many, "src"))
+        assert r.returncode != 0 and "too many packages" in r.stderr, r.stderr
+
+        ns = tempfile.mkdtemp(prefix="pkgnsmax-")
+        os.makedirs(os.path.join(ns, "src"))
+        for i in range(17):
+            with open(os.path.join(ns, "src", f"!a{i}!.sigil"), "w", encoding="utf-8") as f:
+                f.write("!1! P;\n")
+        r = build(os.path.join(ns, "src"))
+        assert r.returncode != 0 and "too many namespaces" in r.stderr, r.stderr
+
+    assert_ok("57. pkg limits", "namespace 1-8 chars, IDs 0-99, max 16 namespaces / 64 packages", test_package_limits)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2916,7 +2956,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 56-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 57-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
