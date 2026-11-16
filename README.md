@@ -102,6 +102,7 @@ python3 dist/sigilc.pyz --version
 
 | 中文名 | 文件 | 内容 |
 |---|---|---|
+| 手册 | [`MANUAL.md`](MANUAL.md) | 安全须知、上手、本地/外部飞线、外部扩展、严谨规范、错误表 |
 | 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，22 个可运行示例 |
 | 设计档案 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 配电箱 v1 原始设计：未实现、不可补、无用户开关 |
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
@@ -109,7 +110,7 @@ python3 dist/sigilc.pyz --version
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
 | 标准库 | [`STDLIB.md`](STDLIB.md) | libc 覆盖矩阵与缺口 |
 | 多文件 | [`MULTIFILE.md`](MULTIFILE.md) | 跨文件函数原型与边界 |
-| 兼容承诺 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | Core v1 冻结；Layer 2 `!` 明确排除 |
+| 兼容承诺 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | Core v1 冻结；Layer 2 `!` 允许使用、不纳入冻结 |
 | 安装 | [`INSTALL.md`](INSTALL.md) | pip / zipapp / PyInstaller 单文件 |
 | 性能 | [`BENCHMARKS.md`](BENCHMARKS.md) | C vs Sigil-C 的运行时 microbenchmark |
 | 移植探针 | [`PORTING.md`](PORTING.md) | 3 个外部风格探针与失败点 |
