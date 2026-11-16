@@ -20,7 +20,7 @@
 | **可检查的写法**：`m` 写操作、指针带来源 | 更安全的 C 本身 —— 堆、空指针、未初始化要做数据流分析，单遍转译做不到 |
 | **转译期检查**：常量越界、悬空、跨函数逃逸、`r@` 违约 | 跨文件分析 —— 只看单个翻译单元，跨文件要链接期信息 |
 | **可退出的产物**：`#line` 映射、`--no-line` 交付、`.h` 输出 | 自己的标准库 —— 直接用 C 的 libc，省掉一整套生态维护 |
-| **重布线层（飞线层）**：`!n!` / `!/n/!` / `!>n<!` 全局与局部别名，`!n!!` 地雷包，`![mask]!` 封锁域，`!/[[id]]/!` 长集合，`bit` / `bits` / `byte` 切片 | 危险工具，请勿使用 |
+| **Layer 2 实验（重布线层）**：`!n!` / `!/n/!` / `!>n<!` 全局与局部别名，`!n!!` 地雷包，`![mask]!` 封锁域，`!/[[id]]/!` 长集合，`bit` / `bits` / `byte` 切片 | 危险工具，请勿使用 |
 | **完整工具链**：build / fmt / check / init / LSP | 包管理与构建系统 —— 交给 C 侧，不另造一套 |
 
 一句话：**不是更快的 C，是"读一遍就能验证"的 C。**
@@ -45,6 +45,10 @@
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+| 兼容承诺 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | Core v1 冻结；Layer 2 `!` 明确排除 |
+| 安装 | [`INSTALL.md`](INSTALL.md) | pip / zipapp / PyInstaller 单文件 |
+| 性能 | [`BENCHMARKS.md`](BENCHMARKS.md) | C vs Sigil-C 的运行时 microbenchmark |
+| 移植探针 | [`PORTING.md`](PORTING.md) | 3 个外部风格探针与失败点 |
 | 贡献指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 环境、一键检查、加印记清单、发布流程 |
 | 架构 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 分层、依赖方向、预算、非目标 |
 | 汇编实验 | [Sigil-ASM](https://github.com/weird655/Sigil-ASM) | 独立的 `.sigil → x86-64` 概念验证，与 Sigil-C 分仓 |
@@ -149,7 +153,7 @@ Helix、Emacs（lsp-mode）、Sublime LSP 等通用客户端用同一行命令�
 VS Code 需要额外的客户端扩展；本仓库的 `editors/vscode/` 只含语法高亮。
 
 编辑器：`editors/vscode/` 是最小 VS Code 语法扩展（`.sigil` 高亮、注释与括号配置），
-把它复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.1.0` 后重启即可。
+把它复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.2.0` 后重启即可。
 
 ## 它挡什么
 
@@ -474,7 +478,7 @@ int main(void) {
 
 ## 测试矩阵
 
-201 项 / 42 层，每层一个主题：
+212 项 / 53 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -498,11 +502,21 @@ int main(void) {
 | 41 | `--strict` 拒绝无法证明的参数访问 |
 | 42 | 跨函数来源摘要（返回 / 出参） |
 | 43 | 调用点长度契约（常量下标 / `--strict`） |
+| 44 | `pN*` 多指针、C 关键字提示 |
+| 45 | `!n!` 包/读写/双映射 |
+| 46 | 包随机生成器 |
+| 47 | 封锁域 / 短集合 |
+| 48 | 长集合 / 位置选择 |
+| 49 | 地雷包单绑定 |
+| 50 | `--netlist` 万用表 |
+| 51 | trap 诊断（原生 / Sigil 帧） |
+| 52 | `bit` / `bits` / `byte` 切片 |
+| 53 | 栈过载模拟 / ASan 源 |
 
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 201 项 / 42 层，需要 gcc
+python3 test_matrix.py        # 212 项 / 53 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -510,7 +524,7 @@ python3 test_matrix.py        # 201 项 / 42 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 201 项测试
+python tools/check.py            # py_compile → ruff → mypy → 212 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -548,9 +562,10 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 版本 **1.1**，tag `v1.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.1) 已发布；语法冻结（v1.x 只加不改）。
-- 201 项测试，Windows、WSL Ubuntu、GitHub Actions 三处通过；ruff / mypy 零告警，覆盖率门槛 85%。
-- 已有：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP（诊断 / 大纲 / 片段补全）、格式化器、多文件构建、栈/堆三写法。
+- 版本 **1.2**，tag `v1.2.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 212 项测试 / 53 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
+- **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**不在 Core v1 兼容承诺内**，见 `COMPATIBILITY.md`。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理。
 
 ## 版本策略

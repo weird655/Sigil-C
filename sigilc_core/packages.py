@@ -1,4 +1,6 @@
-"""Experimental package aliases: `!n!`, `!/n/!`, `!>n<!`.
+"""Layer 2 experimental, excluded from the Core v1 compatibility promise.
+
+Package aliases: `!n!`, `!/n/!`, `!>n<!`.
 
 Dangerous feature. File-scope bindings are compile-time aliases; local
 bindings use a global `void *` slot. Packages can be nested (a package bound

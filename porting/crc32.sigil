@@ -1,0 +1,27 @@
+#include <stdio.h>
+
+/* External-style probe: tableless CRC32 (zlib polynomial), byte-at-a-time. */
+u4 crc32(p* c@ u1 data, u4 n) {
+    o! u4 crc m, 0xFFFFFFFF;
+    o! u4 i m, 0;
+    w~ (i < n) {
+        crc m, crc ^ (u4)data[i];
+        o! u4 k m, 0;
+        w~ (k < 8) {
+            i? (crc & 1) {
+                crc m, (crc >> 1) ^ 0xEDB88320;
+            } e: {
+                crc m, crc >> 1;
+            }
+            k m+ 1;
+        }
+        i m+ 1;
+    }
+    r; ~crc;
+}
+
+i4 main(v.) {
+    o! u1[9] data m, {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
+    printf("%08x\n", crc32(p@ data[0], 9));
+    r; 0;
+}

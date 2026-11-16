@@ -1,0 +1,16 @@
+#include <stdint.h>
+#include <stdio.h>
+
+o! v@ u4 acc m, 0;
+!1! ALIAS;
+!1! m, acc;
+
+i4 main(v.) {
+    o! u4 i m, 0;
+    w~ (i < 100000000) {
+        !/1/! m+ i;
+        i m+ 1;
+    }
+    printf("%u\n", acc);
+    r; 0;
+}

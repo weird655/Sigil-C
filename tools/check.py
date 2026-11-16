@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCES = ["sigilc.py", "sigilc_core", "test_matrix.py", "tools/check.py", "tools/fuzz.py", "tools/bench.py", "tools/difftest.py", "tools/runcheck.py"]
+SOURCES = ["sigilc.py", "sigilc_core", "test_matrix.py", "tools/check.py", "tools/fuzz.py", "tools/bench.py", "tools/difftest.py", "tools/runcheck.py", "tools/bench_runtime.py", "tools/build_standalone.py"]
 
 
 def _run(title, cmd):

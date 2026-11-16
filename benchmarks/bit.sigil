@@ -1,0 +1,16 @@
+#include <stdint.h>
+#include <stdio.h>
+
+o! v@ u4 acc m, 0;
+!1! FLAG;
+!1! m, bit(acc, 3);
+
+i4 main(v.) {
+    o! u4 i m, 0;
+    w~ (i < 100000000) {
+        !/1/! m, 1;
+        i m+ 1;
+    }
+    printf("%u\n", acc);
+    r; 0;
+}

@@ -1,8 +1,51 @@
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.1 的版本变更、缺陷修复与 212 项自动化测试矩阵覆盖明细。
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.2 的版本变更、缺陷修复与 212 项自动化测试矩阵覆盖明细。
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
+
+## [1.2.0] - 2026-11-16
+
+### Core v1 冻结
+
+* 新增 [`COMPATIBILITY.md`](COMPATIBILITY.md)：Core v1 语法（除 `!` 家族外的全部印记/运算符/语义/生成物）冻结。
+* 承诺 v1.x 只加不改；破坏性变更必须经过至少一个 minor 的弃用期。
+* 生成物仍为纯 C99 + `#line`，可随时脱离转译器交付。
+
+### Layer 2 明确隔离
+
+* `!` 家族（`!n!`、`!/n/!`、`!>n<!`、`!/[id]/!`、`!/[[id]]/!`、`![mask]!`、`!n!!`、`bit`/`bits`/`byte`）
+  正式标为 **Layer 2 实验**，**不在 Core v1 兼容承诺内**，任意 minor 可改/可删。
+* `--netlist`、`--trap-trace`、`--shadow-stack` 同属实验工具。
+* README、SYNTAX 5.10、TUTORIAL 3.7、`packages.py` 文档串同步标注。
+* 局部包悬垂、无生命周期、无运行时仍是已知边界，不因 1.2 改变。
+
+### 安装路径
+
+* [`INSTALL.md`](INSTALL.md)：`pip install .` / `pip install -e .` / `sigilc` 入口。
+* `tools/build_standalone.py --zipapp`：生成 `dist/sigilc.pyz`（单文件，需 Python）。
+* `tools/build_standalone.py --onefile`：可选 PyInstaller 单文件原生二进制；未安装时明确报错。
+* 干净 venv 验证：`pip install .` + `sigilc --version` + 端到端编译。
+
+### 性能基线
+
+* 新增 [`BENCHMARKS.md`](BENCHMARKS.md) 与 `tools/bench_runtime.py`，C 基线 vs Sigil-C 生成 C，`-O2`。
+* 文件级别名 1.00x；局部包在本 microbenchmark 中约 1.00x（优化后）；`bit` 置位约 5.59x；`byte` 约 0.99x。
+* 结论：静态 `!` 零成本，`bit` 的读改写有真实成本，局部包需警惕别名屏障；数字不外推为应用性能承诺。
+
+### 移植探针
+
+* 新增 [`PORTING.md`](PORTING.md) 与 `porting/`：CRC32、环形缓冲、JSON 数字转换。
+* CRC32 与 ringbuf 编译运行通过；JSON 探针失败于 `strtod` 未在 libc 子集注册，记录为真实移植摩擦点。
+* 明确说明：这是 3 个 external-style 探针，**不是完整第三方仓库移植**；真项目需选定具体仓库后逐个函数做。
+
+### 测试与交付
+
+* 212 项 / 53 层，覆盖率门槛 85%（当前 87%）。
+* `tools/build_standalone.py` 进入可验证的 zipapp 路径。
+* 版本号：`1.2.0`；tag `v1.2.0`。
+
+---
 
 ## [维护期补丁] - 2026-11-13
 
@@ -72,7 +115,7 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 
 ---
 
-## [v1.1] - 2026-11-12（当前版本）
+## [v1.1] - 2026-11-12（历史版本）
 
 面向"能被别人链接的模块"与"少踩内存坑"的一次收敛：语言补全 + 数组越界防护。
 

@@ -1,0 +1,45 @@
+#include <stdio.h>
+
+/* External-style probe: fixed-capacity UART/DMA ring buffer. */
+#define CAP 8
+
+o! u4[CAP] buf;
+o! u4 head m, 0;
+o! u4 tail m, 0;
+o! u4 count m, 0;
+
+v. push(u4 v) {
+    i? (count == CAP) {
+        printf("overflow\n");
+    } e: {
+        buf[head] m, v;
+        head m, (head + 1) mod CAP;
+        count m+ 1;
+    }
+}
+
+u4 pop(v.) {
+    i? (count == 0) {
+        r; 0;
+    }
+    o! u4 v m, buf[tail];
+    tail m, (tail + 1) mod CAP;
+    count m- 1;
+    r; v;
+}
+
+i4 main(v.) {
+    o! u4 i m, 0;
+    w~ (i < 10) {
+        push(i);
+        i m+ 1;
+    }
+    o! u4 sum m, 0;
+    i m, 0;
+    w~ (i < 8) {
+        sum m+ pop();
+        i m+ 1;
+    }
+    printf("sum=%u count=%u\n", sum, count);
+    r; 0;
+}
