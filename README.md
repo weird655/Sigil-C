@@ -79,7 +79,7 @@ python3 dist/sigilc.pyz --version
 | libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
 | 支持范围 | 缺陷修复、文档、C99 完备性、函数级多文件；不加新语言记号 |
-| 命名预算 | 16 个 `!name!/` 电箱；每箱 64 个包（0–63）；每箱 32 个函数包导出 |
+| 命名预算 | 16 个命名空间；每空间 64 个包（0–63）；每空间 32 个函数包导出 |
 | 不做 | GC、借用检查、包管理、运行时、安全认证、跨文件分析 |
 | 退出路径 | 生成的 C99 + `#line` 可独立编译、交付、修改 |
 | 性能目标 | 生成的 C 不拖后腿；不是“比 C 快”，先量再改，见 [`BENCHMARKS.md`](BENCHMARKS.md) |
@@ -103,6 +103,7 @@ python3 dist/sigilc.pyz --version
 | 中文名 | 文件 | 内容 |
 |---|---|---|
 | 手册 | [`MANUAL.md`](MANUAL.md) | 安全须知、上手、本地/外部飞线、外部扩展、严谨规范、错误表 |
+| 飞线教程 | [`WIRING.md`](WIRING.md) | Layer 2 唯一教程：包/外部飞线/封锁/地雷/切片 |
 | 教程 | [`TUTORIAL.md`](TUTORIAL.md) | Part 0–7：从 Hello 到指针/文件/回调/栈堆三写法，22 个可运行示例 |
 | 设计档案 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 配电箱 v1 原始设计：未实现、不可补、无用户开关 |
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
