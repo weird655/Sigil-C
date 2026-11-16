@@ -2843,7 +2843,7 @@ i4 main(v.) {
             f.write(c)
         exe = os.path.join(work, "stdlib.exe")
         b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
-                            cpath, "-o", exe], capture_output=True, text=True)
+                            cpath, "-o", exe, "-lm"], capture_output=True, text=True)
         assert b.returncode == 0, b.stderr
         r = subprocess.run([exe], capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
