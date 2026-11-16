@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.4 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.5 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2063,7 +2063,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6200, (total, sizes)
+        assert total <= 6300, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
@@ -2868,6 +2868,47 @@ i4 main(v.) {
 
     assert_ok("55. multifile", "cross-file call resolves via generated project prototypes", test_multifile)
 
+    # Layer 56: package file namespaces
+    def test_package_namespace():
+        work = tempfile.mkdtemp(prefix="pkgns-")
+        os.makedirs(os.path.join(work, "src"))
+        math_src = (
+            "o! i4 v m, 5;\n"
+            "!1! P;\n"
+            "!2! Q;\n"
+            "!2! m, v;\n"
+            "i4 get(v.) { r; !/2/!; }\n"
+            "!1! m, get;\n"
+        )
+        with open(os.path.join(work, "src", "!math!.sigil"), "w", encoding="utf-8") as f:
+            f.write(math_src)
+        with open(os.path.join(work, "src", "!main!.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; !math!1!(); }\n")
+        exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work, "-o", exe], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        mp = os.path.join(work, ".sigil-build", "packages.txt")
+        with open(mp, encoding="utf-8") as f:
+            index = f.read()
+        assert "math.1 ->" in index and "!math!.sigil" in index, index
+        assert "math.1 target -> get" in index, index
+        q = subprocess.run([exe], capture_output=True, text=True)
+        assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
+
+        dup = tempfile.mkdtemp(prefix="pkgdup-")
+        os.makedirs(os.path.join(dup, "src"))
+        for name in ("!math!a.sigil", "!math!b.sigil"):
+            with open(os.path.join(dup, "src", name), "w", encoding="utf-8") as f:
+                f.write("!1! P;\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", dup, "-o", os.path.join(dup, "app")],
+                           capture_output=True, text=True)
+        assert r.returncode != 0
+        assert "duplicate package !1!" in r.stderr, r.stderr
+
+    assert_ok("56. pkg namespace", "!name! registers !1! as name.1; !name!1! calls across files; duplicates fail", test_package_namespace)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2875,7 +2916,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 55-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 56-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

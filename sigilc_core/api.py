@@ -612,6 +612,51 @@ def _project_prototypes(src: str) -> List[str]:
     return out
 
 
+_PROJECT_PKG_DECL_RE = re.compile(r"^\s*!(\d+)!!?", re.M)
+
+
+def _project_namespace(rel: str) -> str:
+    """File-level package namespace: `!math!.sigil` -> `math`."""
+    base = os.path.basename(rel)
+    m = re.match(r"!([A-Za-z_]\w*)!", base)
+    return m.group(1) if m else ""
+
+
+def _project_package_ids(src: str) -> List[str]:
+    """Package IDs declared in one source (not references like !/1/!)."""
+    seen = set()
+    out: List[str] = []
+    for m in _PROJECT_PKG_DECL_RE.finditer(src):
+        pid = m.group(1)
+        if pid not in seen:
+            seen.add(pid)
+            out.append(pid)
+    return out
+
+_PROJECT_PKG_BIND_RE = re.compile(r"^\s*!(\d+)!\s+m,\s*([A-Za-z_]\w*)\s*;", re.M)
+_PROJECT_EXT_REF_RE = re.compile(r"!([A-Za-z_]\w*)!(\d+)!")
+
+
+def _project_package_bindings(src: str) -> Dict[str, str]:
+    """Package id -> file-level target name for `!n! m, target;`."""
+    out: Dict[str, str] = {}
+    for m in _PROJECT_PKG_BIND_RE.finditer(src):
+        out.setdefault(m.group(1), m.group(2))
+    return out
+
+
+def _rewrite_external_packages(src: str, exports: Dict[str, str], filename: str) -> str:
+    """Rewrite `!name!n!` to the exported C-level target name."""
+    def repl(m):
+        key = f"{m.group(1)}.{m.group(2)}"
+        if key not in exports:
+            raise SemanticError(
+                f"{filename}: package '!{m.group(1)}!{m.group(2)}!' is not exported "
+                f"by a file-level `!{m.group(2)}! m, target;`")
+        return exports[key]
+    return _PROJECT_EXT_REF_RE.sub(repl, src)
+
+
 def _build_project(args, defines: Dict[str, str]) -> int:
     """把目录下所有 .sigil 转译到 .sigil-build/，再用 gcc 链接成一个可执行文件。"""
     root = args.build
@@ -629,6 +674,32 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         with open(src_path, "r", encoding="utf-8") as f:
             sources_text[rel] = f.read()
         prototypes[rel] = _project_prototypes(sources_text[rel])
+    package_index: Dict[str, Dict[str, str]] = {}
+    for rel, text in sources_text.items():
+        ns = _project_namespace(rel)
+        for pid in _project_package_ids(text):
+            key = f"{ns}.{pid}" if ns else pid
+            bucket = package_index.setdefault(ns, {})
+            if pid in bucket:
+                print(f"error: duplicate package !{pid}! in namespace '{ns}' "
+                      f"({bucket[pid]} and {rel})", file=sys.stderr)
+                return 1
+            bucket[pid] = rel
+    exports: Dict[str, str] = {}
+    for rel, text in sources_text.items():
+        ns = _project_namespace(rel)
+        for pid, target in _project_package_bindings(text).items():
+            exports[f"{ns}.{pid}" if ns else pid] = target
+    map_path = os.path.join(out_dir, "packages.txt")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(map_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("# project package index\n")
+        for rel, text in sources_text.items():
+            ns = _project_namespace(rel)
+            for pid in _project_package_ids(text):
+                f.write(f"{ns + '.' if ns else ''}{pid} -> {rel}\n")
+        for key, target in exports.items():
+            f.write(f"{key} target -> {target}\n")
     for src_path in sources:
         rel = os.path.relpath(src_path, root)
         c_path = os.path.join(out_dir, os.path.splitext(rel)[0] + ".c")
@@ -642,6 +713,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
         src = sources_text[rel]
         try:
+            src = _rewrite_external_packages(src, exports, rel)
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict)
