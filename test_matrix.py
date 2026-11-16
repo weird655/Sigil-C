@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.7 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.8 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2883,7 +2883,7 @@ i4 main(v.) {
         with open(os.path.join(work, "src", "!math!.sigil"), "w", encoding="utf-8") as f:
             f.write(math_src)
         with open(os.path.join(work, "src", "!main!.sigil"), "w", encoding="utf-8") as f:
-            f.write("i4 main(v.) { r; !math!1!(); }\n")
+            f.write("i4 main(v.) { r; !math[1]!(); }\n")
         exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
         r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
                             "--build", work, "-o", exe], capture_output=True, text=True)
@@ -2907,7 +2907,7 @@ i4 main(v.) {
         assert r.returncode != 0
         assert "duplicate package !1!" in r.stderr, r.stderr
 
-    assert_ok("56. pkg namespace", "!name! registers !1! as name.1; !name!1! calls across files; duplicates fail", test_package_namespace)
+    assert_ok("56. pkg namespace", "!name! registers !1! as name.1; !name[1]! calls across files; duplicates fail", test_package_namespace)
 
     # Layer 57: strict package naming budgets
     def test_package_limits():
@@ -2927,9 +2927,9 @@ i4 main(v.) {
         bad2 = tempfile.mkdtemp(prefix="pkgid-")
         os.makedirs(os.path.join(bad2, "src"))
         with open(os.path.join(bad2, "src", "!math!.sigil"), "w", encoding="utf-8") as f:
-            f.write("!100! P;\n")
+            f.write("!64! P;\n")
         r = build(os.path.join(bad2, "src"))
-        assert r.returncode != 0 and "0-99" in r.stderr, r.stderr
+        assert r.returncode != 0 and "0-63" in r.stderr, r.stderr
 
         many = tempfile.mkdtemp(prefix="pkgmany-")
         os.makedirs(os.path.join(many, "src"))
@@ -2947,7 +2947,7 @@ i4 main(v.) {
         r = build(os.path.join(ns, "src"))
         assert r.returncode != 0 and "too many namespaces" in r.stderr, r.stderr
 
-    assert_ok("57. pkg limits", "namespace 1-8 chars, IDs 0-99, max 16 namespaces / 64 packages", test_package_limits)
+    assert_ok("57. pkg limits", "namespace 1-8 chars, IDs 0-63, max 16 namespaces / 64 packages", test_package_limits)
 
     # Layer 58: directory-level package namespaces
     def test_directory_namespace():
@@ -2957,7 +2957,7 @@ i4 main(v.) {
         with open(os.path.join(work, "src", "!math!", "core.sigil"), "w", encoding="utf-8") as f:
             f.write("i4 get(v.) { r; 5; }\n!1! P;\n!1! m, get;\n")
         with open(os.path.join(work, "src", "!main!", "main.sigil"), "w", encoding="utf-8") as f:
-            f.write("i4 main(v.) { r; !math!1!(); }\n")
+            f.write("i4 main(v.) { r; !math[1]!(); }\n")
         exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
         r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
                             "--build", work, "-o", exe], capture_output=True, text=True)
@@ -2969,7 +2969,7 @@ i4 main(v.) {
         q = subprocess.run([exe], capture_output=True, text=True)
         assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
 
-    assert_ok("58. dir namespace", "!math!/ directory scopes the whole tree; !math!1! crosses directories", test_directory_namespace)
+    assert_ok("58. dir namespace", "!math!/ directory scopes the whole tree; !math[1]! crosses directories", test_directory_namespace)
 
     # === end of tests: new layers go above this line ===
 

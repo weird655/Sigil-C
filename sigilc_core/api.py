@@ -639,7 +639,7 @@ def _project_namespace(rel: str) -> str:
 _PROJECT_NS_RE = re.compile(r"^[a-z][a-z0-9_]{0,7}$")
 _PROJECT_MAX_NAMESPACES = 16
 _PROJECT_MAX_PACKAGES = 64
-_PROJECT_MAX_PACKAGE_ID = 99
+_PROJECT_MAX_PACKAGE_ID = 63
 _PROJECT_MAX_EXPORTS = 32
 
 
@@ -655,7 +655,7 @@ def _project_package_ids(src: str) -> List[str]:
     return out
 
 _PROJECT_PKG_BIND_RE = re.compile(r"^\s*!(\d+)!\s+m,\s*([A-Za-z_]\w*)\s*;", re.M)
-_PROJECT_EXT_REF_RE = re.compile(r"!([A-Za-z_]\w*)!(\d+)!")
+_PROJECT_EXT_REF_RE = re.compile(r"!([A-Za-z_]\w*)\[(\d+)\]!")
 
 
 def _project_package_bindings(src: str) -> Dict[str, str]:
@@ -672,7 +672,7 @@ def _rewrite_external_packages(src: str, exports: Dict[str, str], filename: str)
         key = f"{m.group(1)}.{m.group(2)}"
         if key not in exports:
             raise SemanticError(
-                f"{filename}: package '!{m.group(1)}!{m.group(2)}!' is not exported "
+                f"{filename}: package '!{m.group(1)}[{m.group(2)}]!' is not exported "
                 f"by a file-level `!{m.group(2)}! m, target;`")
         return exports[key]
     return _PROJECT_EXT_REF_RE.sub(repl, src)
