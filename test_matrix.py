@@ -2892,7 +2892,7 @@ i4 main(v.) {
         with open(mp, encoding="utf-8") as f:
             index = f.read()
         assert "math.1 ->" in index and "!math!.sigil" in index, index
-        assert "math.1 target -> get" in index, index
+        assert "math.1 target -> math_get" in index, index
         q = subprocess.run([exe], capture_output=True, text=True)
         assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
 
@@ -2976,14 +2976,20 @@ i4 main(v.) {
         work = tempfile.mkdtemp(prefix="review-")
         os.makedirs(os.path.join(work, "src", "!math!"))
         os.makedirs(os.path.join(work, "src", "!util!"))
+        os.makedirs(os.path.join(work, "src", "!main!"))
         with open(os.path.join(work, "src", "!math!", "a.sigil"), "w", encoding="utf-8") as f:
-            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n")
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n!1! P;\n!1! m, add;\n")
         with open(os.path.join(work, "src", "!util!", "b.sigil"), "w", encoding="utf-8") as f:
-            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n")
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n!1! P;\n!1! m, add;\n")
+        with open(os.path.join(work, "src", "!main!", "m.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; !math[1]!(2, 3) + !util[1]!(4, 5); }\n")
+        exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
         r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
-                            "--build", os.path.join(work, "src"), "-o", os.path.join(work, "app")],
+                            "--build", os.path.join(work, "src"), "-o", exe],
                            capture_output=True, text=True)
-        assert r.returncode != 0 and "duplicate C symbol 'add'" in r.stderr, r.stderr
+        assert r.returncode == 0, r.stderr
+        q = subprocess.run([exe], capture_output=True, text=True)
+        assert q.returncode == 14, (q.returncode, q.stdout, q.stderr)
 
         try:
             check_source("!64! P;", "x.sigil")

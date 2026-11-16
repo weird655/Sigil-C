@@ -17,7 +17,7 @@ from .parser import Parser
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
                    line_directives: bool = True, strict: bool = False,
-                   trap_trace: bool = False, shadow_stack: bool = False) -> str:
+                   trap_trace: bool = False, shadow_stack: bool = False, namespace: str = "") -> str:
     if trap_trace and shadow_stack:
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
@@ -25,7 +25,8 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
     ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives,
-                         trap_trace=trap_trace, shadow_stack=shadow_stack).generate(ast)
+                         trap_trace=trap_trace, shadow_stack=shadow_stack,
+                         namespace=namespace).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None,
                  strict: bool = False) -> None:
@@ -35,7 +36,7 @@ def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict
     Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
 
 def netlist_source(src: str, filename: str = "input.sigil",
-                   defines: Optional[Dict[str, str]] = None, strict: bool = False) -> str:
+                   defines: Optional[Dict[str, str]] = None, strict: bool = False, namespace: str = "") -> str:
     """解析并返回飞线网表，不生成 C。"""
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
@@ -49,13 +50,14 @@ def _header_guard(header_name: str) -> str:
 
 def compile_header(src: str, filename: str = "input.sigil", header_name: str = "output.h",
                    prelude: Optional[str] = None, bounds_check: bool = False,
-                   defines: Optional[Dict[str, str]] = None, strict: bool = False) -> str:
+                   defines: Optional[Dict[str, str]] = None, strict: bool = False, namespace: str = "") -> str:
     """生成公共接口头文件：类型定义 + 非 static 函数原型 + 非 static 全局 extern。"""
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
     return CodeGenerator(filename, header_mode=True, prelude_include=prelude,
-                         bounds_check=bounds_check, cli_defines=defines).generate_header(ast, _header_guard(header_name))
+                         bounds_check=bounds_check, cli_defines=defines,
+                         namespace=namespace).generate_header(ast, _header_guard(header_name))
 
 def _print_error(exc: Exception, fname: str, src: str) -> None:
     """打印错误，并在能定位时给出源码片段与插入符。"""
@@ -595,7 +597,7 @@ _PROJECT_PROTO_RE = re.compile(
 )
 
 
-def _project_prototypes(src: str) -> List[str]:
+def _project_prototypes(src: str, ns: str = "", mangle: bool = True) -> List[str]:
     """Extract top-level function signatures from one .sigil source.
 
     Cross-file MVP: functions only, one-line signatures. Static (s@) and main
@@ -608,7 +610,8 @@ def _project_prototypes(src: str) -> List[str]:
         if name == "main" or "s@" in ret or name in seen:
             continue
         seen.add(name)
-        out.append(f"{ret} {name}({params});")
+        out_name = f"{ns}_{name}" if mangle and ns and name != "main" else name
+        out.append(f"{ret} {out_name}({params});")
     return out
 
 
@@ -711,6 +714,18 @@ def _rewrite_external_packages(src: str, exports: Dict[str, str],
     return _PROJECT_EXT_REF_RE.sub(repl, src)
 
 
+def _rename_function_calls(src: str, mapping: Dict[str, str]) -> str:
+    """Rename function definitions/calls to namespace-mangled C symbols."""
+    if not mapping:
+        return src
+    names = "|".join(re.escape(n) for n in sorted(mapping, key=len, reverse=True))
+    pattern = re.compile(r"\b(" + names + r")\s*\(")
+    src = pattern.sub(lambda m: f"{mapping[m.group(1)]}(", src)
+    # package bindings: !1! m, add; -> !1! m, math_add;
+    bind = re.compile(r"(!\d+!\s*m,\s*)([A-Za-z_]\w*)(\s*;)")
+    return bind.sub(lambda m: m.group(1) + mapping.get(m.group(2), m.group(2)) + m.group(3), src)
+
+
 def _build_project(args, defines: Dict[str, str]) -> int:
     """把目录下所有 .sigil 转译到 .sigil-build/，再用 gcc 链接成一个可执行文件。"""
     root = args.build
@@ -723,11 +738,13 @@ def _build_project(args, defines: Dict[str, str]) -> int:
     c_paths: List[str] = []
     sources_text: Dict[str, str] = {}
     prototypes: Dict[str, List[str]] = {}
+    raw_prototypes: Dict[str, List[str]] = {}
     for src_path in sources:
         rel = os.path.relpath(src_path, root)
         with open(src_path, "r", encoding="utf-8") as f:
             sources_text[rel] = f.read()
-        prototypes[rel] = _project_prototypes(sources_text[rel])
+        raw_prototypes[rel] = _project_prototypes(sources_text[rel], mangle=False)
+        prototypes[rel] = _project_prototypes(sources_text[rel], _project_namespace(rel))
     package_index: Dict[str, Dict[str, str]] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
@@ -774,6 +791,15 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         print(f"error: too many namespaces ({len(namespaces)} > "
               f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
         return 1
+    renames_by_ns: Dict[str, Dict[str, str]] = {}
+    for rel, raws in raw_prototypes.items():
+        ns = _project_namespace(rel)
+        if not ns:
+            continue
+        for proto in raws:
+            m = re.match(r".*?\b([A-Za-z_]\w*)\s*\(", proto)
+            if m and m.group(1) != "main":
+                renames_by_ns.setdefault(ns, {})[m.group(1)] = f"{ns}_{m.group(1)}"
     function_names = set()
     symbol_owner: Dict[str, str] = {}
     for rel, protos in prototypes.items():
@@ -800,8 +826,9 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         ns = _project_namespace(rel)
         for pid, target in _project_package_bindings(text).items():
             # Only function-target packages are cross-file exports.
-            if target in function_names:
-                exports[f"{ns}.{pid}" if ns else pid] = target
+            mangled = f"{ns}_{target}" if ns else target
+            if mangled in function_names:
+                exports[f"{ns}.{pid}" if ns else pid] = mangled
     export_counts: Dict[str, int] = {}
     for key in exports:
         ns = key.rsplit(".", 1)[0] if "." in key else ""
@@ -833,7 +860,9 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
         src = sources_text[rel]
         try:
-            src = _rewrite_local_packages(src, _project_namespace(rel),
+            ns = _project_namespace(rel)
+            src = _rename_function_calls(src, renames_by_ns.get(ns, {}))
+            src = _rewrite_local_packages(src, ns,
                                           set(_project_package_ids(src)), exports)
             src = _rewrite_external_packages(src, exports, package_index,
                                              bindings_all, namespaces, rel)

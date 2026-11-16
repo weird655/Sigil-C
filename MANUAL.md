@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.9.1**
+**版本：v1.10.0**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -89,7 +89,7 @@ src/
 
 超出预算在 `--build` 扫描阶段直接失败，不进入编译。
 
-> 命名空间不改 C 符号名：`!math!` 和 `!util!` 都写 `add` 仍会撞。`--build` 会在转译期报 `duplicate C symbol 'add'`，建议手动改名（如 `math_add`）。
+> 命名空间会改 C 符号：`!math!` 下的 `add` 生成 `math_add`，`!util!` 下的 `add` 生成 `util_add`。调用点、定义、原型和导出目标一起改；`--emit-header` 也用改名后的符号。
 
 ---
 
@@ -157,7 +157,7 @@ sigilc --build src -o app --run
 
 ```text
 math.1 -> src/!math!/core.sigil
-math.1 target -> add
+math.1 target -> math_add
 ```
 
 完整飞线语法、封锁域、地雷、切片见 [`WIRING.md`](WIRING.md)。

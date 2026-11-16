@@ -53,7 +53,7 @@ class CodeGenerator:
                  prelude_include: Optional[str] = None, bounds_check: bool = False,
                  cli_defines: Optional[Dict[str, str]] = None,
                  line_directives: bool = True, trap_trace: bool = False,
-                 shadow_stack: bool = False):
+                 shadow_stack: bool = False, namespace: str = ""):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.line_directives = line_directives
         self.header_mode = header_mode
@@ -61,6 +61,7 @@ class CodeGenerator:
         self.bounds_check = bounds_check
         self.trap_trace = trap_trace
         self.shadow_stack = shadow_stack
+        self.namespace = namespace
         self.cli_defines = cli_defines or {}
         self.lines: List[str] = []
 
