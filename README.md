@@ -1,12 +1,12 @@
-# Sigil-C（印记-C）
+# Sigil-C（印记-C） / Sunberry-C
 
-一个小实验项目：把 `.sigil` 转译成 ISO C99。45 个双字符记号 + C99 运算符，外加一些编译期检查。
+一个小实验项目：把 `.sigil` 转译成 ISO C99。又称 **Sunberry-C**（太阳莓-C）。45 个双字符记号 + C99 运算符，外加一些编译期检查。
 
 > 概括：把数据流写在字面上的 C。
 > 太阳莓果设计。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-201%20%2F%2042%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-212%20%2F%2053%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -562,7 +562,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 版本 **1.2**，tag `v1.2.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 又称 **Sunberry-C**；版本 **1.2.1**，tag `v1.2.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.1) 已发布；Core v1 语法冻结（v1.x 只加不改）。
 - 212 项测试 / 53 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**不在 Core v1 兼容承诺内**，见 `COMPATIBILITY.md`。

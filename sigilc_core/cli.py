@@ -20,7 +20,7 @@ from .api import (
 from .lexer import LexerError
 from .nodes import ParseError, SemanticError
 from .preamble import C99_PRELUDE
-from .version import __version__
+from .version import __alias__, __version__
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -72,7 +72,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--no-line", action="store_true",
                     help="omit #line directives so the generated C reads like ordinary C")
 
-    ap.add_argument("--version", action="version", version=f"Sigil-C {__version__}")
+    ap.add_argument("--version", action="version", version=f"Sigil-C {__version__} ({__alias__})")
     args = ap.parse_args(argv)
 
     defines = _parse_defines(args.define)

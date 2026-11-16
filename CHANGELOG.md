@@ -4,6 +4,15 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.2.1] - 2026-11-16
+
+* 新增又称 **Sunberry-C**（太阳莓-C），用于避开 `Sigil` 重名；仓库名/包名/主命令暂不改。
+* CLI 版本串变为 `Sigil-C 1.2.1 (Sunberry-C)`。
+* `pyproject.toml` 新增 `sunberry-c` 入口，与 `sigilc` / `sigil` 等价。
+* README、SYNTAX、INSTALL、MEMORIAL 同步标注；无语言/生成物变更，Core v1 与 Layer 2 边界不变。
+
+---
+
 ## [1.2.0] - 2026-11-16
 
 ### Core v1 冻结

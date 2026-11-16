@@ -14,7 +14,7 @@ sigilc --build src -o app --run
 python3 -m pip install -e .
 ```
 
-`pyproject.toml` 注册了两个等价入口：`sigilc` 与 `sigil`。
+`pyproject.toml` 注册了三个等价入口：`sigilc`、`sigil` 与 `sunberry-c`。
 
 ## 2. 单文件 zipapp（需要 Python）
 
