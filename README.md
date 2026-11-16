@@ -5,25 +5,29 @@
 > 概括：把数据流写在字面上的 C。
 > 太阳莓果设计。
 
-## 它是什么 / 不是什么
+[![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-212%20%2F%2053%20layers-brightgreen)](test_matrix.py)
+[![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
+[![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
-**是：**
+**Core 不是实验品。** 实验性只属于 Layer 2 `!`；Core v1 是可落地的 C99 方言。
 
-- 一个严格的 C99 方言，生成物是普通 C99 + `#line`
-- 一个“读写顺序更线性”的写法：状态修改必须落成 `m,` 语句，不藏在表达式里
-- 一个可以交付的转译器：生成的 C 可以脱离它独立编译、修改、退出
-- 一个带有限静态检查的小工具：来源、边界、契约、C 关键字提示
+## 有什么 / 没有什么
 
-**不是：**
+| 有什么 | 没有什么（为什么） |
+|---|---|
+| **C99 表面层**：45 个双字符印记 + C 运算符，生成纯 C99 | 新运行时 —— 有运行时就不是表面层，生成物必须能独立用 gcc 编 |
+| **显式状态修改**：`m,` 是语句，不藏在表达式里 | “所有代码更好读” —— 复杂逻辑仍然复杂，只保证读写顺序线性 |
+| **转译期检查**：常量越界、悬空、跨函数逃逸、`r@` 违约 | 借用检查 / 生命周期安全 —— 没有所有权系统，堆和悬垂仍要自己扛 |
+| **可退出的产物**：`#line` 映射、`--no-line` 交付、`.h` 输出 | 自己的标准库 —— 直接用 C 的 libc，不另造生态 |
+| **完整工具链**：build / fmt / check / init / LSP / netlist | 跨文件分析 —— 只看单个翻译单元，跨文件要链接期信息 |
+| **Layer 2 `!`**：重布线/飞线层，允许使用，实验性 | 跨版本稳定承诺 —— 任意 minor 可改/删；不纳入 Core v1 冻结 |
+| **固定宽度类型**：`i4/u4/f4/f8`，不靠 `int` 猜 | 包管理器 / 构建系统 —— 交给 C 侧，不另造一套 |
+| **可交付的 C**：随时丢掉转译器，只留生成代码 | 安全认证 / 生产支持 —— 这是小工具，不是认证工具链 |
 
-- 不是新后端、不是运行时、不是 GC
-- 不是借用检查器，不保证生命周期安全
-- 不是“所有代码都更好读”——复杂逻辑仍然复杂
-- 不是包管理器/标准库/生态
-- 不是“安全 C”；边界检查有限，悬垂仍然可能
-- 不是 Layer 2 的稳定性承诺；`!` 仍是实验层
+一句话：**不是更快的 C，是“读写顺序能从左到右核对”的 C。**
 
-### 为什么是“线性”，不是“更好读”
+## 为什么是线性，不是更好读
 
 C 允许把状态修改塞进表达式：
 
@@ -45,32 +49,41 @@ i m+ 1;
 - 指针用 `p*` / `p@` 显式写出
 - 类型固定宽度，不靠 `int` 猜
 
-这不等于“更好读”；它只保证**读写顺序更线性、状态变化更显式**。复杂逻辑还是复杂，只是不再藏在表达式求值顺序里。
+**这不等于“更好读”。** 它只保证读写顺序更线性、状态变化更显式；复杂逻辑还是复杂，只是不再藏在表达式求值顺序里。
 
-**落地范围**：小型 C 工程、教学/实验、生成 C 交付、裸机/嵌入式（无 GC/运行时）。
-**不适用**：需要借用检查、安全认证、大生态、复杂跨平台构建的项目。
+## 怎么开始
 
-[![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-212%20%2F%2053%20layers-brightgreen)](test_matrix.py)
-[![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
-[![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
+```bash
+# 直接跑源码，零安装
+python3 sigilc.py --version
+python3 sigilc.py examples/tutorial/01_hello.sigil -o hello.c
+cc -std=c99 hello.c -o hello && ./hello
 
----
+# 装成命令
+python3 -m pip install .
+sigilc --build examples/tutorial -o app --run
 
-## 有什么，没有什么
+# 单文件 zipapp（需要 Python）
+python3 tools/build_standalone.py --zipapp
+python3 dist/sigilc.pyz --version
+```
 
-| 有什么 | 没有什么（为什么） |
+## 官方口径（一页纸，不写官话）
+
+| 项 | 口径 |
 |---|---|
-| **C99 表面层**：45 个双字符印记 + C 运算符，转译成纯 C99 | 新运行时 —— 有运行时就不再是"表面层"，生成物必须能独立用 gcc 编 |
-| **可检查的写法**：`m` 写操作、指针带来源 | 更安全的 C 本身 —— 堆、空指针、未初始化要做数据流分析，单遍转译做不到 |
-| **转译期检查**：常量越界、悬空、跨函数逃逸、`r@` 违约 | 跨文件分析 —— 只看单个翻译单元，跨文件要链接期信息 |
-| **可退出的产物**：`#line` 映射、`--no-line` 交付、`.h` 输出 | 自己的标准库 —— 直接用 C 的 libc，省掉一整套生态维护 |
-| **Layer 2 实验（重布线层）**：`!n!` / `!/n/!` / `!>n<!` 全局与局部别名，`!n!!` 地雷包，`![mask]!` 封锁域，`!/[[id]]/!` 长集合，`bit` / `bits` / `byte` 切片 | 危险工具，请勿使用 |
-| **完整工具链**：build / fmt / check / init / LSP | 包管理与构建系统 —— 交给 C 侧，不另造一套 |
+| 版本 | 1.2.3 |
+| Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
+| Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
+| 支持范围 | 缺陷修复、文档、C99 完备性；不加新语言记号 |
+| 不做 | GC、借用检查、包管理、运行时、安全认证、跨文件分析 |
+| 退出路径 | 生成的 C99 + `#line` 可独立编译、交付、修改 |
+| 性能目标 | 生成的 C 不拖后腿；不是“比 C 快”，先量再改，见 [`BENCHMARKS.md`](BENCHMARKS.md) |
 
-一句话：**不是更快的 C，是"读一遍就能验证"的 C。**
+## 落地范围
 
----
+- **适合**：小型 C 工程、教学/实验、生成 C 交付、裸机/嵌入式（无 GC/运行时）
+- **不适用**：需要借用检查、安全认证、大生态、复杂跨平台构建的项目
 
 ## 设计原则
 
