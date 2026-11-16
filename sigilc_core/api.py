@@ -588,6 +588,30 @@ def _collect_sources(root: str) -> List[str]:
     return found
 
 
+_PROJECT_PROTO_RE = re.compile(
+    r"^\s*((?:(?:p\*|p@|c@|v@)\s*)*[A-Za-z_][\w.]*)"
+    r"\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*\{",
+    re.M,
+)
+
+
+def _project_prototypes(src: str) -> List[str]:
+    """Extract top-level function signatures from one .sigil source.
+
+    Cross-file MVP: functions only, one-line signatures. Static (s@) and main
+    are not exported.
+    """
+    out: List[str] = []
+    seen = set()
+    for m in _PROJECT_PROTO_RE.finditer(src):
+        ret, name, params = m.group(1).strip(), m.group(2), m.group(3).strip()
+        if name == "main" or "s@" in ret or name in seen:
+            continue
+        seen.add(name)
+        out.append(f"{ret} {name}({params});")
+    return out
+
+
 def _build_project(args, defines: Dict[str, str]) -> int:
     """把目录下所有 .sigil 转译到 .sigil-build/，再用 gcc 链接成一个可执行文件。"""
     root = args.build
@@ -598,14 +622,27 @@ def _build_project(args, defines: Dict[str, str]) -> int:
 
     out_dir = os.path.join(root, ".sigil-build")
     c_paths: List[str] = []
+    sources_text: Dict[str, str] = {}
+    prototypes: Dict[str, List[str]] = {}
+    for src_path in sources:
+        rel = os.path.relpath(src_path, root)
+        with open(src_path, "r", encoding="utf-8") as f:
+            sources_text[rel] = f.read()
+        prototypes[rel] = _project_prototypes(sources_text[rel])
     for src_path in sources:
         rel = os.path.relpath(src_path, root)
         c_path = os.path.join(out_dir, os.path.splitext(rel)[0] + ".c")
         os.makedirs(os.path.dirname(c_path) or out_dir, exist_ok=True)
-        with open(src_path, "r", encoding="utf-8") as f:
-            src = f.read()
+        others: List[str] = []
+        for other, protos in prototypes.items():
+            if other != rel:
+                others.extend(protos)
+        prefix = ""
+        if others:
+            prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
+        src = sources_text[rel]
         try:
-            c_src = compile_source(src, rel, prelude=args.prelude,
+            c_src = compile_source(prefix + src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict)
         except (LexerError, ParseError, SemanticError) as e:

@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.3 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.4 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2851,6 +2851,23 @@ i4 main(v.) {
 
     assert_ok("54. stdlib", "strtod/strncat/atan2/round/time/errno via libc coverage", test_stdlib)
 
+    # Layer 55: cross-file function prototypes
+    def test_multifile():
+        work = tempfile.mkdtemp(prefix="multi-")
+        os.makedirs(os.path.join(work, "src"))
+        with open(os.path.join(work, "src", "math.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n")
+        with open(os.path.join(work, "src", "main.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; add(2, 3); }\n")
+        exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work, "-o", exe], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        q = subprocess.run([exe], capture_output=True, text=True)
+        assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
+
+    assert_ok("55. multifile", "cross-file call resolves via generated project prototypes", test_multifile)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2858,7 +2875,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 54-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 55-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
