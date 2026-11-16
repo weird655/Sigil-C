@@ -63,6 +63,14 @@ def render_netlist(parser) -> str:
     if len(lines) == 2:
         lines.append("(none)")
 
+    lines += ["", "[qualified]"]
+    qualified = sorted(set(p.packages) | set(p.slot_types) | set(p.fields), key=int)
+    if qualified and ns:
+        for pid in qualified:
+            lines.append(f"{ns}.{pid} -> !{pid}!")
+    else:
+        lines.append("(none)")
+
     lines += ["", "[fields]"]
     if p.fields:
         for pid, (base_type, offset, width, byte_index, base_name) in p.fields.items():

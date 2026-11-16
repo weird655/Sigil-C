@@ -3019,7 +3019,7 @@ i4 main(v.) {
         assert "sizeof(int32_t)" in sized, sized
 
         nl = netlist_source("!1! P;", "!math!/a.sigil")
-        assert "# namespace: math" in nl, nl
+        assert "# namespace: math" in nl and "math.1 -> !1!" in nl, nl
 
         xw = tempfile.mkdtemp(prefix="xwidth-")
         with open(os.path.join(xw, "sys_fake.h"), "w", encoding="utf-8") as f:

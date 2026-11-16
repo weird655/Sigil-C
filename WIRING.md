@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.10.1，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.10.2，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -233,7 +233,7 @@ sigilc --trap-trace file.sigil ...   # 原生调用栈
 sigilc --shadow-stack file.sigil ... # Sigil 活跃帧
 ```
 
-- `--netlist` 打印 `# namespace:` 与 packages/fields/links/groups/gates/landmines/confinement
+- `--netlist` 打印 `# namespace:`、`[qualified]` 与 packages/fields/links/groups/gates/landmines/confinement
 - **单文件**，不跨文件
 - `--trap-trace` 与 `--shadow-stack` 互斥、默认关；调试用，不进 release
 - `--shadow-stack` 不是生命周期检查
