@@ -674,22 +674,25 @@ def _rewrite_external_packages(src: str, exports: Dict[str, str],
     def repl(m):
         ns, pid = m.group(1), m.group(2)
         key = f"{ns}.{pid}"
+        line = src.count("\n", 0, m.start()) + 1
+        col = m.start() - src.rfind("\n", 0, m.start())
+        where = f"{filename}:{line}:{col}"
         if ns not in namespaces:
             raise SemanticError(
-                f"{filename}: namespace '!{ns}!' is not declared; "
+                f"{where}: namespace '!{ns}!' is not declared; "
                 f"use an !{ns}!/ directory or !{ns}!.sigil prefix")
         if pid not in package_ids.get(ns, {}):
             declared = ", ".join(sorted(package_ids.get(ns, {}), key=int)) or "(none)"
             raise SemanticError(
-                f"{filename}: package '!{ns}[{pid}]!' is not declared in namespace "
+                f"{where}: package '!{ns}[{pid}]!' is not declared in namespace "
                 f"'{ns}' (declared: {declared})")
         if key not in exports:
             if key in bindings:
                 raise SemanticError(
-                    f"{filename}: package '!{ns}[{pid}]!' targets variable "
+                    f"{where}: package '!{ns}[{pid}]!' targets variable "
                     f"'{bindings[key]}'; only file-level function packages are exported")
             raise SemanticError(
-                f"{filename}: package '!{ns}[{pid}]!' is declared but has no file-level "
+                f"{where}: package '!{ns}[{pid}]!' is declared but has no file-level "
                 f"binding; use '!{pid}! m, function;'")
         return exports[key]
     return _PROJECT_EXT_REF_RE.sub(repl, src)

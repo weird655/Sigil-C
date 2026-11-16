@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.8.1**
+**版本：v1.8.2**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -88,6 +88,8 @@ src/
 > 可以类比为 16 个配电箱、每箱 64 个空开、32 个开关；正文按命名空间/包/导出描述。
 
 超出预算在 `--build` 扫描阶段直接失败，不进入编译。
+
+> 命名空间不改 C 符号名：`!math!` 和 `!util!` 都写 `add` 仍会撞。`--build` 会在转译期报 `duplicate C symbol 'add'`，建议手动改名（如 `math_add`）。
 
 ---
 
@@ -288,6 +290,7 @@ sigilc --fmt src --fmt-check
 | `targets variable 'x'` | 变量包不导出 | 跨文件只导出函数包 |
 | `duplicate C symbol 'add'` | 两个文件同名 C 函数 | 改名，如 `math_add` |
 | `x! field width drift` | `x!` 登记宽度与真实头不符 | 改登记类型 |
+| `Undeclared identifier 'sizeof'` | 用了 C 的 sizeof | 写 `z? 类型` |
 | `Undeclared identifier` | 外部飞线没用 `--build` | 用项目构建 |
 | `data definition has no type` | 变量包跨文件 | 不要导出变量 |
 

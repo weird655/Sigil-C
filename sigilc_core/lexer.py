@@ -65,6 +65,7 @@ C_KEYWORD_HINTS = {
     'double': "write f8 for a 64-bit float",
     'long': "has no fixed width; use a fixed-width type",
     'short': "has no fixed width; use a fixed-width type",
+    'sizeof': "write 'z? type' for sizeof",
 }
 
 def c_keyword_hint(name: str) -> str:

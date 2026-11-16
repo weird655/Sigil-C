@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.8.1，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.8.2，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -123,6 +123,7 @@ math.1 target -> add
 - `main` / `s@` 不导出
 - 同名函数只保留第一个原型；不支持重载
 - 不支持跨文件变量/类型/链接/封锁/netlist
+- 命名空间不改 C 符号名；同名函数由 `--build` 的符号表报错并建议改名
 - `!math[n]!` 不能单文件直接编译
 
 ---
