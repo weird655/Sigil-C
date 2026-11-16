@@ -1060,21 +1060,8 @@ cc -std=c99 -O0 -g -fsanitize=address -fno-omit-frame-pointer real.c -o real
 - 必须 `--no-bounds-check`，否则边界检查先 abort
 - 真栈布局依编译器/ABI/优化；ASan 只报现场，不保证“侵入成功”
 - Windows MinGW 通常没有 libasan，用 WSL/Linux/macOS
-### CMD 终结者版
 
-```bat
-cd examples\stack_overload
-terminator.cmd
-```
-
-黑底红字、提示 `TARGET FILE>`、回车后滚假汇编和 canary 入侵报告。读目标文件但
-不修改；纯模拟栈，没有堆。
-
-- 没有堆分配
-
----
-
-# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
+# Part 4 · 系统
 
 ## 4.1 输入输出
 

@@ -409,7 +409,7 @@ python3 sigilc.py <input.sigil> [-o out.c] [选项]
 | 回调表 | [`callbacks.sigil`](examples/callbacks.sigil) | 全局函数指针表 | `quit after 2 ticks` |
 | 帧解析 | [`wire.sigil`](examples/wire.sigil) | 大端帧解析 | `frames=2 bytes=9` |
 | 内存池 | [`pool.sigil`](examples/pool.sigil) | 三级指针、读写视图分流 | `checksum=1012` |
-| 栈过载 | [`stack_overload/`](examples/stack_overload/) | 静态 arena + canary；真栈 ASan；CMD 终结者可视化 | `invaded words: 6` |
+| 栈过载 | [`stack_overload/`](examples/stack_overload/) | 静态 arena 帧 + canary；真栈 UB + ASan | `invaded words: 6` |
 
 内存池的布局图、指针链和权限表在 [`TUTORIAL.md`](TUTORIAL.md) §3.6。
 

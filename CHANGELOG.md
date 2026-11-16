@@ -37,7 +37,7 @@ v1.1 标签之后、未发新版本号的改动。不新增语言记号，只做
 
 * **位/字节切片实现**：`bit(expr, k)`、`bits(expr, k, w)`、`byte(expr, i)` 支持绑定、读写、复合赋值；`--netlist` 增加 `[fields]`。`bit`/`bits` 整数，`byte` 整数/浮点。第 52 层。
 
-* **栈过载演示**：`examples/stack_overload/` 提供静态 arena + canary 的可重复模拟版，以及 `--no-bounds-check` + ASan 的真栈 UB 版；`terminator.cmd` 提供 CMD 黑底红字的交互式可视化；第 53 层跑模拟版、Terminator 版，真栈版只做源码/编译检查。
+* **栈过载演示**：`examples/stack_overload/` 提供静态 arena + canary 的可重复模拟版，以及 `--no-bounds-check` + ASan 的真栈 UB 版；第 53 层跑模拟版，真栈版只做源码/编译检查。
 
 **交付与工具**
 
