@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.10.0**
+**版本：v1.10.1**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -89,7 +89,8 @@ src/
 
 超出预算在 `--build` 扫描阶段直接失败，不进入编译。
 
-> 命名空间会改 C 符号：`!math!` 下的 `add` 生成 `math_add`，`!util!` 下的 `add` 生成 `util_add`。调用点、定义、原型和导出目标一起改；`--emit-header` 也用改名后的符号。
+> 命名空间会改 C 符号：`!math!` 下的 `add` 生成 `math_add`，`!util!` 下的 `add` 生成 `util_add`。调用点、定义、原型、包绑定和函数指针一起改；`--emit-header` 也用改名后的符号。
+> 改名按 token 做：字符串/注释/成员名不动；局部变量与函数同名时仍可能被一起改。
 
 ---
 

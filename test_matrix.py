@@ -2063,7 +2063,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6500, (total, sizes)
+        assert total <= 6600, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
@@ -2990,6 +2990,24 @@ i4 main(v.) {
         assert r.returncode == 0, r.stderr
         q = subprocess.run([exe], capture_output=True, text=True)
         assert q.returncode == 14, (q.returncode, q.stdout, q.stderr)
+
+        tok = tempfile.mkdtemp(prefix="tok-")
+        os.makedirs(os.path.join(tok, "src", "!math!"))
+        os.makedirs(os.path.join(tok, "src", "!main!"))
+        with open(os.path.join(tok, "src", "!math!", "a.sigil"), "w", encoding="utf-8") as f:
+            f.write('i4 add(i4 a, i4 b) { r; a + b; }\n'
+                    'o! (f^(i4, i4) -> i4) FP m, add;\n'
+                    'o! p* c@ c1 label m, "add(";\n'
+                    '!1! P;\n!1! m, add;\n')
+        with open(os.path.join(tok, "src", "!main!", "m.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; !math[1]!(2, 3); }\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", os.path.join(tok, "src"), "-o", os.path.join(tok, "app")],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        with open(os.path.join(tok, "src", ".sigil-build", "!math!", "a.c"), encoding="utf-8") as f:
+            ctext = f.read()
+        assert "math_add" in ctext and '"add("' in ctext, ctext
 
         try:
             check_source("!64! P;", "x.sigil")

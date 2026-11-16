@@ -715,15 +715,36 @@ def _rewrite_external_packages(src: str, exports: Dict[str, str],
 
 
 def _rename_function_calls(src: str, mapping: Dict[str, str]) -> str:
-    """Rename function definitions/calls to namespace-mangled C symbols."""
+    """Rename function identifiers by token, not raw text.
+
+    This covers definitions, calls, prototypes, package bindings and bare
+    function pointers (`p@ add`), while leaving strings/comments alone and
+    skipping member names after `.` / `->`.
+    """
     if not mapping:
         return src
-    names = "|".join(re.escape(n) for n in sorted(mapping, key=len, reverse=True))
-    pattern = re.compile(r"\b(" + names + r")\s*\(")
-    src = pattern.sub(lambda m: f"{mapping[m.group(1)]}(", src)
-    # package bindings: !1! m, add; -> !1! m, math_add;
-    bind = re.compile(r"(!\d+!\s*m,\s*)([A-Za-z_]\w*)(\s*;)")
-    return bind.sub(lambda m: m.group(1) + mapping.get(m.group(2), m.group(2)) + m.group(3), src)
+    tokens = Lexer(src, "rename.sigil").tokenize()
+    lines = src.splitlines(keepends=True)
+    line_starts = [0]
+    for line in lines:
+        line_starts.append(line_starts[-1] + len(line))
+    edits = []
+    for idx, tok in enumerate(tokens):
+        if tok.kind != "IDENT" or tok.value not in mapping:
+            continue
+        prev = tokens[idx - 1].kind if idx else ""
+        if prev in ("DOT", "ARROW"):
+            continue
+        start_off = line_starts[min(tok.line - 1, len(line_starts) - 1)] + tok.col - 1
+        if src[start_off:start_off + len(tok.value)] != tok.value:
+            found = src.find(tok.value, line_starts[tok.line - 1] if tok.line <= len(lines) else 0)
+            if found < 0:
+                continue
+            start_off = found
+        edits.append((start_off, start_off + len(tok.value), mapping[tok.value]))
+    for start_off, end_off, new_name in sorted(edits, reverse=True):
+        src = src[:start_off] + new_name + src[end_off:]
+    return src
 
 
 def _build_project(args, defines: Dict[str, str]) -> int:
