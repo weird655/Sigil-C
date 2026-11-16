@@ -615,8 +615,22 @@ def _project_prototypes(src: str) -> List[str]:
 _PROJECT_PKG_DECL_RE = re.compile(r"^\s*!(\d+)!!?", re.M)
 
 
+def _project_dir_namespaces(rel: str) -> List[str]:
+    """Directory-level namespaces: `!math!/core.sigil` -> ['math']."""
+    parts = rel.replace("\\", "/").split("/")[:-1]
+    out: List[str] = []
+    for part in parts:
+        m = re.fullmatch(r"!([^!]+)!", part)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
 def _project_namespace(rel: str) -> str:
-    """File-level package namespace: `!math!.sigil` -> `math`."""
+    """Primary namespace: nearest `!name!` directory, else file prefix fallback."""
+    dirs = _project_dir_namespaces(rel)
+    if dirs:
+        return dirs[0]
     base = os.path.basename(rel)
     m = re.match(r"!([A-Za-z_]\w*)!", base)
     return m.group(1) if m else ""
@@ -693,8 +707,13 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                 return 1
             bucket[pid] = rel
     namespaces = set()
-    total_packages = 0
+    namespace_packages: Dict[str, int] = {}
     for rel, text in sources_text.items():
+        dirs = _project_dir_namespaces(rel)
+        if len(dirs) > 1:
+            print(f"error: nested package namespaces in {rel} "
+                  f"({', '.join(dirs)}); use one directory level", file=sys.stderr)
+            return 1
         ns = _project_namespace(rel)
         if ns:
             if not _PROJECT_NS_RE.fullmatch(ns):
@@ -703,7 +722,12 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                 return 1
             namespaces.add(ns)
         ids = _project_package_ids(text)
-        total_packages += len(ids)
+        ns_key = ns or ""
+        namespace_packages[ns_key] = namespace_packages.get(ns_key, 0) + len(ids)
+        if namespace_packages[ns_key] > _PROJECT_MAX_PACKAGES:
+            print(f"error: too many packages in namespace '{ns or '<global>'}' "
+                  f"({namespace_packages[ns_key]} > {_PROJECT_MAX_PACKAGES})", file=sys.stderr)
+            return 1
         for pid in ids:
             if not pid.isdigit() or int(pid) > _PROJECT_MAX_PACKAGE_ID:
                 print(f"error: package !{pid}! in {rel} exceeds the budget "
@@ -717,19 +741,19 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         print(f"error: too many namespaces ({len(namespaces)} > "
               f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
         return 1
-    if total_packages > _PROJECT_MAX_PACKAGES:
-        print(f"error: too many packages ({total_packages} > "
-              f"{_PROJECT_MAX_PACKAGES})", file=sys.stderr)
-        return 1
     exports: Dict[str, str] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
         for pid, target in _project_package_bindings(text).items():
             exports[f"{ns}.{pid}" if ns else pid] = target
-    if len(exports) > _PROJECT_MAX_EXPORTS:
-        print(f"error: too many exported packages ({len(exports)} > "
-              f"{_PROJECT_MAX_EXPORTS})", file=sys.stderr)
-        return 1
+    export_counts: Dict[str, int] = {}
+    for key in exports:
+        ns = key.rsplit(".", 1)[0] if "." in key else ""
+        export_counts[ns] = export_counts.get(ns, 0) + 1
+        if export_counts[ns] > _PROJECT_MAX_EXPORTS:
+            print(f"error: too many exported packages in namespace '{ns or '<global>'}' "
+                  f"({export_counts[ns]} > {_PROJECT_MAX_EXPORTS})", file=sys.stderr)
+            return 1
     map_path = os.path.join(out_dir, "packages.txt")
     os.makedirs(out_dir, exist_ok=True)
     with open(map_path, "w", encoding="utf-8", newline="\n") as f:

@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.6 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.7 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2063,7 +2063,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6300, (total, sizes)
+        assert total <= 6400, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
@@ -2949,6 +2949,28 @@ i4 main(v.) {
 
     assert_ok("57. pkg limits", "namespace 1-8 chars, IDs 0-99, max 16 namespaces / 64 packages", test_package_limits)
 
+    # Layer 58: directory-level package namespaces
+    def test_directory_namespace():
+        work = tempfile.mkdtemp(prefix="pkgdir-")
+        os.makedirs(os.path.join(work, "src", "!math!"))
+        os.makedirs(os.path.join(work, "src", "!main!"))
+        with open(os.path.join(work, "src", "!math!", "core.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 get(v.) { r; 5; }\n!1! P;\n!1! m, get;\n")
+        with open(os.path.join(work, "src", "!main!", "main.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; !math!1!(); }\n")
+        exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work, "-o", exe], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        mp = os.path.join(work, ".sigil-build", "packages.txt")
+        with open(mp, encoding="utf-8") as f:
+            index = f.read()
+        assert "math.1 ->" in index and "!math!" in index, index
+        q = subprocess.run([exe], capture_output=True, text=True)
+        assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
+
+    assert_ok("58. dir namespace", "!math!/ directory scopes the whole tree; !math!1! crosses directories", test_directory_namespace)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2956,7 +2978,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 57-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 58-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
