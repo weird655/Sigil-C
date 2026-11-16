@@ -1042,6 +1042,7 @@ class Parser:
             reg_fn('rand', [], t_int)
             reg_fn('srand', [t_u32], t_void)
             reg_fn('getenv', [t_cstr], t_buf)
+            reg_fn('system', [t_cstr], t_int)
         if '<string.h>' in txt:
             reg_fn('memcpy', [t_vptr, t_cvptr, t_size], t_vptr)
             reg_fn('memmove', [t_vptr, t_cvptr, t_size], t_vptr)

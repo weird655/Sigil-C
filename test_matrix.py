@@ -2811,6 +2811,25 @@ i4 main(v.) { r; 0; }
         assert "volatile uint32_t buf[4]" in real_c, real_c
         assert "SIGIL_IDX" in real_c, real_c
 
+        with open(os.path.join(base, "terminator.sigil"), encoding="utf-8") as f:
+            term_src = f.read()
+        term_c = compile_source(term_src, "terminator.sigil")
+        term_path = os.path.join(work, "terminator.c")
+        with open(term_path, "w", encoding="utf-8") as f:
+            f.write(term_c)
+        term_exe = os.path.join(work, "terminator.exe")
+        b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                            term_path, "-o", term_exe], capture_output=True, text=True)
+        assert b.returncode == 0, b.stderr
+        target = os.path.join(work, "target.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("hello")
+        r = subprocess.run([term_exe], input=target + "\n\n", capture_output=True, text=True)
+        assert "[SCAN] target=" in r.stdout, r.stdout
+        assert "bytes=5" in r.stdout, r.stdout
+        assert "frame 1 canary" in r.stdout, r.stdout
+        assert "[WORDS] 6 invaded" in r.stdout, r.stdout
+
     assert_ok("53. stack overload", "static-arena canary replay and the real-stack ASan demo source", test_stack_overload)
 
     # === end of tests: new layers go above this line ===

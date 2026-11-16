@@ -1,0 +1,143 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+/* CMD 可视化：黑底红字，输入目标文件，回车开始"攻击"。
+   攻击的是程序自己的静态 arena 模拟栈，不写目标文件。 */
+
+#define ARENA_WORDS 128
+#define MAX_FRAMES 8
+#define CANARY 0xDEADBEEF
+#define INVADER 0x41414141
+
+o! u4[ARENA_WORDS] arena;
+o! u4[ARENA_WORDS] baseline;
+o! u4[MAX_FRAMES] fbase;
+o! u4[MAX_FRAMES] fsize;
+o! u4[MAX_FRAMES] fcanary;
+o! u4 frame_count m, 0;
+o! u4 top m, 0;
+
+v. frame_push(u4 size) {
+    o! u4 b m, top;
+    fbase[frame_count] m, b;
+    fsize[frame_count] m, size;
+    fcanary[frame_count] m, b + size;
+    arena[b + size] m, CANARY;
+    frame_count m, frame_count + 1;
+    top m, b + size + 1;
+}
+
+v. frame_fill(u4 idx, u4 val) {
+    o! u4 b m, fbase[idx];
+    o! u4 s m, fsize[idx];
+    o! u4 i m, 0;
+    w~ (i < s) {
+        arena[b + i] m, val;
+        i m, i + 1;
+    }
+}
+
+v. snapshot(v.) {
+    o! u4 i m, 0;
+    w~ (i < ARENA_WORDS) {
+        baseline[i] m, arena[i];
+        i m, i + 1;
+    }
+}
+
+v. overflow(u4 idx, u4 words) {
+    o! u4 b m, fbase[idx];
+    o! u4 s m, fsize[idx];
+    o! u4 i m, 0;
+    w~ (i < words) {
+        arena[b + s + i] m, INVADER;
+        i m, i + 1;
+    }
+}
+
+u4 report(v.) {
+    o! u4 i m, 0;
+    o! u4 changed m, 0;
+    w~ (i < frame_count) {
+        o! u4 c m, fcanary[i];
+        i? (arena[c] != CANARY) {
+            printf("  [!] frame %u canary 0x%08x -> 0x%08x\n", i, CANARY, arena[c]);
+        }
+        i m, i + 1;
+    }
+    i m, 0;
+    w~ (i < ARENA_WORDS) {
+        i? (arena[i] != baseline[i]) {
+            changed m, changed + 1;
+        }
+        i m, i + 1;
+    }
+    r; changed;
+}
+
+i4 main(v.) {
+    o! c1[256] target;
+    o! c1[512] data;
+    o! p* FILE f;
+    o! u4 n m, 0;
+    o! u4 i m, 0;
+    o! u4 hits m, 0;
+
+    system("title TERMINATOR // STACK OVERLOAD");
+    system("color 0C");
+    system("cls");
+
+    printf("+------------------------------------------+\n");
+    printf("|   T E R M I N A T O R   //   OVERLOAD    |\n");
+    printf("|   stack intrusion simulator  //  no heap |\n");
+    printf("+------------------------------------------+\n\n");
+    printf("TARGET FILE> ");
+
+    fgets(p@ target[0], 256, stdin);
+    w~ (target[i] != 0) {
+        i? (target[i] == 10) { target[i] m, 0; }
+        i m, i + 1;
+    }
+
+    f m, fopen(p@ target[0], "rb");
+    i? (f != NULL) {
+        n m, (u4)fread(p@ data[0], 1, 512, f);
+        fclose(f);
+    }
+    i? (n == 0) {
+        printf("[WARN] target unreadable; using synthetic payload\n");
+    }
+
+    printf("\n[SCAN] target=%s bytes=%u\n", target, n);
+    printf("[MAP]  arena=128 words, frames=3, canary=0x%08x\n\n", CANARY);
+    printf("disassembly stream:\n");
+
+    i m, 0;
+    w~ (i < 10) {
+        o! u4 b m, 0;
+        i? (i < n) { b m, (u1)data[i]; }
+        printf("  0x004010%02x  mov  byte [ebp-0x%02x], 0x%02x\n", 0x10 + i * 3, 0x20 + i, b);
+        i m, i + 1;
+    }
+
+    printf("\n[LOAD] pushing frames 0..2\n");
+    frame_push(4);
+    frame_fill(0, 0x11111111);
+    frame_push(4);
+    frame_fill(1, 0x22222222);
+    frame_push(4);
+    frame_fill(2, 0x33333333);
+    snapshot();
+
+    printf("[ATTACK] frame 1 + 6 words\n");
+    overflow(1, 6);
+    hits m, report();
+
+    printf("\n[STATUS] INTRUSION COMPLETE\n");
+    printf("[HIT] frame 1 canary, frame 2 payload, frame 2 canary\n");
+    printf("[WORDS] %u invaded (simulated)\n", hits);
+    printf("\npress ENTER to close...");
+    fgets(p@ target[0], 256, stdin);
+    system("color 07");
+    r; 0;
+}

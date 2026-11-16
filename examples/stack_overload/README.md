@@ -47,6 +47,34 @@ cc -std=c99 -O0 -g -fsanitize=address -fno-omit-frame-pointer real.c -o real
 `run.sh` 封装了这两步；Windows 的 MinGW 通常没有 `libasan`，请在 WSL 或
 Linux 上跑。ASan 会打印 `stack-buffer-overflow`、函数名和越界偏移。
 
+## CMD 终结者版：`terminator.sigil` / `terminator.cmd`
+
+双击或在 CMD 里运行：
+
+```bat
+terminator.cmd
+```
+
+会黑底红字（`color 0C`）、清屏，提示：
+
+```text
+TARGET FILE>
+```
+
+输入一个文件路径回车，它读取文件字节（只读，不修改），然后滚一段假汇编、
+推三个模拟帧、越界写 6 words，最后打印：
+
+```text
+[STATUS] INTRUSION COMPLETE
+[HIT] frame 1 canary, frame 2 payload, frame 2 canary
+[WORDS] 6 invaded (simulated)
+```
+
+- 纯模拟栈，不碰真实帧，不写目标文件
+- `terminator.cmd` 先转译再 gcc，然后启动
+- 没有堆；arena 是静态 `u4[128]`
+- 只是视觉效果，不是真入侵
+
 ## 边界
 
 - 模拟版是安全的、可进 CI；真栈版是 UB 演示，不进 CI
