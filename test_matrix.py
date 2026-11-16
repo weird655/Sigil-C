@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.8.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.9 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3024,6 +3024,26 @@ i4 main(v.) {
 
     assert_ok("59. review fixes", "namespace symbol collision, !64! single-file, netlist namespace, x! width assert", test_review_fixes)
 
+    # Layer 60: same-namespace local refs
+    def test_same_namespace_local_ref():
+        work = tempfile.mkdtemp(prefix="localref-")
+        os.makedirs(os.path.join(work, "src", "!math!"))
+        with open(os.path.join(work, "src", "!math!", "a.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 get(v.) { r; 5; }\n!1! P;\n!1! m, get;\n")
+        with open(os.path.join(work, "src", "!math!", "b.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 call(v.) { r; !/1/!(); }\n")
+        with open(os.path.join(work, "src", "!math!", "main.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; call(); }\n")
+        exe = os.path.join(work, "app.exe" if os.name == "nt" else "app")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", os.path.join(work, "src"), "-o", exe],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        q = subprocess.run([exe], capture_output=True, text=True)
+        assert q.returncode == 5, (q.returncode, q.stdout, q.stderr)
+
+    assert_ok("60. local ref", "same-namespace sibling !/1/! resolves to the exported function", test_same_namespace_local_ref)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3031,7 +3051,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 59-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 60-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

@@ -656,6 +656,7 @@ def _project_package_ids(src: str) -> List[str]:
 
 _PROJECT_PKG_BIND_RE = re.compile(r"^\s*!(\d+)!\s+m,\s*([A-Za-z_]\w*)\s*;", re.M)
 _PROJECT_EXT_REF_RE = re.compile(r"!([A-Za-z_]\w*)\[(\d+)\]!")
+_PROJECT_LOCAL_REF_RE = re.compile(r"!/\s*(\d+)\s*/!")
 
 
 def _project_package_bindings(src: str) -> Dict[str, str]:
@@ -664,6 +665,18 @@ def _project_package_bindings(src: str) -> Dict[str, str]:
     for m in _PROJECT_PKG_BIND_RE.finditer(src):
         out.setdefault(m.group(1), m.group(2))
     return out
+
+
+def _rewrite_local_packages(src: str, ns: str, local_ids: Set[str],
+                             exports: Dict[str, str]) -> str:
+    """Resolve `!/n/!` to a same-namespace exported function when not local."""
+    def repl(m):
+        pid = m.group(1)
+        if pid in local_ids:
+            return m.group(0)
+        key = f"{ns}.{pid}" if ns else pid
+        return exports.get(key, m.group(0))
+    return _PROJECT_LOCAL_REF_RE.sub(repl, src)
 
 
 def _rewrite_external_packages(src: str, exports: Dict[str, str],
@@ -820,6 +833,8 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
         src = sources_text[rel]
         try:
+            src = _rewrite_local_packages(src, _project_namespace(rel),
+                                          set(_project_package_ids(src)), exports)
             src = _rewrite_external_packages(src, exports, package_index,
                                              bindings_all, namespaces, rel)
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
