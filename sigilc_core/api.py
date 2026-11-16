@@ -741,11 +741,19 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         print(f"error: too many namespaces ({len(namespaces)} > "
               f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
         return 1
+    function_names = set()
+    for protos in prototypes.values():
+        for proto in protos:
+            m = re.match(r".*?\b([A-Za-z_]\w*)\s*\(", proto)
+            if m:
+                function_names.add(m.group(1))
     exports: Dict[str, str] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
         for pid, target in _project_package_bindings(text).items():
-            exports[f"{ns}.{pid}" if ns else pid] = target
+            # Only function-target packages are cross-file exports.
+            if target in function_names:
+                exports[f"{ns}.{pid}" if ns else pid] = target
     export_counts: Dict[str, int] = {}
     for key in exports:
         ns = key.rsplit(".", 1)[0] if "." in key else ""

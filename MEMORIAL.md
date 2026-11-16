@@ -24,7 +24,7 @@
 | 20 个可运行示例 | [`TUTORIAL.md`](TUTORIAL.md) + [`examples/`](examples/) |
 | 指针来源、悬空、逃逸、`r@` 违约的检查 | `sigilc_core/parser.py` |
 | 212 项测试、53 层矩阵 | [`test_matrix.py`](test_matrix.py) |
-| 一个 tag、一个 Release | `v1.7.0` |
+| 一个 tag、一个 Release | `v1.7.1` |
 | 一段被写下来的边界 | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 
 ## 墓志铭
@@ -33,7 +33,7 @@
 #include <stdio.h>
 
 i4 main(v.) {
-    printf("sigil-c 1.7.0\n");
+    printf("sigil-c 1.7.1\n");
     r; 0;
 }
 ```
@@ -42,7 +42,7 @@ i4 main(v.) {
 
 ```c
 int32_t main(void) {
-    printf("sigil-c 1.7.0\n");
+    printf("sigil-c 1.7.1\n");
     return 0;
 }
 ```
