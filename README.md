@@ -1,9 +1,54 @@
 # Sigil-C（印记-C） / Sunberry-C
 
-一个小实验项目：把 `.sigil` 转译成 ISO C99。又称 **Sunberry-C**（太阳莓-C）。45 个双字符记号 + C99 运算符，外加一些编译期检查。
+一个可直接落地的 C99 方言：把 `.sigil` 转译成 ISO C99。又称 **Sunberry-C**（太阳莓-C）。45 个双字符记号 + C99 运算符，外加一些编译期检查。
 
 > 概括：把数据流写在字面上的 C。
 > 太阳莓果设计。
+
+## 它是什么 / 不是什么
+
+**是：**
+
+- 一个严格的 C99 方言，生成物是普通 C99 + `#line`
+- 一个“读写顺序更线性”的写法：状态修改必须落成 `m,` 语句，不藏在表达式里
+- 一个可以交付的转译器：生成的 C 可以脱离它独立编译、修改、退出
+- 一个带有限静态检查的小工具：来源、边界、契约、C 关键字提示
+
+**不是：**
+
+- 不是新后端、不是运行时、不是 GC
+- 不是借用检查器，不保证生命周期安全
+- 不是“所有代码都更好读”——复杂逻辑仍然复杂
+- 不是包管理器/标准库/生态
+- 不是“安全 C”；边界检查有限，悬垂仍然可能
+- 不是 Layer 2 的稳定性承诺；`!` 仍是实验层
+
+### 为什么是“线性”，不是“更好读”
+
+C 允许把状态修改塞进表达式：
+
+```c
+a[i++] = f(x) + g(y);
+```
+
+读这行时，`i` 什么时候变、`a[i]` 用的是新 `i` 还是旧 `i`、`f`/`g` 谁先跑，都要停下来想。
+
+Sigil-C 要求把状态修改拆成语句：
+
+```sigil
+a[i] m, f(x) + g(y);
+i m+ 1;
+```
+
+- 先读，后改，顺序从左到右
+- 副作用不藏在子表达式里
+- 指针用 `p*` / `p@` 显式写出
+- 类型固定宽度，不靠 `int` 猜
+
+这不等于“更好读”；它只保证**读写顺序更线性、状态变化更显式**。复杂逻辑还是复杂，只是不再藏在表达式求值顺序里。
+
+**落地范围**：小型 C 工程、教学/实验、生成 C 交付、裸机/嵌入式（无 GC/运行时）。
+**不适用**：需要借用检查、安全认证、大生态、复杂跨平台构建的项目。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
 [![tests](https://img.shields.io/badge/tests-212%20%2F%2053%20layers-brightgreen)](test_matrix.py)
@@ -562,7 +607,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.2.2**，tag `v1.2.2` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.2) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 又称 **Sunberry-C**；版本 **1.2.3**，tag `v1.2.3` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.3) 已发布；Core v1 语法冻结（v1.x 只加不改）。
 - 212 项测试 / 53 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。
