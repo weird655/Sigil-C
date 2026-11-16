@@ -1,7 +1,7 @@
 """Sigil-C nodes (generated split of sigilc.py)."""
 
 from dataclasses import dataclass, field
-from typing import List, NamedTuple, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from .type_system import TypeNode, format_c_declarator
 
@@ -190,6 +190,8 @@ class ExternalTypeNode(StmtNode):
     c_spelling: str
     opaque: bool
     field_count: int = 0
+    fields: Dict[str, TypeNode] = field(default_factory=dict)
+    bitfields: Dict[str, int] = field(default_factory=dict)
 
 @dataclass
 class EnumDefNode(StmtNode):

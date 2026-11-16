@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.8.0**
+**版本：v1.8.1**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -107,7 +107,7 @@ o! i4 v m, 5;
 |---|---|
 | `!n! NAME;` | 声明包；`NAME` 是别名，不是 C 变量 |
 | `!n! m, target;` | 绑定；target 必须是文件级变量/函数 |
-| `!/n/!` | 本地访问，lvalue |
+| `!/n/!` | 本地访问，lvalue；只在本文件 |
 | `!name[n]!` | 外部访问，只支持函数包 |
 
 ### 3.2 本地访问
@@ -118,7 +118,7 @@ i4 get(v.) {
 }
 ```
 
-本地访问不加命名空间前缀。
+本地访问不加命名空间前缀；`!/n/!` 只在本文件内。同命名空间的兄弟文件也要写 `!math[n]!`。
 
 ### 3.3 函数包导出
 
@@ -202,6 +202,7 @@ t! (offsetof(sockaddr_in, sin_addr) == 4, "layout drift");
 - 不透明句柄 `x! pthread_t;` 只允许过指针
 - 字段访问、`offsetof`、`z?` 按登记类型检查
 - 用 `t!` + `offsetof` 钉住布局假设
+- 每个标量字段会自动生成 `SIGIL_STATIC_ASSERT(sizeof(field) == sizeof(注册类型))`；宽度不符编译失败
 
 ### 4.3 头文件输出
 
@@ -236,7 +237,7 @@ sigilc --netlist src/!math!/core.sigil
 sigilc --fmt src --fmt-check
 ```
 
-`--netlist` 是单文件网表；跨文件包索引看 `.sigil-build/packages.txt`。
+`--netlist` 是单文件网表，会输出 `# namespace:`；跨文件包索引看 `.sigil-build/packages.txt`。
 
 ---
 
@@ -258,6 +259,7 @@ sigilc --fmt src --fmt-check
 - 变量包只做本地接线
 - 外部类型用 `x!` + `t!` 钉布局
 - 数学函数链接 `-lm`
+- C 的 `sizeof` 写成 `z? 类型`（如 `z? i4`）
 
 ### NEVER
 
@@ -281,6 +283,11 @@ sigilc --fmt src --fmt-check
 | `nested package namespaces` | `!a!/!b!/` | 只留一层 |
 | `duplicate package !N!` | 同空间重复包号 | 改号或合并 |
 | `package '!math[1]!' is not exported` | 目标不是函数包/未绑定 | 用 `!1! m, function;` |
+| `namespace '!nope!' is not declared` | 没有对应目录/前缀 | 建 `!nope!/` 或改前缀 |
+| `package '!math[9]!' is not declared` | 包号不存在 | 声明 `!9! NAME;` 或改号 |
+| `targets variable 'x'` | 变量包不导出 | 跨文件只导出函数包 |
+| `duplicate C symbol 'add'` | 两个文件同名 C 函数 | 改名，如 `math_add` |
+| `x! field width drift` | `x!` 登记宽度与真实头不符 | 改登记类型 |
 | `Undeclared identifier` | 外部飞线没用 `--build` | 用项目构建 |
 | `data definition has no type` | 变量包跨文件 | 不要导出变量 |
 

@@ -32,7 +32,7 @@ from .nodes import (
     slice_uint_type,
 )
 from .preamble import C99_HEADER, C99_HEADER_BODY
-from .type_system import format_c_declarator
+from .type_system import BaseType, format_c_declarator
 
 
 class CodeGenerator:
@@ -154,6 +154,22 @@ class CodeGenerator:
             else:
                 self._emit(f"/* x! {node.name} -> '{node.c_spelling}' ({node.field_count} checked field(s), "
                            f"definition comes from the system header) */", node.line)
+                # x! only registers fields; without this, g? branches trust the
+                # registered type while C reads the real header. One combined
+                # assert avoids duplicate __LINE__ typedef names.
+                checks = []
+                for fname, ftype in node.fields.items():
+                    if fname in node.bitfields or not isinstance(ftype, BaseType):
+                        continue
+                    checks.append(
+                        f"sizeof((({node.c_spelling} *)0)->{fname}) == "
+                        f"sizeof({format_c_declarator(ftype)})")
+                if checks:
+                    self._emit(
+                        f'SIGIL_STATIC_ASSERT(({" && ".join(checks)}), '
+                        f'"x! field width drift: {node.name}");',
+                        node.line,
+                    )
         elif isinstance(node, EnumDefNode):
             self._emit(f"typedef enum {node.name} {{", node.line)
             for idx, (iname, ival) in enumerate(node.items):

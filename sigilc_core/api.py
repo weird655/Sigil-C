@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .codegen import CodeGenerator
 from .lexer import EXTERNAL_C_SPELLING, SIGIL_KEYWORDS, SIGIL_OPERATORS, Lexer, LexerError
@@ -666,14 +666,31 @@ def _project_package_bindings(src: str) -> Dict[str, str]:
     return out
 
 
-def _rewrite_external_packages(src: str, exports: Dict[str, str], filename: str) -> str:
-    """Rewrite `!name!n!` to the exported C-level target name."""
+def _rewrite_external_packages(src: str, exports: Dict[str, str],
+                                package_ids: Dict[str, Dict[str, str]],
+                                bindings: Dict[str, str],
+                                namespaces: Set[str], filename: str) -> str:
+    """Rewrite `!name[n]!` to the exported function name, with specific errors."""
     def repl(m):
-        key = f"{m.group(1)}.{m.group(2)}"
-        if key not in exports:
+        ns, pid = m.group(1), m.group(2)
+        key = f"{ns}.{pid}"
+        if ns not in namespaces:
             raise SemanticError(
-                f"{filename}: package '!{m.group(1)}[{m.group(2)}]!' is not exported "
-                f"by a file-level `!{m.group(2)}! m, target;`")
+                f"{filename}: namespace '!{ns}!' is not declared; "
+                f"use an !{ns}!/ directory or !{ns}!.sigil prefix")
+        if pid not in package_ids.get(ns, {}):
+            declared = ", ".join(sorted(package_ids.get(ns, {}), key=int)) or "(none)"
+            raise SemanticError(
+                f"{filename}: package '!{ns}[{pid}]!' is not declared in namespace "
+                f"'{ns}' (declared: {declared})")
+        if key not in exports:
+            if key in bindings:
+                raise SemanticError(
+                    f"{filename}: package '!{ns}[{pid}]!' targets variable "
+                    f"'{bindings[key]}'; only file-level function packages are exported")
+            raise SemanticError(
+                f"{filename}: package '!{ns}[{pid}]!' is declared but has no file-level "
+                f"binding; use '!{pid}! m, function;'")
         return exports[key]
     return _PROJECT_EXT_REF_RE.sub(repl, src)
 
@@ -742,11 +759,26 @@ def _build_project(args, defines: Dict[str, str]) -> int:
               f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
         return 1
     function_names = set()
-    for protos in prototypes.values():
+    symbol_owner: Dict[str, str] = {}
+    for rel, protos in prototypes.items():
         for proto in protos:
             m = re.match(r".*?\b([A-Za-z_]\w*)\s*\(", proto)
-            if m:
-                function_names.add(m.group(1))
+            if not m:
+                continue
+            name = m.group(1)
+            function_names.add(name)
+            if name in symbol_owner:
+                other = symbol_owner[name]
+                print(f"error: duplicate C symbol '{name}' in {other} and {rel}; "
+                      f"namespaces do not rename C symbols (try '{_project_namespace(rel)}"
+                      f"_{name}')", file=sys.stderr)
+                return 1
+            symbol_owner[name] = rel
+    bindings_all: Dict[str, str] = {}
+    for rel, text in sources_text.items():
+        ns = _project_namespace(rel)
+        for pid, target in _project_package_bindings(text).items():
+            bindings_all[f"{ns}.{pid}" if ns else pid] = target
     exports: Dict[str, str] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
@@ -785,7 +817,8 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
         src = sources_text[rel]
         try:
-            src = _rewrite_external_packages(src, exports, rel)
+            src = _rewrite_external_packages(src, exports, package_index,
+                                             bindings_all, namespaces, rel)
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict)

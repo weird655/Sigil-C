@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.8 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.8.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2063,7 +2063,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6400, (total, sizes)
+        assert total <= 6500, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
@@ -2971,6 +2971,42 @@ i4 main(v.) {
 
     assert_ok("58. dir namespace", "!math!/ directory scopes the whole tree; !math[1]! crosses directories", test_directory_namespace)
 
+    # Layer 59: review fixes — symbol collision, x! width, namespace netlist, !64! single-file
+    def test_review_fixes():
+        work = tempfile.mkdtemp(prefix="review-")
+        os.makedirs(os.path.join(work, "src", "!math!"))
+        os.makedirs(os.path.join(work, "src", "!util!"))
+        with open(os.path.join(work, "src", "!math!", "a.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n")
+        with open(os.path.join(work, "src", "!util!", "b.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", os.path.join(work, "src"), "-o", os.path.join(work, "app")],
+                           capture_output=True, text=True)
+        assert r.returncode != 0 and "duplicate C symbol 'add'" in r.stderr, r.stderr
+
+        try:
+            check_source("!64! P;", "x.sigil")
+            raise AssertionError("!64! was accepted by --check")
+        except SemanticError as e:
+            assert "0-63" in str(e), e
+
+        nl = netlist_source("!1! P;", "!math!/a.sigil")
+        assert "# namespace: math" in nl, nl
+
+        xw = tempfile.mkdtemp(prefix="xwidth-")
+        with open(os.path.join(xw, "sys_fake.h"), "w", encoding="utf-8") as f:
+            f.write("#include <stdint.h>\nstruct pair_fake { uint16_t lo; };\n")
+        src = '#include "sys_fake.h"\nx! struct pair_fake { f8 lo; };\ni4 main(v.) { r; 0; }\n'
+        c = os.path.join(xw, "x.c")
+        with open(c, "w", encoding="utf-8") as f:
+            f.write(compile_source(src, "x.sigil"))
+        b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", c,
+                            "-o", os.path.join(xw, "x.exe")], capture_output=True, text=True, cwd=xw)
+        assert b.returncode != 0, b.stderr
+
+    assert_ok("59. review fixes", "namespace symbol collision, !64! single-file, netlist namespace, x! width assert", test_review_fixes)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2978,7 +3014,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 58-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 59-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

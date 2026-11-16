@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.8.1，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -16,7 +16,7 @@
 | 包 | `!1!` | 编译期包槽，编号 0–63 |
 | 包别名 | `!1! P;` 的 `P` | Sigil-C 别名，不是 C 变量 |
 | 目标 | `!1! m, add;` 的 `add` | 文件级函数或变量 |
-| 本地引用 | `!/1/!` | 当前文件/命名空间内访问 |
+| 本地引用 | `!/1/!` | 当前文件内访问；同命名空间兄弟文件也要 `!math[n]!` |
 | 外部引用 | `!math[1]!` | 跨文件访问，只支持函数包 |
 | 导出 | `!1! m, function;` | 外部可见的函数包 |
 
@@ -62,7 +62,7 @@ i4 get(v.) {
 
 - `!n! NAME;`：声明包，`NAME` 是别名
 - `!n! m, target;`：绑定；target 必须是文件级变量/函数
-- `!/n/!`：本地 lvalue，可读、可写、可调用
+- `!/n/!`：本地 lvalue，只在本文件内；兄弟文件也要 `!math[n]!`
 - 文件级绑定是编译期别名，零运行时
 - 变量包和函数包都可本地使用；跨文件只导出函数包
 
@@ -232,7 +232,7 @@ sigilc --trap-trace file.sigil ...   # 原生调用栈
 sigilc --shadow-stack file.sigil ... # Sigil 活跃帧
 ```
 
-- `--netlist` 打印 packages/fields/links/groups/gates/landmines/confinement
+- `--netlist` 打印 `# namespace:` 与 packages/fields/links/groups/gates/landmines/confinement
 - **单文件**，不跨文件
 - `--trap-trace` 与 `--shadow-stack` 互斥、默认关；调试用，不进 release
 - `--shadow-stack` 不是生命周期检查
@@ -257,6 +257,10 @@ sigilc --shadow-stack file.sigil ... # Sigil 活跃帧
 | `nested package namespaces` | 嵌套目录 | 只留一层 |
 | `duplicate package !N!` | 同空间重复 | 改号或合并 |
 | `package '!math[1]!' is not exported` | 非函数包/未绑定 | 用 `!1! m, function;` |
+| `namespace '!nope!' is not declared` | 没有对应目录/前缀 | 建 `!nope!/` 或改前缀 |
+| `package '!math[9]!' is not declared` | 包号不存在 | 声明 `!9! NAME;` 或改号 |
+| `targets variable 'x'` | 变量包不导出 | 跨文件只导出函数包 |
+| `has no file-level binding` | 声明了没绑定 | 用 `!n! m, function;` |
 
 ---
 

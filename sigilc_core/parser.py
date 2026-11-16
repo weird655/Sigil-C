@@ -1558,7 +1558,9 @@ class Parser:
         self.complete_structs.add(sigil_name)
         EXTERNAL_C_SPELLING[sigil_name] = c_spelling
         return ExternalTypeNode(line=kw.line, col=kw.col, name=sigil_name,
-                                c_spelling=c_spelling, opaque=False, field_count=count)
+                                c_spelling=c_spelling, opaque=False, field_count=count,
+                                fields=fields,
+                                bitfields=dict(self.struct_bitfields.get(sigil_name, {})))
 
     def parse_struct_or_union(self, attrs: Optional[List[Attribute]] = None) -> StructDefNode:
         attrs = attrs or []

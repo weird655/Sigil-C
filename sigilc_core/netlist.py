@@ -1,4 +1,5 @@
 """Human-readable netlist for the !...! rewiring layer (the multimeter)."""
+import re
 from typing import List
 
 
@@ -16,10 +17,23 @@ def _field_text(base_name: str, offset: int, width: int, byte_index) -> str:
     return f"{kind}({base_name}, k={offset}, w={width})"
 
 
+def _namespace(filename: str) -> str:
+    parts = filename.replace("\\", "/").split("/")[:-1]
+    for part in parts:
+        m = re.fullmatch(r"!([^!]+)!", part)
+        if m:
+            return m.group(1)
+    base = filename.replace("\\", "/").split("/")[-1]
+    m = re.match(r"!([A-Za-z_]\w*)!", base)
+    return m.group(1) if m else ""
+
+
 def render_netlist(parser) -> str:
     p = parser.pkgs
     c = parser.confine
-    lines: List[str] = [f"# Sigil-C netlist: {parser.filename}", ""]
+    ns = _namespace(parser.filename)
+    lines: List[str] = [f"# Sigil-C netlist: {parser.filename}", "",
+                        f"# namespace: {ns or '(none)'}", ""]
     lines.append("[packages]")
     seen = set()
     for pid, name in p.packages.items():

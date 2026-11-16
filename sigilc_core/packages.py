@@ -215,9 +215,22 @@ def _landmine_bind(parser, pid: str, tok) -> None:
     parser.pkgs.armed_bound[pid] = (tok.line, tok.col)
 
 
+def _check_package_id(parser, tok, pid: str) -> None:
+    """Single-file package IDs obey the same 0-63 budget as project builds."""
+    if not pid.isdigit() or int(pid) > 63:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: Package '!{pid}!' exceeds the budget "
+            f"(IDs must be 0-63)")
+    if pid != str(int(pid)):
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: Package '!{pid}!' has a non-canonical ID "
+            f"(leading zero)")
+
+
 def parse_decl(parser) -> Optional[VarDeclStmt]:
     tok = parser._eat()  # PKG1 / PKG1_ARMED
     pid = tok.value
+    _check_package_id(parser, tok, pid)
     armed = tok.kind == 'PKG1_ARMED'
     if parser._cur().kind == 'OP_ASSIGN':
         parser._eat('OP_ASSIGN')
@@ -290,6 +303,7 @@ def parse_bind_local(parser, tok):
     parser._eat()
     parser._eat('OP_ASSIGN')
     pid = tok.value
+    _check_package_id(parser, tok, pid)
     armed = tok.kind == 'PKG1_ARMED'
     if armed:
         if pid not in parser.pkgs.packages:
@@ -340,6 +354,7 @@ def parse_link_local(parser, tok):
     right = parser._eat('IDENT')
     parser._eat('SEMI')
     pid = tok.value
+    _check_package_id(parser, tok, pid)
     left_type = _lookup_type(parser, left.value, left)
     right_type = _lookup_type(parser, right.value, right)
     if not types_equal(left_type, right_type):
@@ -390,7 +405,8 @@ def local_expr(parser, name: str, tok):
 
 
 def parse_link(parser) -> None:
-    parser._eat()  # PKG3
+    tok = parser._eat()  # PKG3
+    _check_package_id(parser, tok, tok.value)
     left = parser._eat('IDENT')
     right = parser._eat('IDENT')
     parser._eat('SEMI')
