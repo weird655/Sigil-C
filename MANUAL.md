@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.8.2**
+**版本：v1.8.3**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -204,7 +204,7 @@ t! (offsetof(sockaddr_in, sin_addr) == 4, "layout drift");
 - 不透明句柄 `x! pthread_t;` 只允许过指针
 - 字段访问、`offsetof`、`z?` 按登记类型检查
 - 用 `t!` + `offsetof` 钉住布局假设
-- 每个标量字段会自动生成 `SIGIL_STATIC_ASSERT(sizeof(field) == sizeof(注册类型))`；宽度不符编译失败
+- 每个标量/数组/指针字段会自动生成 `SIGIL_STATIC_ASSERT` 比较宽度；位域除外（C 不能对它做 sizeof）
 
 ### 4.3 头文件输出
 

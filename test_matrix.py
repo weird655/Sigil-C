@@ -3011,6 +3011,17 @@ i4 main(v.) {
                             "-o", os.path.join(xw, "x.exe")], capture_output=True, text=True, cwd=xw)
         assert b.returncode != 0, b.stderr
 
+        # array width: header uint16_t[2], declared u2[3]
+        with open(os.path.join(xw, "arr_fake.h"), "w", encoding="utf-8") as f:
+            f.write("#include <stdint.h>\nstruct arr_fake { uint16_t lo[2]; };\n")
+        src2 = '#include "arr_fake.h"\nx! struct arr_fake { u2[3] lo; };\ni4 main(v.) { r; 0; }\n'
+        c2 = os.path.join(xw, "arr.c")
+        with open(c2, "w", encoding="utf-8") as f:
+            f.write(compile_source(src2, "arr.sigil"))
+        b2 = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", c2,
+                             "-o", os.path.join(xw, "arr.exe")], capture_output=True, text=True, cwd=xw)
+        assert b2.returncode != 0, b2.stderr
+
     assert_ok("59. review fixes", "namespace symbol collision, !64! single-file, netlist namespace, x! width assert", test_review_fixes)
 
     # === end of tests: new layers go above this line ===

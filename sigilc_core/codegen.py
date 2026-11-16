@@ -32,7 +32,20 @@ from .nodes import (
     slice_uint_type,
 )
 from .preamble import C99_HEADER, C99_HEADER_BODY
-from .type_system import BaseType, format_c_declarator
+from .type_system import ArrayType, BaseType, PointerType, format_c_declarator
+
+
+def _field_size_expr(ftype) -> Optional[str]:
+    """C expression for the registered field size, or None if unknown."""
+    if isinstance(ftype, BaseType):
+        return f"sizeof({format_c_declarator(ftype)})"
+    if isinstance(ftype, PointerType):
+        return "sizeof(void *)"
+    if isinstance(ftype, ArrayType) and ftype.size_val is not None:
+        inner = _field_size_expr(ftype.element_type)
+        if inner:
+            return f"({inner} * {ftype.size_val})"
+    return None
 
 
 class CodeGenerator:
@@ -159,11 +172,13 @@ class CodeGenerator:
                 # assert avoids duplicate __LINE__ typedef names.
                 checks = []
                 for fname, ftype in node.fields.items():
-                    if fname in node.bitfields or not isinstance(ftype, BaseType):
+                    if fname in node.bitfields:
+                        continue
+                    expected = _field_size_expr(ftype)
+                    if expected is None:
                         continue
                     checks.append(
-                        f"sizeof((({node.c_spelling} *)0)->{fname}) == "
-                        f"sizeof({format_c_declarator(ftype)})")
+                        f"sizeof((({node.c_spelling} *)0)->{fname}) == {expected}")
                 if checks:
                     self._emit(
                         f'SIGIL_STATIC_ASSERT(({" && ".join(checks)}), '
