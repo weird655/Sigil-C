@@ -1042,6 +1042,18 @@ class Parser:
             reg_fn('rand', [], t_int)
             reg_fn('srand', [t_u32], t_void)
             reg_fn('getenv', [t_cstr], t_buf)
+            reg_fn('system', [t_cstr], t_int)
+            reg_fn('atof', [t_cstr], t_double)
+            t_cstr_ptr = PointerType(ln, cl, t_buf)
+            reg_fn('strtod', [t_cstr, t_cstr_ptr], t_double)
+            reg_fn('strtof', [t_cstr, t_cstr_ptr], t_double)
+            reg_fn('strtol', [t_cstr, t_cstr_ptr, t_int], BaseType(ln, cl, 'int64_t'))
+            reg_fn('strtoul', [t_cstr, t_cstr_ptr, t_int], BaseType(ln, cl, 'uint64_t'))
+            reg_fn('strtoll', [t_cstr, t_cstr_ptr, t_int], BaseType(ln, cl, 'int64_t'))
+            reg_fn('strtoull', [t_cstr, t_cstr_ptr, t_int], BaseType(ln, cl, 'uint64_t'))
+            reg_fn('abs', [t_int], t_int)
+            reg_fn('labs', [BaseType(ln, cl, 'int64_t')], BaseType(ln, cl, 'int64_t'))
+            reg_fn('llabs', [BaseType(ln, cl, 'int64_t')], BaseType(ln, cl, 'int64_t'))
         if '<string.h>' in txt:
             reg_fn('memcpy', [t_vptr, t_cvptr, t_size], t_vptr)
             reg_fn('memmove', [t_vptr, t_cvptr, t_size], t_vptr)
@@ -1056,6 +1068,13 @@ class Parser:
             reg_fn('strchr', [t_cstr, t_int], t_buf)
             reg_fn('strrchr', [t_cstr, t_int], t_buf)
             reg_fn('strstr', [t_cstr, t_cstr], t_buf)
+            reg_fn('strncat', [t_buf, t_cstr, t_size], t_buf)
+            reg_fn('strspn', [t_cstr, t_cstr], t_size)
+            reg_fn('strcspn', [t_cstr, t_cstr], t_size)
+            reg_fn('strpbrk', [t_cstr, t_cstr], t_buf)
+            reg_fn('strtok', [t_buf, t_cstr], t_buf)
+            reg_fn('strerror', [t_int], t_buf)
+            reg_fn('memchr', [t_cvptr, t_int, t_size], t_vptr)
         if '<ctype.h>' in txt:
             for name in ('isalnum', 'isalpha', 'isdigit', 'islower', 'isspace',
                          'isupper', 'isxdigit'):
@@ -1067,6 +1086,21 @@ class Parser:
                 reg_fn(name, [t_double], t_double)
             reg_fn('pow', [t_double, t_double], t_double)
             reg_fn('fmod', [t_double, t_double], t_double)
+            reg_fn('atan2', [t_double, t_double], t_double)
+            reg_fn('hypot', [t_double, t_double], t_double)
+            reg_fn('fmin', [t_double, t_double], t_double)
+            reg_fn('fmax', [t_double, t_double], t_double)
+            for name in ('asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+                         'log10', 'log2', 'exp2', 'round', 'trunc'):
+                reg_fn(name, [t_double], t_double)
+            for name in ('isnan', 'isfinite', 'isinf', 'signbit'):
+                reg_fn(name, [t_double], t_int)
+        if '<time.h>' in txt:
+            reg_fn('time', [t_vptr], BaseType(ln, cl, 'uint64_t'))
+            reg_fn('clock', [], BaseType(ln, cl, 'uint64_t'))
+            reg_fn('difftime', [t_double, t_double], t_double)
+        if '<errno.h>' in txt:
+            self.scopes[0].setdefault('errno', t_int)
         if '<assert.h>' in txt:
             reg_fn('assert', [t_int], t_void)
 

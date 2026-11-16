@@ -6,7 +6,7 @@
 > 太阳莓果设计。
 
 [![ci](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml/badge.svg)](https://github.com/weird655/Sigil-C/actions/workflows/ci.yml)
-[![tests](https://img.shields.io/badge/tests-212%20%2F%2053%20layers-brightgreen)](test_matrix.py)
+[![tests](https://img.shields.io/badge/tests-213%20%2F%2054%20layers-brightgreen)](test_matrix.py)
 [![output](https://img.shields.io/badge/output-ISO%20C99-blue)](#)
 [![license](https://img.shields.io/badge/license-CC%20BY%204.0-lightgrey)](LICENSE)
 
@@ -20,10 +20,12 @@
 | **显式状态修改**：`m,` 是语句，不藏在表达式里 | “所有代码更好读” —— 复杂逻辑仍然复杂，只保证读写顺序线性 |
 | **转译期检查**：常量越界、悬空、跨函数逃逸、`r@` 违约 | 借用检查 / 生命周期安全 —— 没有所有权系统，堆和悬垂仍要自己扛 |
 | **可退出的产物**：`#line` 映射、`--no-line` 交付、`.h` 输出 | 自己的标准库 —— 直接用 C 的 libc，不另造生态 |
+| **libc 覆盖**：stdio / stdlib / string / math / time / errno / ctype | 完整 C 标准库 / 平台 API —— 只覆盖常用 C99 面，见 [`STDLIB.md`](STDLIB.md) |
 | **完整工具链**：build / fmt / check / init / LSP / netlist | 跨文件分析 —— 只看单个翻译单元，跨文件要链接期信息 |
 | **Layer 2 `!`**：重布线/飞线层，允许使用，实验性 | 跨版本稳定承诺 —— 任意 minor 可改/删；不纳入 Core v1 冻结 |
 | **固定宽度类型**：`i4/u4/f4/f8`，不靠 `int` 猜 | 包管理器 / 构建系统 —— 交给 C 侧，不另造一套 |
 | **可交付的 C**：随时丢掉转译器，只留生成代码 | 安全认证 / 生产支持 —— 这是小工具，不是认证工具链 |
+| **标准库覆盖表**：常用 C99 libc 函数已登记 | 自建 std/ 容器库 —— 需要模块/包管理，不在这层 |
 
 一句话：**不是更快的 C，是“读写顺序能从左到右核对”的 C。**
 
@@ -72,8 +74,9 @@ python3 dist/sigilc.pyz --version
 
 | 项 | 口径 |
 |---|---|
-| 版本 | 1.2.3 |
+| 版本 | 1.3.0 |
 | Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
+| libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
 | 支持范围 | 缺陷修复、文档、C99 完备性；不加新语言记号 |
 | 不做 | GC、借用检查、包管理、运行时、安全认证、跨文件分析 |
@@ -103,6 +106,7 @@ python3 dist/sigilc.pyz --version
 | 速查表 | [`SYNTAX.md`](SYNTAX.md) | 印记与运算符清单、类型绑定、运算符优先级、**书写规格（空格纪律）** §0.8 |
 | 迁移对照 | [`MIGRATION.md`](MIGRATION.md) | C → Sigil-C 对照，23 条陷阱逐条实测 |
 | 更新日志 | [`CHANGELOG.md`](CHANGELOG.md) | 版本演进与每层测试的覆盖明细 |
+| 标准库 | [`STDLIB.md`](STDLIB.md) | libc 覆盖矩阵与缺口 |
 | 兼容承诺 | [`COMPATIBILITY.md`](COMPATIBILITY.md) | Core v1 冻结；Layer 2 `!` 明确排除 |
 | 安装 | [`INSTALL.md`](INSTALL.md) | pip / zipapp / PyInstaller 单文件 |
 | 性能 | [`BENCHMARKS.md`](BENCHMARKS.md) | C vs Sigil-C 的运行时 microbenchmark |
@@ -536,7 +540,7 @@ int main(void) {
 
 ## 测试矩阵
 
-212 项 / 53 层，每层一个主题：
+213 项 / 54 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -574,7 +578,7 @@ int main(void) {
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 212 项 / 53 层，需要 gcc
+python3 test_matrix.py        # 213 项 / 54 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -582,7 +586,7 @@ python3 test_matrix.py        # 212 项 / 53 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 212 项测试
+python tools/check.py            # py_compile → ruff → mypy → 213 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -620,8 +624,8 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.2.3**，tag `v1.2.3` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.2.3) 已发布；Core v1 语法冻结（v1.x 只加不改）。
-- 212 项测试 / 53 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 又称 **Sunberry-C**；版本 **1.3.0**，tag `v1.3.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.3.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 213 项测试 / 54 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理。

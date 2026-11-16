@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.2 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.3 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2064,7 +2064,7 @@ int main(void) {
 
         total = sum(sizes.values())
         assert total <= 6200, (total, sizes)
-        assert sizes["parser"] <= 2650, sizes["parser"]
+        assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
@@ -2813,6 +2813,44 @@ i4 main(v.) { r; 0; }
 
     assert_ok("53. stack overload", "static-arena canary replay and the real-stack ASan demo source", test_stack_overload)
 
+    # Layer 54: libc coverage
+    def test_stdlib():
+        src = """#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include <errno.h>
+
+i4 main(v.) {
+    o! p* c@ c1 text m, "3.5px";
+    o! p* c1 end;
+    o! f8 x m, strtod(text, p@ end);
+    o! c1[16] buf m, {0};
+    strcpy(p@ buf[0], "ab");
+    strncat(p@ buf[0], "cdef", 2);
+    o! f8 pi m, atan2(0.0, -1.0);
+    o! u8 now m, time(NULL);
+    errno m, 0;
+    printf("%d %s %d %d %d\\n", (i4)(x * 10.0), buf, (i4)(round(pi) == 3.0), (i4)(now > 0), errno);
+    r; 0;
+}
+"""
+        c = compile_source(src, "stdlib.sigil")
+        work = tempfile.mkdtemp(prefix="stdlib-")
+        cpath = os.path.join(work, "stdlib.c")
+        with open(cpath, "w", encoding="utf-8") as f:
+            f.write(c)
+        exe = os.path.join(work, "stdlib.exe")
+        b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                            cpath, "-o", exe], capture_output=True, text=True)
+        assert b.returncode == 0, b.stderr
+        r = subprocess.run([exe], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == "35 abcd 1 1 0", r.stdout
+
+    assert_ok("54. stdlib", "strtod/strncat/atan2/round/time/errno via libc coverage", test_stdlib)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2820,7 +2858,7 @@ i4 main(v.) { r; 0; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 53-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 54-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

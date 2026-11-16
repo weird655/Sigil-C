@@ -9,22 +9,20 @@
 |---|---|---|
 | `crc32.sigil` | zlib/PNG 的 tableless CRC32 | ✅ 编译运行，`cbf43926` |
 | `ringbuf.sigil` | UART/DMA 固定容量环形缓冲 | ✅ 编译运行，`sum=28 count=0`，overflow 两次 |
-| `json_number.sigil` | cJSON 风格 JSON 数字转换 | ❌ 编译失败：`strtod` 未注册 |
+| `json_number.sigil` | cJSON 风格 JSON 数字转换 | ✅ v1.3.0 起 `strtod` 已登记，输出 `3.14159` |
 
-## 失败点
+## 曾经的失败点（v1.3.0 已修复）
 
-### 1. `strtod` / `errno` / `isfinite` 不在 libc 子集
+### 1. `strtod` 不在 libc 子集
 
 ```text
 error: json_number.sigil:10:20: Undeclared identifier 'strtod'
 ```
 
-Sigil-C 的 `#include <stdlib.h>` 只登记了部分函数（`malloc/free/atoi/...`），`strtod` 没有登记。JSON 数字解析要么：
+v1.3.0 起 `strtod` / `strtof` / `strtol` / `strtoul` / `strtoll` / `strtoull` 已登记，JSON 探针通过。
+`errno` 也已登记；`isfinite` 等 math 宏在 `<math.h>` 下可用。
 
-- 手写十进制/指数解析（可控，但重复造轮子）
-- 或把 `strtod` 加进 libc 原型表（需要改编译器，且 `errno`/`isfinite` 也要跟上）
-
-这是**真实外部项目移植会撞上的第一类问题**：libc 子集不等于完整 libc。
+这仍然是**真实外部项目移植会撞上的第一类问题**：libc 子集不等于完整 libc；本轮只补了常用面。
 
 ### 2. 字符串字面量类型摩擦
 
@@ -46,7 +44,7 @@ Sigil-C 的 `#include <stdlib.h>` 只登记了部分函数（`malloc/free/atoi/.
 | 维度 | 结果 |
 |---|---|
 | 算法/位运算/固定数组 | 可直接写 |
-| libc 覆盖 | 不够完整，`strtod` 这类会卡住 |
+| libc 覆盖 | 常用面已够用，冷门函数仍会卡 |
 | 字符串/const | 需要适应 `p* c@ c1` |
 | 容器/生态 | 没有，需自带 |
 | 完整第三方项目 | **未完成**；需要选定具体仓库后逐个函数移植 |

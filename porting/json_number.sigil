@@ -6,7 +6,7 @@
    registered libc subset. Kept as a porting-failure record. */
 i4 main(v.) {
     o! p* c@ c1 text m, "3.14159";
-    o! p* c@ c1 end;
+    o! p* c1 end;
     o! f8 value m, strtod(text, p@ end);
     printf("%.5f\n", value);
     r; 0;
