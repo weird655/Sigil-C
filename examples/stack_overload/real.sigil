@@ -1,0 +1,19 @@
+#include <stdio.h>
+
+/* 真栈过载：本地 volatile 数组越界写。
+   必须用 --no-bounds-check 编译；建议用 AddressSanitizer 跑。
+   这是 UB 演示，不是 Sigil-C 的语言特性；布局依赖编译器和 ABI。 */
+
+#define INVADER 0x41414141
+
+i4 main(v.) {
+    o! v@ u4[4] buf;
+    o! u4 i m, 0;
+    w~ (i < 8) {
+        buf[i] m, INVADER;
+        i m, i + 1;
+    }
+    printf("buf[0]=0x%08x\n", buf[0]);
+    printf("survived overflow (unexpected under ASan)\n");
+    r; 0;
+}

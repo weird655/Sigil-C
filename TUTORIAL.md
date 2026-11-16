@@ -1025,7 +1025,46 @@ live frames: [1] main [2] helper
 
 ---
 
-# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
+## 3.15 栈过载演示：模拟栈与 ASan
+
+> **危险工具，请勿使用。** 两个版本都不加语言特性，只是演示与诊断。
+
+示例在 [`examples/stack_overload/`](examples/stack_overload/)。
+
+### 模拟栈：`simulated.sigil`
+
+静态 `u4[128]` arena，自己管帧、栈顶、canary，不用堆：
+
+```text
+before: 3 frames, 4 words each
+overload frame 1 by 6 words...
+  frame 1 canary INVADED at word 9
+  frame 2 canary INVADED at word 14
+  word 9: 0xdeadbeef -> 0x41414141
+  ...
+invaded words: 6
+```
+
+这是定义行为，可重复，进第 53 层测试。
+
+### 真栈：`real.sigil`
+
+本地 `volatile u4[4]` 数组写 8 个 word，靠 ASan 抓 `stack-buffer-overflow`：
+
+```bash
+python3 sigilc.py examples/stack_overload/real.sigil -o real.c --no-bounds-check
+cc -std=c99 -O0 -g -fsanitize=address -fno-omit-frame-pointer real.c -o real
+./real
+```
+
+- 必须 `--no-bounds-check`，否则边界检查先 abort
+- 真栈布局依编译器/ABI/优化；ASan 只报现场，不保证“侵入成功”
+- Windows MinGW 通常没有 libasan，用 WSL/Linux/macOS
+- 没有堆分配
+
+---
+
+# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4# Part 4 · 系统
 
 ## 4.1 输入输出
 

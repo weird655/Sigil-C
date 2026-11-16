@@ -2784,6 +2784,35 @@ i4 main(v.) { r; 0; }
 
     assert_ok("52. slices", "bit/bits/byte bind, read, write and --netlist fields", test_slices)
 
+    # Layer 53: stack overload demos
+    def test_stack_overload():
+        base = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "examples", "stack_overload")
+        with open(os.path.join(base, "simulated.sigil"), encoding="utf-8") as f:
+            sim_src = f.read()
+        c = compile_source(sim_src, "simulated.sigil")
+        work = tempfile.mkdtemp(prefix="stackover-")
+        cpath = os.path.join(work, "sim.c")
+        with open(cpath, "w", encoding="utf-8") as f:
+            f.write(c)
+        exe = os.path.join(work, "sim.exe")
+        b = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                            cpath, "-o", exe], capture_output=True, text=True)
+        assert b.returncode == 0, b.stderr
+        r = subprocess.run([exe], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "frame 1 canary INVADED" in r.stdout, r.stdout
+        assert "frame 2 canary INVADED" in r.stdout, r.stdout
+        assert "invaded words: 6" in r.stdout, r.stdout
+
+        with open(os.path.join(base, "real.sigil"), encoding="utf-8") as f:
+            real_src = f.read()
+        real_c = compile_source(real_src, "real.sigil")
+        assert "volatile uint32_t buf[4]" in real_c, real_c
+        assert "SIGIL_IDX" in real_c, real_c
+
+    assert_ok("53. stack overload", "static-arena canary replay and the real-stack ASan demo source", test_stack_overload)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -2791,7 +2820,7 @@ i4 main(v.) { r; 0; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 52-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 53-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

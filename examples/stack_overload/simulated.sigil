@@ -1,0 +1,93 @@
+#include <stdio.h>
+
+/* 模拟栈过载：静态 arena，无堆。
+   帧、canary、越界都由程序自己管；--netlist 不参与，纯运行期演示。 */
+
+#define ARENA_WORDS 128
+#define MAX_FRAMES 4
+#define CANARY 0xDEADBEEF
+#define INVADER 0x41414141
+
+o! u4[ARENA_WORDS] arena;
+o! u4[ARENA_WORDS] baseline;
+o! u4[MAX_FRAMES] fbase;
+o! u4[MAX_FRAMES] fsize;
+o! u4[MAX_FRAMES] fcanary;
+o! u4 frame_count m, 0;
+o! u4 top m, 0;
+
+v. frame_push(u4 size) {
+    o! u4 b m, top;
+    fbase[frame_count] m, b;
+    fsize[frame_count] m, size;
+    fcanary[frame_count] m, b + size;
+    arena[b + size] m, CANARY;
+    frame_count m, frame_count + 1;
+    top m, b + size + 1;
+}
+
+v. frame_fill(u4 idx, u4 val) {
+    o! u4 b m, fbase[idx];
+    o! u4 s m, fsize[idx];
+    o! u4 i m, 0;
+    w~ (i < s) {
+        arena[b + i] m, val;
+        i m, i + 1;
+    }
+}
+
+v. snapshot(v.) {
+    o! u4 i m, 0;
+    w~ (i < ARENA_WORDS) {
+        baseline[i] m, arena[i];
+        i m, i + 1;
+    }
+}
+
+v. overflow(u4 idx, u4 words) {
+    o! u4 b m, fbase[idx];
+    o! u4 s m, fsize[idx];
+    o! u4 i m, 0;
+    w~ (i < words) {
+        arena[b + s + i] m, INVADER;
+        i m, i + 1;
+    }
+}
+
+v. report(v.) {
+    o! u4 i m, 0;
+    o! u4 changed m, 0;
+    printf("live frames: %u\n", frame_count);
+    w~ (i < frame_count) {
+        o! u4 c m, fcanary[i];
+        i? (arena[c] != CANARY) {
+            printf("  frame %u canary INVADED at word %u\n", i, c);
+        }
+        i m, i + 1;
+    }
+    i m, 0;
+    w~ (i < ARENA_WORDS) {
+        i? (arena[i] != baseline[i]) {
+            printf("  word %u: 0x%08x -> 0x%08x\n", i, baseline[i], arena[i]);
+            changed m, changed + 1;
+        }
+        i m, i + 1;
+    }
+    printf("invaded words: %u\n", changed);
+}
+
+i4 main(v.) {
+    frame_push(4);
+    frame_fill(0, 0x11111111);
+    frame_push(4);
+    frame_fill(1, 0x22222222);
+    frame_push(4);
+    frame_fill(2, 0x33333333);
+
+    snapshot();
+    printf("before: 3 frames, 4 words each\n");
+    printf("overload frame 1 by 6 words...\n");
+    overflow(1, 6);
+    report();
+    r; 0;
+}
