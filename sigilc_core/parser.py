@@ -2522,19 +2522,26 @@ class Parser:
 
     def parse_unary(self) -> ExprNode:
         tok = self._cur()
-        # z? 取类型或表达式的大小，结果为 size_t
+        # z? / sizeof(i4) 取类型或表达式的大小，结果为 size_t
         if tok.kind == 'KW_SIZEOF':
             self._eat('KW_SIZEOF')
+            paren = tok.value == 'sizeof' and self._cur().kind == 'LPAREN'
+            if paren:
+                self._eat('LPAREN')
             if self._sizeof_takes_type():
                 target_t = self.parse_type()
                 if is_void_type(target_t):
-                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
+                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: '{tok.value}' cannot be applied to 'v.' (void)")
                 if not self._is_complete_object_type(target_t):
-                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' requires a complete object type")
+                    raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: '{tok.value}' requires a complete object type")
+                if paren:
+                    self._eat('RPAREN')
                 return SizeofExpr(line=tok.line, col=tok.col, target_type=target_t, operand=None)
-            operand = self.parse_unary()
+            operand = self.parse_pure_expr() if paren else self.parse_unary()
             if is_void_type(self._infer_expr_type(operand)):
-                raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: 'z?' cannot be applied to 'v.' (void)")
+                raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: '{tok.value}' cannot be applied to 'v.' (void)")
+            if paren:
+                self._eat('RPAREN')
             return SizeofExpr(line=tok.line, col=tok.col, target_type=None, operand=operand)
 
         # a? 取对齐字节数，结果 size_t

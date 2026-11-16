@@ -502,6 +502,8 @@ class Lexer:
                     tokens.append(Token('PERCENT', word, s_line, s_col, s_byte))
                 elif word == 'NULL':
                     tokens.append(Token('NULL_LIT', word, s_line, s_col, s_byte))
+                elif word == 'sizeof':
+                    tokens.append(Token('KW_SIZEOF', word, s_line, s_col, s_byte))
                 elif word in BASIC_TYPES:
                     tokens.append(Token('TYPE_INT', word, s_line, s_col, s_byte))
                 else:

@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.9.0**
+**版本：v1.9.1**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -261,7 +261,7 @@ sigilc --fmt src --fmt-check
 - 变量包只做本地接线
 - 外部类型用 `x!` + `t!` 钉布局
 - 数学函数链接 `-lm`
-- C 的 `sizeof` 写成 `z? 类型`（如 `z? i4`）
+- `sizeof(i4)` 与 `z? i4` 等价；原生写法仍是 `z? 类型`
 
 ### NEVER
 
@@ -290,7 +290,6 @@ sigilc --fmt src --fmt-check
 | `targets variable 'x'` | 变量包不导出 | 跨文件只导出函数包 |
 | `duplicate C symbol 'add'` | 两个文件同名 C 函数 | 改名，如 `math_add` |
 | `x! field width drift` | `x!` 登记宽度与真实头不符 | 改登记类型 |
-| `Undeclared identifier 'sizeof'` | 用了 C 的 sizeof | 写 `z? 类型` |
 | `Undeclared identifier` | 外部飞线没用 `--build` | 用项目构建 |
 | `data definition has no type` | 变量包跨文件 | 不要导出变量 |
 

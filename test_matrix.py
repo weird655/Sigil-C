@@ -2991,11 +2991,8 @@ i4 main(v.) {
         except SemanticError as e:
             assert "0-63" in str(e), e
 
-        try:
-            check_source("i4 main(v.) { r; sizeof(i4); }", "x.sigil")
-            raise AssertionError("sizeof was accepted")
-        except SemanticError as e:
-            assert "z? type" in str(e), e
+        sized = compile_source("i4 main(v.) { o! u4 n m, sizeof(i4); r; (i4)n; }", "x.sigil")
+        assert "sizeof(int32_t)" in sized, sized
 
         nl = netlist_source("!1! P;", "!math!/a.sigil")
         assert "# namespace: math" in nl, nl
