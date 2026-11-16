@@ -1,12 +1,19 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.10.2，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.10.3，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
 > **危险工具，请勿使用。** 没有生命周期检查；局部包在函数返回后悬垂。
 
 ---
+
+## 0. 规范前强边界
+
+先读 [`BOUNDARIES.md`](BOUNDARIES.md)：
+
+- `x!` 不校验位域宽度；位域 ABI 要自己断言。
+- 命名空间函数名不得与局部变量/参数/字段同名；token 改名不区分作用域。
 
 ## 1. 术语
 

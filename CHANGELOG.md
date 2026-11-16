@@ -4,6 +4,17 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.10.3] - 2026-11-16
+
+* 新增 [`BOUNDARIES.md`](BOUNDARIES.md)，把两条硬边写成规范前强边界：
+  - B1：`x!` 不校验位域宽度；位域 ABI 必须自己断言。
+  - B2：命名空间函数名不得与局部变量/参数/字段同名；token 改名不区分作用域。
+* MANUAL、WIRING、README、COMPATIBILITY、MULTIFILE 全部链接该文件。
+* `x!` 生成的 C 对位域增加 `bitfield width is NOT checked` 注释。
+* 无语言/生成物语义变化；219 项 / 60 层。
+
+---
+
 ## [1.10.2] - 2026-11-16
 
 * `--netlist` 新增 `[qualified]` 段：`math.1 -> !1!`，命名空间与原始包号能对上。
