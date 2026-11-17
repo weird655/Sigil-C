@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.25.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.26.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >

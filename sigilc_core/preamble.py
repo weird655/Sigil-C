@@ -154,11 +154,21 @@ CHECKED_HEADER = r'''#ifdef SIGIL_CHECKED_ARITH
 #define SIGIL_NONNULL(p) ((p) ? (p) : (SIGIL_TRAP(), (p)))
 static inline uint64_t sigil_cidx(void *p, uint64_t i, size_t elem, size_t objsz) {
     if (!p || elem == 0) SIGIL_TRAP();
+    if (objsz == (size_t)-1) {
+#ifdef SIGIL_CHECKED_STRICT
+        SIGIL_TRAP();
+#endif
+    }
     if (objsz != (size_t)-1 && objsz != 0 && i >= objsz / elem) SIGIL_TRAP();
     return i;
 }
 static inline void *sigil_ptr_add(void *p, ptrdiff_t n, size_t elem, size_t objsz) {
     if (!p || elem == 0) SIGIL_TRAP();
+    if (objsz == (size_t)-1) {
+#ifdef SIGIL_CHECKED_STRICT
+        SIGIL_TRAP();
+#endif
+    }
     if (objsz != (size_t)-1 && objsz != 0) {
         size_t count = objsz / elem;
         if (n < 0) { if ((uintmax_t)(-(n + 1)) >= count) SIGIL_TRAP(); }

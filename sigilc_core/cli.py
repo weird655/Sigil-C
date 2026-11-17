@@ -67,6 +67,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--cc", default="gcc", help="C compiler used by --build (default: gcc)")
     ap.add_argument("--cflags", default="-std=c99 -Wall -Wextra -Werror -pedantic",
                     help="compiler flags used by --build")
+    ap.add_argument("--checked-strict", action="store_true",
+                    help="checked mode + trap when __builtin_object_size is unknown")
     ap.add_argument("--checked", action="store_true",
                     help="emit checked arithmetic/division/shift/float-to-int C")
     ap.add_argument("--ub-check", action="store_true",

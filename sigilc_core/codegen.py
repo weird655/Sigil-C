@@ -59,7 +59,7 @@ class CodeGenerator:
                  prelude_include: Optional[str] = None, bounds_check: bool = False,
                  cli_defines: Optional[Dict[str, str]] = None,
                  line_directives: bool = True, trap_trace: bool = False,
-                 shadow_stack: bool = False, namespace: str = "", checked_arith: bool = False):
+                 shadow_stack: bool = False, namespace: str = "", checked_arith: bool = False, checked_strict: bool = False):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.line_directives = line_directives
         self.header_mode = header_mode
@@ -67,7 +67,8 @@ class CodeGenerator:
         self.bounds_check = bounds_check
         self.trap_trace = trap_trace
         self.shadow_stack = shadow_stack
-        self.checked_arith = checked_arith
+        self.checked_arith = checked_arith or checked_strict
+        self.checked_strict = checked_strict
         self._tmp_counter = 0
         self.namespace = namespace
         self.cli_defines = cli_defines or {}
@@ -103,6 +104,8 @@ class CodeGenerator:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
         if self.checked_arith:
             self.lines.append("#define SIGIL_CHECKED_ARITH 1\n")
+        if self.checked_strict:
+            self.lines.append("#define SIGIL_CHECKED_STRICT 1\n")
         if self.trap_trace:
             self.lines.append("#define SIGIL_TRAP_TRACE 1\n")
         if self.shadow_stack:
@@ -125,6 +128,8 @@ class CodeGenerator:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
         if self.checked_arith:
             self.lines.append("#define SIGIL_CHECKED_ARITH 1\n")
+        if self.checked_strict:
+            self.lines.append("#define SIGIL_CHECKED_STRICT 1\n")
         if self.prelude_include:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:

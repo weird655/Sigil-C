@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.25 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.26 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3378,6 +3378,17 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("72. checked pointers", "checked mode rejects pointer subtraction and relational comparison", test_checked_pointer_policy)
 
+    # Layer 73: checked-strict unknown object sizes
+    def test_checked_strict():
+        src = "i4 f(p* i4 p) { o! i4 x m, p[2]; r; x; }\n"
+        c = compile_source(src, "strict.sigil", checked_strict=True)
+        assert "#define SIGIL_CHECKED_STRICT 1" in c
+        assert "sigil_cidx" in c and "SIGIL_CHECKED_STRICT" in c
+        plain = compile_source(src, "plain.sigil", checked=True)
+        assert "#define SIGIL_CHECKED_STRICT 1" not in plain
+
+    assert_ok("73. checked strict", "checked-strict traps when object size is unknown", test_checked_strict)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3385,7 +3396,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 72-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 73-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
