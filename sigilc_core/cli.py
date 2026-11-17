@@ -71,6 +71,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="checked mode + trap when __builtin_object_size is unknown")
     ap.add_argument("--checked", action="store_true",
                     help="emit checked arithmetic/division/shift/float-to-int C")
+    ap.add_argument("--asan", action="store_true",
+                    help="with --build: AddressSanitizer for heap UAF/double-free/leaks")
+    ap.add_argument("--tsan", action="store_true",
+                    help="with --build: ThreadSanitizer for data races")
     ap.add_argument("--ub-check", action="store_true",
                     help="with --build: add UBSan/overflow traps to expose UB at runtime")
     ap.add_argument("--strict", action="store_true",
@@ -108,9 +112,16 @@ def main(argv: Optional[List[str]] = None) -> int:
             sys.stdout.write(out)
         return 0
 
+    if (args.asan or args.tsan) and args.build is None:
+        print("error: --asan/--tsan require --build", file=sys.stderr)
+        return 2
+
     if args.build is not None:
         if args.header:
             print("error: --header is not supported with --build; use --emit-header", file=sys.stderr)
+            return 2
+        if args.asan and args.tsan:
+            print("error: --asan and --tsan are separate modes; pick one", file=sys.stderr)
             return 2
         return _build_project(args, defines)
 
@@ -155,6 +166,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         if args.trap_trace and args.shadow_stack:
             print("error: --trap-trace and --shadow-stack are separate modes; pick one", file=sys.stderr)
+            return 2
+        if args.asan and args.tsan:
+            print("error: --asan and --tsan are separate modes; pick one", file=sys.stderr)
             return 2
         c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check,
                                defines=defines, line_directives=not args.no_line,

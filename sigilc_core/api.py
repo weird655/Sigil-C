@@ -1078,8 +1078,22 @@ def _build_project(args, defines: Dict[str, str]) -> int:
     cflags = args.cflags
     if getattr(args, "checked", False) or getattr(args, "checked_strict", False):
         cflags += " -fno-strict-aliasing"
+    if getattr(args, "asan", False) and getattr(args, "tsan", False):
+        raise ValueError("--asan and --tsan are separate modes")
+    sanitizers = []
     if getattr(args, "ub_check", False):
-        cflags += " -fsanitize=undefined -fno-sanitize-recover=all -ftrapv"
+        sanitizers.append("undefined")
+        cflags += " -ftrapv"
+    if getattr(args, "asan", False):
+        sanitizers.append("address")
+        cflags += " -fno-omit-frame-pointer -g"
+    if getattr(args, "tsan", False):
+        sanitizers.append("thread")
+        cflags += " -g"
+    if sanitizers:
+        cflags += " -fsanitize=" + ",".join(sanitizers)
+        if "undefined" in sanitizers:
+            cflags += " -fno-sanitize-recover=all"
     cmd = [args.cc] + cflags.split() + c_paths + ["-o", exe]
     print("Link      " + " ".join(cmd))
     rc = subprocess.run(cmd).returncode

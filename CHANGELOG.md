@@ -4,6 +4,16 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.27.0] - 2026-11-16
+
+* 新增 `--asan`：`--build` 时加 AddressSanitizer，抓堆 UAF/双重释放/泄漏。
+* 新增 `--tsan`：`--build` 时加 ThreadSanitizer，抓 data race。
+* ASan/TSan 强制 build-only 且互斥。
+* 第 74 层：两种 sanitizer 的 build-only / 互斥校验。
+* 233 项 / 74 层；sanitizer 是运行时门禁，不是所有权/并发模型。
+
+---
+
 ## [1.26.0] - 2026-11-16
 
 * 新增 `--checked-strict`：对象大小未知时直接 trap。

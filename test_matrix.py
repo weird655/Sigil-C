@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.26 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.27 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3389,6 +3389,22 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("73. checked strict", "checked-strict traps when object size is unknown", test_checked_strict)
 
+    # Layer 74: sanitizer build modes
+    def test_sanitizer_modes():
+        work = tempfile.mkdtemp(prefix="san-")
+        with open(os.path.join(work, "main.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; 0; }\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work, "--asan", "--tsan"], capture_output=True, text=True, cwd=work)
+        out = r.stdout + r.stderr
+        assert r.returncode == 2 and "separate modes" in out, out[-500:]
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            os.path.join(work, "main.sigil"), "--asan"], capture_output=True, text=True, cwd=work)
+        out = r.stdout + r.stderr
+        assert r.returncode == 2 and "require --build" in out, out[-500:]
+
+    assert_ok("74. sanitizers", "ASan/TSan are build-only and mutually exclusive", test_sanitizer_modes)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3396,7 +3412,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 73-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 74-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
