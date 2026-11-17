@@ -3221,6 +3221,7 @@ i4 f1(v.) { r; !/2/!; }
             "i4 f(v.) { o! i4 x m, 1; !1! m, x; r; !/1/!; }",
             "o! i4 gx m, 1; p* i4 f(v.) { !1! m, gx; r; p@ !/1/!; }",
             "i4 f(v.) { { o! i4 x m, 1; !1! m, x; r; !/1/!; } }",
+            "i4 f(v.) { o! i4 x m, 1; !1! m, x; o! p* i4 q m, p@ !/1/!; r; x; }",
         ]
         for src in safe:
             assert check_source(src, "life.sigil") is None, src
@@ -3228,6 +3229,9 @@ i4 f1(v.) { r; !/2/!; }
             ("p* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; p@ !/1/!; }", "local package"),
             ("o! p* i4 gp; i4 f(v.) { o! i4 x m, 1; !1! m, x; gp m, p@ !/1/!; r; 0; }", "local package"),
             ("v. f(p* i4 out) { o! i4 x m, 1; !1! m, x; out m, p@ !/1/!; }", "local package"),
+            ("p* i4 f(v.) { o! i4 x m, 1; !1! m, x; o! p* i4 q m, p@ !/1/!; r; q; }", "local package"),
+            ("p* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; p@ !/1/! + 1; }", "local package"),
+            ("p* i4 f(v.) { o! i4 x m, 1; !1! m, x; o! p* i4 q m, (1 ? p@ !/1/! : 0); r; q; }", "local package"),
         ]
         for src, needle in bad:
             try:

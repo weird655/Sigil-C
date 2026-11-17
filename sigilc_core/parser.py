@@ -126,6 +126,7 @@ class Parser:
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
+        self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
         self.func_defined: Set[str] = set()
@@ -811,21 +812,34 @@ class Parser:
         return None
 
     def _local_pkg_address(self, expr: Optional[ExprNode]) -> Optional[str]:
-        """Return the local package id if expr takes the address of its target."""
+        """Return a local package id if expr carries that package's target address."""
         if expr is None:
             return None
-        if isinstance(expr, UnaryExpr) and expr.op == '&':
-            inner = expr.operand
-            if isinstance(inner, UnaryExpr) and inner.op == '*':
-                cast = inner.operand
-                if isinstance(cast, CastExpr):
-                    cast = cast.operand
-                if isinstance(cast, IdentExpr) and cast.name.startswith("__sigil_pkg_"):
-                    pid = cast.name[len("__sigil_pkg_"):]
-                    if pid in self.pkgs.local_regions:
-                        return pid
+        if isinstance(expr, IdentExpr):
+            return self.escape_taint.get(expr.name)
+        if isinstance(expr, UnaryExpr):
+            if expr.op == '&':
+                inner = expr.operand
+                if isinstance(inner, UnaryExpr) and inner.op == '*':
+                    cast = inner.operand
+                    if isinstance(cast, CastExpr):
+                        cast = cast.operand
+                    if isinstance(cast, IdentExpr) and cast.name.startswith("__sigil_pkg_"):
+                        pid = cast.name[len("__sigil_pkg_"):]
+                        if pid in self.pkgs.local_regions:
+                            return pid
+            return self._local_pkg_address(expr.operand)
         if isinstance(expr, CastExpr):
             return self._local_pkg_address(expr.operand)
+        if isinstance(expr, BinaryExpr):
+            return self._local_pkg_address(expr.left) or self._local_pkg_address(expr.right)
+        if isinstance(expr, TernaryExpr):
+            return (self._local_pkg_address(expr.then_expr)
+                    or self._local_pkg_address(expr.else_expr))
+        if isinstance(expr, IndexExpr):
+            return self._local_pkg_address(expr.base)
+        if isinstance(expr, MemberExpr):
+            return self._local_pkg_address(expr.base)
         return None
 
     def _param_source(self, expr: Optional[ExprNode]) -> Optional[str]:
@@ -1771,6 +1785,13 @@ class Parser:
         if not global_scope:
             self.local_objects.add(name_tok.value)
         self._note_prov(name_tok.value, decl_type, init_expr)
+        pkg_bad = self._local_pkg_address(init_expr)
+        if pkg_bad is not None:
+            if global_scope:
+                raise SemanticError(
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Global initializer for '{name_tok.value}' "
+                    f"cannot store the address of local package target !/{pkg_bad}/!")
+            self.escape_taint[name_tok.value] = pkg_bad
         if isinstance(decl_type, PointerType) and decl_type.is_restrict and name_tok.value in self.prov:
             self.restricted[self.prov[name_tok.value].base] = len(self.scopes) - 1
         return VarDeclStmt(line=name_tok.line, col=name_tok.col, var_type=decl_type,
@@ -1999,9 +2020,11 @@ class Parser:
             prev_cur_name = self.cur_func_name
             prev_escape = self.cur_escape
             prev_restricted = self.restricted
+            prev_taint = self.escape_taint
             self.cur_func_name = name_tok.value
             self.cur_escape = set()
             self.restricted = {}
+            self.escape_taint = {}
             self.func_param_names[name_tok.value] = [pname for _, pname in params]
             self.scopes.append({pname: pt for pt, pname in params})
             for _pt, pname in params:
@@ -2017,6 +2040,7 @@ class Parser:
             self.cur_func_name = prev_cur_name
             self.cur_escape = prev_escape
             self.restricted = prev_restricted
+            self.escape_taint = prev_taint
             self.current_func_ret = prev_ret
             self.current_func_variadic = prev_variadic
             self.prov = prev_prov
@@ -2456,6 +2480,7 @@ class Parser:
                         raise SemanticError(
                             f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local package "
                             f"target !/{pkg_bad}/! into '{lhs.name}' would dangle after this function returns")
+                    self.escape_taint[lhs.name] = pkg_bad
                 if isinstance(lhs, IdentExpr) and isinstance(strip_top_qualifiers(lhs_t), PointerType):
                     self._note_prov(lhs.name, lhs_t, rhs)
                 if self.cur_func_name is not None:
