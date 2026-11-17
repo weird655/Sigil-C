@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.21.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.21.1，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -367,7 +367,8 @@ i4 bad(v.) {
 
 - 只对**全局根**字段做 retains 摘要
 - 局部对象的字段不记 escape，避免 `arena->base = buf` 这类正常代码误报
-- `--build` 先收集全项目 P1 摘要，再注入各文件；跨文件 retains/returns 也能检查
+- `--build` 先收集全项目 P1 摘要，再注入各文件；无指针 API 的文件跳过摘要扫描
+- 跨文件 retains/returns 也能检查
 
 ### 边界
 

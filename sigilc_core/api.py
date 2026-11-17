@@ -761,7 +761,11 @@ def _project_effects(sources_text: Dict[str, str],
     """Collect P1 return/retains effects across project files."""
     effects: Dict[str, Dict[str, Any]] = {}
     for rel, text in sources_text.items():
-        prepared = "\n".join(raw_prototypes.get(rel, [])) + "\n" + text
+        prototypes = raw_prototypes.get(rel, [])
+        # P1 effects only matter when the file exposes a pointer/function-pointer API.
+        if not any(re.search(r"p\d*\*|f\^", proto) for proto in prototypes):
+            continue
+        prepared = "\n".join(prototypes) + "\n" + text
         prepared = re.sub(r"!([A-Za-z_]\w*)\[(\d+)\]!\s*\([^()]*\)", "0", prepared)
         prepared = re.sub(r"!([A-Za-z_]\w*)\[(\d+)\]!", "0", prepared)
         try:
