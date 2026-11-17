@@ -379,10 +379,18 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, TernaryExpr):
         return f"({emit_expr(e.cond)} ? {emit_expr(e.then_expr)} : {emit_expr(e.else_expr)})"
     if isinstance(e, CallExpr):
-        return f"{emit_expr(e.callee)}({', '.join(emit_expr(a) for a in e.args)})"
+        callee = emit_expr(e.callee)
+        if _CHECKED_ARITH:
+            callee = f"SIGIL_NONNULL({callee})"
+        return f"{callee}({', '.join(emit_expr(a) for a in e.args)})"
     if isinstance(e, IndexExpr):
         if e.bound is not None:
             return f"{emit_expr(e.base)}[SIGIL_IDX({emit_expr(e.index)}, {e.bound})]"
+        if _CHECKED_ARITH and isinstance(getattr(e.base, "sem_type", None), PointerType):
+            base = emit_expr(e.base)
+            idx = emit_expr(e.index)
+            return (f"{base}[sigil_cidx((void *)({base}), (uint64_t)({idx}), "
+                    f"sizeof(*({base})), __builtin_object_size(({base}), 0))]")
         return f"{emit_expr(e.base)}[{emit_expr(e.index)}]"
     if isinstance(e, BitSliceExpr):
         base = emit_expr(e.base)
