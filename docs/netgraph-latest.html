@@ -42,7 +42,7 @@ button:hover,select:hover{background:var(--panel-bar);border-color:var(--line-da
 #drop .preset-row{margin-top:14px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
 .node{cursor:pointer;transition:opacity .1s}.node text{font-size:11px;pointer-events:none;user-select:none;font-family:var(--font-term)}
 .node .node-box{stroke-width:1;stroke:var(--line-dark);fill:#ffffff}.node .node-header{stroke-width:1;stroke:var(--line-dark)}
-.node:hover .node-box{stroke:#0284c7;stroke-width:1.5}.node.selected .node-box{stroke:#0284c7;stroke-width:2.5;fill:#f0f9ff}.node.match .node-box{stroke:#d97706;stroke-width:2}.node.dim{opacity:.12}.lod-far .node text{display:none}.lod-far .edge-label{opacity:0!important}
+.node:hover .node-box{stroke:#0284c7;stroke-width:1.5}.node.selected .node-box{stroke:#0284c7;stroke-width:2.5;fill:#f0f9ff}.node.match .node-box{stroke:#d97706;stroke-width:2}.node.dim{opacity:.12}.node.marked .node-box{stroke:#d97706;stroke-width:2.5}.node.marked .node-header{fill:#fef3c7}.star{fill:#d97706;font-size:12px;font-weight:700}.lod-far .node text{display:none}.lod-far .edge-label{opacity:0!important}
 .edge{fill:none;stroke:#64748b;stroke-width:1.3}.edge.hl{stroke:#0284c7;stroke-width:2.2}.edge.dim{opacity:.10}
 @keyframes signalFlow{0%{stroke-dashoffset:24}100%{stroke-dashoffset:0}}
 .edge.pulse{stroke:#0284c7!important;stroke-width:2.4!important;stroke-dasharray:4 3;animation:signalFlow .5s linear infinite}
@@ -70,7 +70,7 @@ button:hover,select:hover{background:var(--panel-bar);border-color:var(--line-da
     </select>
     <button id="fit">[FIT / 适配]</button><button id="reset">[RESET / 重置]</button>
     <button id="fold-all" title="Toggle all namespace folds">[FOLD / 折叠全部]</button>
-    <button id="wire-style">[ORTHO / 正交]</button><button id="wires">[WIRES: OFF]</button><button id="labels">[LABELS / 连线名]</button>
+    <button id="wire-style">[ORTHO / 正交]</button><button id="wires">[WIRES: OFF]</button><button id="live" title="poll netgraph.json (serve over HTTP)">[LIVE: OFF]</button><button id="labels">[LABELS / 连线名]</button>
     <button id="lang-btn">[EN / 中文]</button>
   </div>
 </header>
@@ -225,7 +225,7 @@ function frameFor(kind,title,members,color,key){
   if(key){
     const toggle = ()=>{
       if(collapsedSets.has(key)) collapsedSets.delete(key); else collapsedSets.add(key);
-      draw();fit();
+      draw();fit();scheduleSave();
     };
     bg.ondblclick = toggle; r.ondblclick = toggle; t.ondblclick = toggle;
     bg.title = "double-click to fold"; r.title = "double-click to fold"; t.title = "double-click to fold";
@@ -244,14 +244,58 @@ function updateFilterDisplay(){
   const countBadge=document.getElementById("search-count");if(q){countBadge.textContent=`[${matchCount}/${nodes.length}]`;document.getElementById("search-clear").style.display="inline";}else{countBadge.textContent="";document.getElementById("search-clear").style.display="none";}
   edgeEls.forEach(({p,t,e})=>{const a=byId.get(e.source),b=byId.get(e.target);const vis=a&&b&&!nodeEls.get(a.id)?.classList.contains("dim")&&!nodeEls.get(b.id)?.classList.contains("dim");p.classList.toggle("dim",!vis);t.classList.toggle("dim",!vis);});
 }
+const marked = new Set();
+const STORE_PREFIX = "sigil.graph.v2:";
+let saveTimer = null;
+let liveTimer = null, liveOn = false, lastLivePayload = null;
+let liveUrl = new URLSearchParams(location.search).get("live") || "graph.json";
+let liveFallback = !new URLSearchParams(location.search).get("live");
+function graphKey(g=GRAPH){const k=(g&&(g.project||g.namespace))||"graph";return STORE_PREFIX+k;}
+function loadStore(g=GRAPH){try{return JSON.parse(localStorage.getItem(graphKey(g)))||{};}catch(e){return {};}}
+function saveStore(){
+  if(!nodes.length)return;
+  try{
+    const positions={};nodes.forEach(n=>positions[n.id]=[Math.round(n.x),Math.round(n.y)]);
+    localStorage.setItem(graphKey(),JSON.stringify({
+      collapsed:[...collapsedSets],marks:[...marked].filter(id=>byId.has(id)),positions,
+      view,wireStyle,showStructure,showLabels:document.body.classList.contains("show-labels"),
+      selected:selectedNodeId,lang
+    }));
+  }catch(e){}
+}
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveStore,250);}
+function applyMark(id,on){
+  const g=nodeEls.get(id);if(!g)return;
+  g.classList.toggle("marked",on);
+  const st=g.querySelector(".star");if(st)st.style.display=on?"":"none";
+}
+function toggleMark(id){
+  if(marked.has(id))marked.delete(id);else marked.add(id);
+  applyMark(id,marked.has(id));saveStore();
+  if(selectedNodeId===id)select(id);
+}
+function updateUiFromState(){
+  const w=document.getElementById("wires"),ws=document.getElementById("wire-style"),lv=document.getElementById("live");
+  if(w)w.textContent=showStructure?"[WIRES: ON]":"[WIRES: OFF]";
+  if(ws)ws.textContent=wireStyle==="ortho"?"[ORTHO / 正交]":"[CURVE / 曲线]";
+  document.body.classList.toggle("show-labels",document.body.classList.contains("show-labels"));
+}
 function buildGraph(data){
   if(!data||!Array.isArray(data.objects)||!Array.isArray(data.morphisms))throw new Error("not a netlist graph JSON");
-  GRAPH=data;nodes=data.objects.map((o,i)=>({...o,x:0,y:0,idx:i}));byId=new Map(nodes.map(n=>[n.id,n]));edges=data.morphisms.filter(e=>byId.has(e.source)&&byId.has(e.target));
+  GRAPH=data;
+  const saved=loadStore(data);
+  if(saved.lang==='en'||saved.lang==='zh')lang=saved.lang;
+  if(saved.wireStyle==='bezier'||saved.wireStyle==='ortho')wireStyle=saved.wireStyle;
+  if(typeof saved.showStructure==='boolean')showStructure=saved.showStructure;
+  document.body.classList.toggle("show-labels",Boolean(saved.showLabels));
+  marked.clear();(saved.marks||[]).forEach(id=>marked.add(id));
+  collapsedSets.clear();(saved.collapsed||[]).forEach(k=>collapsedSets.add(k));
+  nodes=data.objects.map((o,i)=>({...o,x:0,y:0,idx:i}));byId=new Map(nodes.map(n=>[n.id,n]));edges=data.morphisms.filter(e=>byId.has(e.source)&&byId.has(e.target));
   adj=new Map(nodes.map(n=>[n.id,{out:[],in:[]}]));edges.forEach((e,i)=>{e.idx=i;adj.get(e.source).out.push(e);adj.get(e.target).in.push(e);});
   nodeEls.clear();edgeEls=[];nodeLayer.replaceChildren();edgeLayer.replaceChildren();document.getElementById("legend").replaceChildren();
   const t = I18N[lang].kinds;
   nodes.forEach(n=>{
-    const g=document.createElementNS("http://www.w3.org/2000/svg","g");g.classList.add("node");g.dataset.id=n.id;
+    const g=document.createElementNS("http://www.w3.org/2000/svg","g");g.classList.add("node");if(marked.has(n.id))g.classList.add("marked");g.dataset.id=n.id;
     const sh=shapeFor(n.kind);n.w=sh.w;n.h=sh.h;
     const box=document.createElementNS("http://www.w3.org/2000/svg","rect");box.classList.add("node-box");box.setAttribute("width",sh.w);box.setAttribute("height",sh.h);
     const hdr=document.createElementNS("http://www.w3.org/2000/svg","rect");hdr.classList.add("node-header");hdr.setAttribute("width",sh.w);hdr.setAttribute("height",sh.hdr);hdr.setAttribute("fill",KIND_HEADER[n.kind]||"#f1f5f9");
@@ -264,7 +308,7 @@ function buildGraph(data){
     const lineOut = "→ " + (outs.length ? [...new Set(outs)].slice(0,2).join(",")+(outs.length>2?` +${outs.length-2}`:"") : "—");
     const ti=document.createElementNS("http://www.w3.org/2000/svg","text");ti.setAttribute("x",8);ti.setAttribute("y",53);ti.setAttribute("fill","#64748b");ti.setAttribute("font-size","8");ti.textContent=lineIn;
     const to=document.createElementNS("http://www.w3.org/2000/svg","text");to.setAttribute("x",8);to.setAttribute("y",65);to.setAttribute("fill","#475569");to.setAttribute("font-size","8");to.textContent=lineOut;
-    g.append(box,hdr,th,tb,ti,to);g.setAttribute("title",lineIn+"  "+lineOut);nodeLayer.append(g);nodeEls.set(n.id,g);
+    const star=document.createElementNS("http://www.w3.org/2000/svg","text");star.classList.add("star");star.setAttribute("x",sh.w-16);star.setAttribute("y",14);star.textContent="★";star.style.display=marked.has(n.id)?"":"none";g.append(box,hdr,th,tb,ti,to,star);g.setAttribute("title",lineIn+"  "+lineOut);nodeLayer.append(g);nodeEls.set(n.id,g);
   });
   edges.forEach((e,i)=>{
     const p=document.createElementNS("http://www.w3.org/2000/svg","path");p.classList.add("edge");p.dataset.idx=i;p.setAttribute("marker-end","url(#arrow)");p.setAttribute("stroke",EDGE_COLOR[e.kind]||"#64748b");
@@ -274,7 +318,12 @@ function buildGraph(data){
   const legend=document.getElementById("legend");
   Object.keys(I18N[lang].kinds).forEach(k=>{if(!nodes.some(n=>n.kind===k))return;const s=document.createElement("span");s.innerHTML=`<i class="dot" style="background:${KIND_HEADER[k]}"></i>${t[k]||k}`;legend.append(s);});
   renderKindFilters();initLayout();
-  draw();fit();startWind();
+  if(saved.positions)nodes.forEach(n=>{const p=saved.positions[n.id];if(Array.isArray(p)){n.x=p[0];n.y=p[1];}});
+  draw();
+  if(saved.view&&Number.isFinite(saved.view.k)){view=saved.view;applyTransform();}else fit();
+  if(saved.selected&&byId.has(saved.selected))select(saved.selected);
+  updateUiFromState();
+  startWind();
 }
 function draw(){
   frames.replaceChildren();
@@ -334,7 +383,7 @@ function draw(){
   nodes.forEach(n=>{const g=nodeEls.get(n.id);const q=proj(n);g.setAttribute("transform",`translate(${q.x-n.w/2},${q.y-n.h/2})`);});
 }
 let view={x:0,y:0,k:1};
-function applyTransform(){viewport.setAttribute("transform",`translate(${view.x},${view.y}) scale(${view.k})`);document.getElementById("zoom-val").textContent=Math.round(view.k*100)+"%";svg.classList.toggle("lod-far",view.k<0.38);}
+function applyTransform(){viewport.setAttribute("transform",`translate(${view.x},${view.y}) scale(${view.k})`);document.getElementById("zoom-val").textContent=Math.round(view.k*100)+"%";svg.classList.toggle("lod-far",view.k<0.38);scheduleSave();}
 function fit(){
   if(!nodes.length){view={x:0,y:0,k:1};applyTransform();return;}
   const visible = nodes.filter(n=>nodeEls.get(n.id)?.style.display!=="none");
@@ -358,24 +407,24 @@ svg.addEventListener("pointermove",ev=>{
   if(drag){drag.n.x=drag.ox+(ev.clientX-drag.dx)/view.k;drag.n.y=drag.oy+(ev.clientY-drag.dy)/view.k;draw();return;}
   if(pan){view.x=pan.vx+ev.clientX-pan.x;view.y=pan.vy+ev.clientY-pan.y;applyTransform();}
 });
-svg.addEventListener("pointerup",()=>{drag=null;pan=null;svg.classList.remove("panning");});
+svg.addEventListener("pointerup",()=>{drag=null;pan=null;svg.classList.remove("panning");scheduleSave();});
 svg.addEventListener("wheel",ev=>{
   ev.preventDefault();const r=svg.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;const k=Math.max(.2,Math.min(3.0,view.k*(ev.deltaY<0?1.12:.89)));
   view.x=mx-(mx-view.x)*k/view.k;view.y=my-(my-view.y)*k/view.k;view.k=k;applyTransform();
 },{passive:false});
-document.getElementById("fit").onclick=fit;document.getElementById("reset").onclick=()=>{initLayout();draw();fit();};document.getElementById("labels").onclick=()=>document.body.classList.toggle("show-labels");
-document.getElementById("wire-style").onclick=function(){wireStyle=(wireStyle==="ortho"?"bezier":"ortho");this.textContent=(wireStyle==="ortho"?"[ORTHO / 正交]":"[CURVE / 曲线]");draw();};
-document.getElementById("wires").onclick=function(){showStructure=!showStructure;this.textContent=showStructure?"[WIRES: ON]":"[WIRES: OFF]";draw();};
+document.getElementById("fit").onclick=fit;document.getElementById("reset").onclick=()=>{initLayout();draw();fit();};document.getElementById("labels").onclick=()=>{document.body.classList.toggle("show-labels");saveStore();};
+document.getElementById("wire-style").onclick=function(){wireStyle=(wireStyle==="ortho"?"bezier":"ortho");this.textContent=(wireStyle==="ortho"?"[ORTHO / 正交]":"[CURVE / 曲线]");draw();saveStore();};
+document.getElementById("wires").onclick=function(){showStructure=!showStructure;this.textContent=showStructure?"[WIRES: ON]":"[WIRES: OFF]";draw();saveStore();};
 document.getElementById("fold-all").onclick=function(){
   const nsList = GRAPH.namespaces || (GRAPH.namespace ? [GRAPH.namespace] : []);
   const allCollapsed = nsList.length && nsList.every(ns=>collapsedSets.has(`ns:${ns}`));
   if(allCollapsed){collapsedSets.clear();} else {nsList.forEach(ns=>collapsedSets.add(`ns:${ns}`));}
-  draw();fit();
+  draw();fit();scheduleSave();
 };
 document.getElementById("lang-btn").onclick=function(){
   lang = (lang==="zh"?"en":"zh");this.textContent = (lang==="zh"?"[EN / 中文]":"[ZH / ENGLISH]");
   document.querySelector("#hint").textContent = I18N[lang].hint;document.querySelector("#panel h2 span").textContent = I18N[lang].inspector;
-  renderKindFilters();draw();if(selectedNodeId) select(selectedNodeId);
+  renderKindFilters();draw();if(selectedNodeId) select(selectedNodeId);saveStore();
 };
 document.getElementById("preset-select").onchange=function(){if(!this.value)return;loadPreset(this.value);this.value="";};
 function loadPreset(key){if(PRESETS[key]){collapsedSets.clear();buildGraph(PRESETS[key]);drop.style.display="none";}}
@@ -386,12 +435,13 @@ function select(id){
   panel.innerHTML=`
     <div class="label">${esc(n.label)}</div>
     <div class="kind">[${(t.kinds[n.kind]||n.kind).toUpperCase()}] · ${esc(n.id)}</div>
-    <div class="actions"><button onclick="focusNode('${esc(n.id)}')">${t.center}</button><button onclick="navigator.clipboard.writeText('${esc(n.id)}');this.textContent='${t.copied}'">${t.copyRef}</button></div>
+    <div class="actions"><button onclick="focusNode('${esc(n.id)}')">${t.center}</button><button onclick="navigator.clipboard.writeText('${esc(n.id)}');this.textContent='${t.copied}'">${t.copyRef}</button><button onclick="toggleMark('${esc(n.id)}')">${marked.has(n.id)?"[UNMARK]":"[MARK]"}</button></div>
     <h2 onclick="toggleSection('out-list')"><span>${t.egress} [${a.out.length}]</span><span id="out-list-btn">[-]</span></h2>
     <ul id="out-list">${a.out.length?a.out.map(e=>`<li onclick="select('${esc(e.target)}')"><b>${esc(e.kind)}</b> -&gt; ${esc(e.target)} <span class="tag">${esc(e.label)}</span></li>`).join(""):`<li style='cursor:default'>${t.none}</li>`}</ul>
     <h2 onclick="toggleSection('in-list')"><span>${t.ingress} [${a.in.length}]</span><span id="in-list-btn">[-]</span></h2>
     <ul id="in-list">${a.in.length?a.in.map(e=>`<li onclick="select('${esc(e.source)}')"><b>${esc(e.kind)}</b> &lt;- ${esc(e.source)} <span class="tag">${esc(e.label)}</span></li>`).join(""):`<li style='cursor:default'>${t.none}</li>`}</ul>
   `;
+  scheduleSave();
 }
 function toggleSection(id){
   const el = document.getElementById(id);const btn = document.getElementById(id+"-btn");
@@ -400,7 +450,7 @@ function toggleSection(id){
   btn.textContent = isC ? "[+]" : "[-]";
 }
 nodeLayer.addEventListener("click",ev=>{const g=ev.target.closest(".node");if(g)select(g.dataset.id);});
-nodeLayer.addEventListener("dblclick",ev=>{const g=ev.target.closest(".node");if(!g)return;const n=byId.get(g.dataset.id);const ns=n&&nsOfNode(n);if(ns){const k=`ns:${ns}`;if(collapsedSets.has(k))collapsedSets.delete(k);else collapsedSets.add(k);draw();fit();}});
+nodeLayer.addEventListener("dblclick",ev=>{const g=ev.target.closest(".node");if(!g)return;const n=byId.get(g.dataset.id);const ns=n&&nsOfNode(n);if(ns){const k=`ns:${ns}`;if(collapsedSets.has(k))collapsedSets.delete(k);else collapsedSets.add(k);draw();fit();scheduleSave();}});
 edgeLayer.addEventListener("click",ev=>{
   const p=ev.target.closest(".edge");if(!p)return;const {e}=edgeEls[+p.dataset.idx];const t=I18N[lang];
   panel.innerHTML=`<div class="label">${t.morphism}</div><div class="kind">[${esc(e.kind)}] · ${esc(e.label)}</div><h2><span>${t.endpoints}</span></h2><ul><li onclick="focusNode('${esc(e.source)}')"><b>${t.source}</b> ${esc(e.source)}</li><li onclick="focusNode('${esc(e.target)}')"><b>${t.target}</b> ${esc(e.target)}</li></ul>`;
@@ -413,6 +463,27 @@ searchInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const hit=searchH
 document.getElementById("search-clear").onclick=()=>{searchInput.value="";searchQuery="";updateFilterDisplay();};
 drop.addEventListener("dragover",ev=>{ev.preventDefault();drop.classList.add("hot");});drop.addEventListener("dragleave",()=>drop.classList.remove("hot"));window.addEventListener("dragover",ev=>{ev.preventDefault();drop.classList.add("hot");});
 window.addEventListener("drop",async ev=>{ev.preventDefault();drop.classList.remove("hot");const file=ev.dataTransfer.files&&ev.dataTransfer.files[0];if(!file)return;try{const data=JSON.parse(await file.text());collapsedSets.clear();buildGraph(data);drop.style.display="none";}catch(err){drop.classList.add("hot");drop.querySelector(".box").innerHTML=`[ DROP_ERR ]<br><small>${esc(err.message)}</small>`;}});
+async function pollLive(){
+  if(!liveOn)return;
+  const btn=document.getElementById("live");
+  try{
+    const sep=liveUrl.includes("?")?"&":"?";
+    const res=await fetch(liveUrl+sep+"t="+Date.now(),{cache:"no-store"});
+    if(!res.ok && liveFallback){liveUrl="netgraph.json";liveFallback=false;return pollLive();}
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    const text=await res.text();
+    if(text!==lastLivePayload){
+      lastLivePayload=text;saveStore();buildGraph(JSON.parse(text));
+    }
+    btn.textContent="[LIVE: ON]";
+  }catch(e){btn.textContent="[LIVE: ERR]";}
+  if(liveOn)liveTimer=setTimeout(pollLive,2500);
+}
+function startLive(){if(liveOn)return;liveOn=true;lastLivePayload=null;document.getElementById("live").textContent="[LIVE: ...]";pollLive();}
+function stopLive(){liveOn=false;clearTimeout(liveTimer);document.getElementById("live").textContent="[LIVE: OFF]";}
+document.getElementById("live").onclick=()=>{if(liveOn)stopLive();else startLive();};
+window.addEventListener("beforeunload",saveStore);
+setTimeout(()=>{if(new URLSearchParams(location.search).get("live"))startLive();},800);
 function startWind(){}
 if(typeof EMBEDDED!=="undefined"&&EMBEDDED&&EMBEDDED.objects&&EMBEDDED.objects.length){buildGraph(EMBEDDED);}
 else{drop.style.display="grid";}
