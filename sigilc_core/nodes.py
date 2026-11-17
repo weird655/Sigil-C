@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
-from .type_system import BaseType, TypeNode, format_c_declarator
+from .type_system import BaseType, PointerType, TypeNode, format_c_declarator
 
 _CHECKED_ARITH = False
 
@@ -349,6 +349,8 @@ def emit_expr(e: ExprNode) -> str:
         return f"SIGIL_ALIGNOF({format_c_declarator(e.target_type)})"
     if isinstance(e, UnaryExpr):
         operand = emit_expr(e.operand)
+        if _CHECKED_ARITH and e.op == "*":
+            return f"(*SIGIL_NONNULL({operand}))"
         if _CHECKED_ARITH and e.op == "-":
             k = _checked_kind(getattr(e, "sem_type", None))
             if k is not None and k[1]:
@@ -356,7 +358,21 @@ def emit_expr(e: ExprNode) -> str:
         return f"({e.op}{operand})"
     if isinstance(e, BinaryExpr):
         left, right = emit_expr(e.left), emit_expr(e.right)
-        checked = checked_binary(e.op, left, right, getattr(e, "sem_type", None))
+        st = getattr(e, "sem_type", None)
+        if _CHECKED_ARITH and isinstance(st, PointerType) and e.op in ("+", "-"):
+            lt = getattr(e.left, "sem_type", None)
+            rt = getattr(e.right, "sem_type", None)
+            if isinstance(lt, PointerType) and not isinstance(rt, PointerType):
+                ptr, num = left, right
+            elif e.op == "+" and isinstance(rt, PointerType) and not isinstance(lt, PointerType):
+                ptr, num = right, left
+            else:
+                ptr, num = "", ""
+            if ptr:
+                elem = f"sizeof(*({ptr}))"
+                return (f"(({format_c_declarator(st)})(sigil_ptr_add((void *)({ptr}), "
+                        f"(ptrdiff_t)({num}), {elem}, __builtin_object_size(({ptr}), 0))))")
+        checked = checked_binary(e.op, left, right, st)
         if checked is not None:
             return checked
         return f"({left} {e.op} {right})"
@@ -375,7 +391,10 @@ def emit_expr(e: ExprNode) -> str:
         uint = slice_uint_type(e.base_type)
         return f"((({uint})({base}) >> {e.offset}) & {slice_mask(e.width)})"
     if isinstance(e, MemberExpr):
-        return f"{emit_expr(e.base)}{'->' if e.is_arrow else '.'}{e.field}"
+        base = emit_expr(e.base)
+        if _CHECKED_ARITH and e.is_arrow:
+            base = f"SIGIL_NONNULL({base})"
+        return f"{base}{'->' if e.is_arrow else '.'}{e.field}"
     raise TypeError(f"Unknown ExprNode: {e}")
 
 

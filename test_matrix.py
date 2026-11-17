@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.24.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.24.2 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2064,7 +2064,7 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 7600, (total, sizes)
+        assert total <= 7800, (total, sizes)
         assert sizes["parser"] <= 2950, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
@@ -3337,6 +3337,10 @@ i4 f1(v.) { r; !/2/!; }
         assert "sigil_add_i4" in compile_source(arr, "arr.sigil", checked=True)
         field = "s{ S { i4 x; };\ni4 main(v.) { o! S s; s.x m, 2147483647; s.x m+ 1; r; s.x; }\n"
         assert "sigil_add_i4" in compile_source(field, "field.sigil", checked=True)
+        nullsrc = "s{ S { i4 x; };\ni4 f(p* S p) { o! i4 y m, p->x; r; y; }\n"
+        assert "SIGIL_NONNULL" in compile_source(nullsrc, "null.sigil", checked=True)
+        ptrsrc = "p* i4 f(v.) { o! i4[4] a; o! p* i4 p m, p@ a[0]; r; p + 2; }\n"
+        assert "sigil_ptr_add" in compile_source(ptrsrc, "ptr.sigil", checked=True)
         work = tempfile.mkdtemp(prefix="checked-")
         c_path = os.path.join(work, "checked.c")
         exe = os.path.join(work, "checked.exe")
