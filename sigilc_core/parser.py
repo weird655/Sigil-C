@@ -646,6 +646,7 @@ class Parser:
                 ft = with_const(ft)
             if parent_is_volatile:
                 ft = with_volatile(ft)
+            setattr(expr, "is_bitfield", self._member_is_bitfield(expr))
             return ft
 
         if isinstance(expr, CallExpr):

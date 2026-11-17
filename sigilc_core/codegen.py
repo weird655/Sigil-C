@@ -314,6 +314,20 @@ class CodeGenerator:
                     t = getattr(s.target, "sem_type", None)
                     if isinstance(s.target, IdentExpr):
                         call = checked_binary(s.op[:-1], target, value, t)
+                    elif isinstance(s.target, MemberExpr) and getattr(s.target, "is_bitfield", False):
+                        bt = getattr(s.target.base, "sem_type", None)
+                        call = checked_binary(s.op[:-1], f"(__sigil_ck_bf_{self._tmp_counter + 1}->{s.target.field})", value, t)
+                        if call is not None:
+                            self._tmp_counter += 1
+                            tmp = f"__sigil_ck_bf_{self._tmp_counter}"
+                            assert bt is not None
+                            base = emit_expr(s.target.base)
+                            if isinstance(bt, PointerType):
+                                self._emit(f"{format_c_declarator(bt)} {tmp} = {base};", s.line, indent)
+                            else:
+                                self._emit(f"{format_c_declarator(bt)} *{tmp} = &({base});", s.line, indent)
+                            self._emit(f"{tmp}->{s.target.field} = {call};", s.line, indent)
+                            call = ""
                     elif isinstance(s.target, (IndexExpr, MemberExpr, UnaryExpr)):
                         call = checked_binary(s.op[:-1], f"(*__sigil_ck_{self._tmp_counter + 1})", value, t)
                         if call is not None:
