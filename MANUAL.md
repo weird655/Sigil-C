@@ -22,7 +22,7 @@
 
 1. 改代码前先提交或备份。
 2. 局部包不离开函数；函数返回后槽会悬垂。
-3. 不把 `!` 当安全边界；它没有借用检查、生命周期或运行时保护。
+3. 不把 `!` 当安全边界；它没有完整借用检查/生命周期，只有 P0 直接/别名逃逸检查和有限的块区域检查。
 
 构建前先检查：
 
@@ -240,7 +240,11 @@ sigilc --netlist src/!math!/core.sigil
 sigilc --fmt src --fmt-check
 ```
 
-生命周期 P0 只拒绝局部包目标地址的直接逃逸（return/全局/参数）；`!<+cat+>! on|off;` 写在 `plant.sigil`，是 plant 容器：管直属 ≤16 个配电箱，并带总闸；`--netlist` 是单文件网表；`--build DIR --netlist` 导出跨文件项目图；`--netlist-format dot|json|mermaid|html|viewer` 导出对象/态射图。2D HTML 是复古 PCB 视图+风场，支持拖拽/缩放/相连信息；`viewer` 是空壳，拖入 JSON 才渲染。跨文件包索引看 `.sigil-build/packages.txt`。
+- 生命周期 P0：拒绝局部包目标地址的直接/别名逃逸（return/全局/参数；cast/算术/三元）
+- `!<+cat+>! on|off;` 写在 `plant.sigil`：plant 容器，管直属 ≤16 个配电箱，并带总闸
+- `--build DIR --netlist`：跨文件项目图，含 plant / file / namespace / uses
+- `--netlist-format text|json|dot|mermaid|html|viewer`：2D HTML 是复古 PCB+风场；`viewer` 是空壳，拖入 JSON 才渲染
+- 跨文件包索引看 `.sigil-build/packages.txt`
 
 ---
 
@@ -249,6 +253,8 @@ sigilc --fmt src --fmt-check
 ### MUST
 
 - 命名空间目录用 `!name!/`，全小写，1–8 字符
+- 每个 `plant.sigil` 管直属 ≤16 个箱；多 plant 可超过全局 16
+- `!<+cat+>!` 只写在 `plant.sigil`
 - 包号 `0–63`，不写前导零
 - 外部调用写 `!math[n]!`，本地写 `!/n/!`
 - 跨文件只导出文件级函数包
@@ -266,7 +272,7 @@ sigilc --fmt src --fmt-check
 
 ### NEVER
 
-- 不要用 `!` 做安全边界或生命周期保证
+- 不要用 `!` 做安全边界；P0 只拦直接/别名逃逸，不是完整生命周期证明
 - 不要把局部包带出函数
 - 不要跨文件访问变量包/局部包
 - 不要嵌套 `!a!/!b!/`
@@ -283,6 +289,8 @@ sigilc --fmt src --fmt-check
 |---|---|
 | B1 `x!` 位域 | `x!` 不校验位域宽度；位域是 ABI 边界时必须自己加断言 |
 | B2 函数/局部同名 | 命名空间函数名不得与局部变量、参数、字段同名；token 改名不区分作用域 |
+| B3 Plant 容器 | 编译期容器；不是运行时隔离，不提供跨 plant 权限 |
+| B4 生命周期 P0 | 只拦直接/别名逃逸；不拦字段/堆/线程/C 边界，不清理别名污染 |
 
 这两条不是 TODO，是当前实现必须承认的限制。
 

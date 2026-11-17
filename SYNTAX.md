@@ -445,7 +445,7 @@ i4 main(v.) {
 - 包是**别名**，不是拷贝；`CCB` 与 `base` 是同一个存储。
 - `!>n<!` 是全局双向：所有 `other` 的使用在解析期改写成 `base`。
 - 文件级目标必须存在；局部目标允许，包槽是全局 `void *`，函数返回后悬垂。
-- 没有栈挤压、没有任意跳转、没有生命周期检查。
+- 没有栈挤压、没有任意跳转；生命周期只有 P0 直接/别名逃逸检查，不是完整生命周期系统。
 
 嵌套：`!2! m, !1!;` 或 `!2! m, !/1/!;` 复制包 1 的绑定；文件级复制目标名，局部级复制槽指针。
 
@@ -572,7 +572,15 @@ error: Landmine '!1!!' already armed at pkg.sigil:2:1 (second bind at pkg.sigil:
 
 ```bash
 python3 sigilc.py wire.sigil --netlist
+python3 sigilc.py wire.sigil --netlist --netlist-format json
+python3 sigilc.py --build src --netlist --netlist-format html -o graph.html
+python3 sigilc.py --build src --netlist --netlist-format json -o graph.json
+python3 sigilc.py --build src --netlist --netlist-format viewer -o viewer.html
 ```
+
+- `text` / `json` / `dot` / `mermaid` / `html` / `viewer`
+- `html` 是自包含 2D PCB 视图（复古 UI、风场、拖拽/缩放）
+- `viewer` 是空壳：打开后把 `json` 拖进去才渲染
 
 输出：
 
@@ -600,6 +608,7 @@ X <- base
 !2! -> f1
 ```
 
+- `[file gate]`：`!<+cat+>! = on/off`（plant.sigil）
 - `[packages]`：文件别名 / 局部槽 / 未绑定
 - `[links]`：`!>n<!` 的别名方向与局部焊接
 - `[groups]`：短集合与长集合展开后的成员
@@ -682,6 +691,73 @@ live frames: [1] main [2] helper
 - 位宽/偏移必须是编译期常量；越界编译期拒绝
 - 浮点不做 `bit` / `bits`
 - v1 的 `expr` 只接受简单变量名；数组元素、结构体字段、解引用目标暂不支持
+
+---
+
+### 5.18 Plant 容器：`!<+cat+>!`
+
+> **v1.17+。** `!<+cat+>!` 不是命名空间引用，也不是单纯总闸；它是 **plant 清单**。
+
+```text
+src/
+  core/
+    plant.sigil          !<+core+>! on;
+    !math!/...
+    !io!/...
+  gpu/
+    plant.sigil          !<+gpu+>! on;
+    !gfx!/...
+```
+
+规则：
+
+- 只能写在 `plant.sigil`；普通箱文件写它，`--build` 报错
+- 一个 plant 管**直属**最多 16 个 `!name!/` 配电箱
+- 多个 plant 可以突破全局 16 个命名空间；箱名仍全项目唯一
+- `on`：plant 下所有箱供电，箱内 `![mask]!` 照常
+- `off`：plant 下所有文件的 `!` 重布线下电，C 代码不受影响
+- 每个 plant 独立；外部不能命名/引用/开关它
+- `cat` 是自由标签，1–18 字节，允许字母/数字/`_`/`.`/`-`，区分大小写
+- 项目图：`plant:<dir>` 节点、`powers` 边、`in-plant` 边
+
+---
+
+### 5.19 生命周期 P0：直接/别名逃逸
+
+> **v1.18+。** 不是借用检查，不要求生命周期标注；只拦局部包目标地址逃逸。
+
+会拒绝：
+
+```sigil
+p* i4 f(v.) {
+    o! i4 x m, 1;
+    !1! m, x;
+    r; p@ !/1/!;          /* 返回局部包目标地址 */
+}
+
+o! p* i4 gp;
+i4 g(v.) {
+    o! i4 x m, 1;
+    !1! m, x;
+    gp m, p@ !/1/!;       /* 存全局 */
+    r; 0;
+}
+```
+
+也会追：
+
+- 局部指针别名：`o! p* i4 q m, p@ !/1/!; r; q;`
+- cast：`(p* i4)(p@ !/1/!)`
+- 指针算术：`p@ !/1/! + 1`
+- 三元：`1 ? p@ !/1/! : 0`
+
+放行：
+
+- `r; !/1/!;`：返回值，不复制地址
+- 目标是函数/文件变量
+- 不逃逸的局部别名
+
+边界：不做调用方 `retains` 摘要、不做字段/堆/线程/`setjmp`、不保证 C 边界；别名污染不因重新赋值清除。详见 [`BOUNDARIES.md`](BOUNDARIES.md) B4。
 
 ---
 

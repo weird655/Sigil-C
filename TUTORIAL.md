@@ -361,10 +361,12 @@ p* i4 bad(v.) {
 | 局部地址存进全局/出参 | 转译期拒绝 |
 | 指针活过它所指向的对象 | 转译期拒绝 |
 | 跨函数逃逸（callee 存参数） | 转译期拒绝 |
+| 局部包目标地址直接/别名逃逸 | 转译期拒绝（P0） |
+| 局部包地址经 cast/算术/三元再返回 | 转译期拒绝（P0） |
 | 常量下标越界 | 转译期拒绝 |
 | `r@` 参数别名 | 转译期拒绝 |
 
-挡不住的：堆、空指针、未初始化、窄化、有符号溢出、跨文件。见 README「它不挡什么」。
+P0 只拦直接/别名逃逸，不拦字段、堆、线程、C 边界。挡不住的：堆、空指针、未初始化、窄化、有符号溢出、跨文件。见 README「它不挡什么」。
 
 参数进来时来源未知，默认**不查也不报**；加 `--strict` 会把「无法证明来源的参数下标/解引用」直接拒掉：
 
@@ -518,6 +520,40 @@ i4 main(v.) {
 ```
 
 记住三条：局部包不离开函数；跨文件只导出函数包；`![...]!` 不是包引用。
+
+### Plant 容器与总闸
+
+```sigil
+/* src/core/plant.sigil */
+!<+core+>! on;
+
+/* src/core/!math!/core.sigil */
+!1! add;
+```
+
+- `plant.sigil` 管直属最多 16 个 `!name!/` 箱
+- 多个 plant 可以超过全局 16 个命名空间
+- `on` 时箱内 `![mask]!` 照常；`off` 时整个 plant 下 `!` 重布线下电
+- 普通箱文件不能写 `!<+cat+>!`；外部不能开关 plant
+
+### 看图
+
+```bash
+# 自包含 2D PCB + 风场
+python3 sigilc.py --build src --netlist --netlist-format html -o graph.html
+
+# 先导 JSON，再拖进空壳
+python3 sigilc.py --build src --netlist --netlist-format json -o graph.json
+python3 sigilc.py --build src --netlist --netlist-format viewer -o viewer.html
+```
+
+打开 `viewer.html`，把 `graph.json` 拖进去才开始渲染。
+
+### 生命周期 P0
+
+只拦局部包目标地址的直接/别名逃逸：`return`、存全局/参数、局部指针别名再返回。
+不要求生命周期标注；`r; !/1/!;` 这种返回值仍然放行。
+
 
 ---
 
