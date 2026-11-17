@@ -1,5 +1,6 @@
 """Human-readable netlist for the !...! rewiring layer (the multimeter)."""
 import json
+import os
 import re
 from typing import Any, Dict, List
 
@@ -125,6 +126,7 @@ def _graph(parser) -> Dict[str, Any]:
 
     return {
         "namespace": ns or None,
+        "namespaces": [ns] if ns else [],
         "objects": list(objects.values()),
         "morphisms": edges,
         "category": {
@@ -136,7 +138,10 @@ def _graph(parser) -> Dict[str, Any]:
 
 
 def render_graph(parser, fmt: str = "json") -> str:
-    g = _graph(parser)
+    return render_graph_data(_graph(parser), fmt)
+
+
+def render_graph_data(g, fmt: str = "json") -> str:
     if fmt == "json":
         return json.dumps(g, ensure_ascii=False, indent=2) + "\n"
     if fmt == "dot":
@@ -165,6 +170,82 @@ def render_graph(parser, fmt: str = "json") -> str:
             lines.append(f'  {ids[e["source"]]} -->|"{_esc(e["label"])}"| {ids[e["target"]]}')
         return "\n".join(lines) + "\n"
     raise ValueError(f"unknown netlist format: {fmt} (use text/dot/json/mermaid)")
+
+
+def merge_project_graphs(root: str, items) -> Dict[str, Any]:
+    """Merge per-file graphs into one project graph with file nodes and uses edges."""
+    project = f"project:{os.path.basename(os.path.abspath(root)) or 'project'}"
+    objects: Dict[str, Dict[str, Any]] = {}
+    raw_edges: List[Dict[str, str]] = []
+    namespaces = set()
+    producer: Dict[tuple, str] = {}
+
+    def obj(oid: str, label: str, kind: str) -> None:
+        objects.setdefault(oid, {"id": oid, "label": label, "kind": kind})
+
+    def edge(src: str, dst: str, kind: str, label: str = "") -> None:
+        raw_edges.append({"source": src, "target": dst, "kind": kind, "label": label or kind})
+
+    def pref(rel: str, oid: str) -> str:
+        if oid.startswith(("ns:", "project:", "file:")):
+            return oid
+        return f"file:{rel}:{oid}"
+
+    obj(project, project, "project")
+
+    # Pass 1: every file/namespace/package exists before uses are resolved.
+    for rel, src, g in items:
+        file_id = f"file:{rel}"
+        obj(file_id, rel, "file")
+        ns = g.get("namespace")
+        if ns:
+            namespaces.add(ns)
+            obj(f"ns:{ns}", f"!{ns}!/", "namespace")
+            edge(file_id, f"ns:{ns}", "in-file", "in file")
+        for o in g.get("objects", []):
+            oid = pref(rel, o["id"])
+            obj(oid, o["label"], o["kind"])
+            if o["kind"] == "package" and ns and o.get("package_id") is not None:
+                producer[(ns, o["package_id"])] = oid
+
+    # Pass 2: graph edges and cross-file uses.
+    for rel, src, g in items:
+        file_id = f"file:{rel}"
+        ns = g.get("namespace")
+        for e in g.get("morphisms", []):
+            edge(pref(rel, e["source"]), pref(rel, e["target"]), e["kind"], e["label"])
+        for m in re.finditer(r"!([a-z][a-z0-9_]*)\[(\d+)\]!", src):
+            target = producer.get((m.group(1), m.group(2)))
+            if target:
+                edge(file_id, target, "uses", m.group(0))
+        if ns:
+            for m in re.finditer(r"!/\s*(\d+)\s*/!", src):
+                target = producer.get((ns, m.group(1)))
+                if target:
+                    edge(file_id, target, "uses-local", f"!/{m.group(1)}/!")
+
+    for ns in sorted(namespaces):
+        edge(f"ns:{ns}", project, "in-project", "in project")
+
+    edges = []
+    seen = set()
+    for e in raw_edges:
+        key = (e["source"], e["target"], e["kind"], e["label"])
+        if key not in seen:
+            seen.add(key)
+            edges.append(e)
+    return {
+        "namespace": None,
+        "namespaces": sorted(namespaces),
+        "project": project,
+        "objects": list(objects.values()),
+        "morphisms": edges,
+        "category": {
+            "objects": len(objects),
+            "morphisms": len(edges),
+            "composition": "files contain namespaces; namespaces contain packages; uses edges cross files",
+        },
+    }
 
 
 def render_netlist(parser) -> str:
@@ -321,11 +402,13 @@ padding:4px 8px;border-radius:6px;border:1px solid var(--line)}
 <script>
 const GRAPH = __GRAPH__;
 const KIND_COLOR = {namespace:"#58a6ff",package:"#3fb950",target:"#d29922",field:"#bc8cff",
-  group:"#ff7b72",gate:"#f0883e",landmine:"#f85149",slot:"#8b949e",alias:"#79c0ff"};
+  group:"#ff7b72",gate:"#f0883e",landmine:"#f85149",slot:"#8b949e",alias:"#79c0ff",
+  file:"#6e7681",project:"#a371f7"};
 const KIND_LABEL = {namespace:"命名空间",package:"包",target:"目标",field:"字段切片",group:"集合/组",
-  gate:"门",landmine:"地雷",slot:"局部槽",alias:"别名"};
+  gate:"门",landmine:"地雷",slot:"局部槽",alias:"别名",file:"文件",project:"工程"};
 const EDGE_COLOR = {in:"#1f6feb",binds:"#3fb950",alias:"#79c0ff",field:"#bc8cff",member:"#ff7b72",
-  gates:"#f0883e",allows:"#f0883e",confined:"#f85149",armed:"#f85149",bound:"#f85149"};
+  gates:"#f0883e",allows:"#f0883e",confined:"#f85149",armed:"#f85149",bound:"#f85149",
+  "in-file":"#6e7681","in-project":"#a371f7",uses:"#ffa657","uses-local":"#ffa657"};
 const svg=document.getElementById("svg"), viewport=document.getElementById("viewport");
 const frames=document.getElementById("frames"), edgeLayer=document.getElementById("edges"), nodeLayer=document.getElementById("nodes");
 const panel=document.getElementById("detail"), stats=document.getElementById("stats");
@@ -334,11 +417,11 @@ const byId=new Map(nodes.map(n=>[n.id,n]));
 const edges=GRAPH.morphisms.filter(e=>byId.has(e.source)&&byId.has(e.target));
 const adj=new Map(nodes.map(n=>[n.id,{out:[],in:[]}]));
 edges.forEach((e,i)=>{e.idx=i;adj.get(e.source).out.push(e);adj.get(e.target).in.push(e);});
-stats.textContent=`${nodes.length} objects · ${edges.length} morphisms · ${GRAPH.namespace||"no namespace"}`;
+stats.textContent=`${nodes.length} objects · ${edges.length} morphisms · ${GRAPH.project ? (GRAPH.namespaces||[]).length+" namespaces" : (GRAPH.namespace||"no namespace")}`;
 
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function initLayout(){
-  const rank={namespace:0,group:1,gate:1,landmine:2,package:3,field:4,alias:4,slot:5,target:6};
+  const rank={project:-1,file:0,namespace:1,group:2,gate:2,landmine:3,package:4,field:5,alias:5,slot:6,target:7};
   const cols={}; nodes.forEach(n=>{const c=rank[n.kind]??4;(cols[c]=cols[c]||[]).push(n);});
   Object.keys(cols).forEach(c=>{cols[c].sort((a,b)=>a.label.localeCompare(b.label));});
   nodes.forEach(n=>{const c=rank[n.kind]??4;const arr=cols[c],row=arr.indexOf(n);n.x=110+c*175;n.y=90+row*82;});
@@ -383,10 +466,24 @@ function frameFor(kind,title,members,color){
 
 function draw(){
   frames.replaceChildren();
-  const ns=GRAPH.namespace;if(ns){
-    const m=nodes.filter(n=>n.kind==="package"||n.kind==="target"||n.kind==="field");
+  const nsList = GRAPH.namespaces || (GRAPH.namespace ? [GRAPH.namespace] : []);
+  nsList.forEach(ns=>{
+    const nsNode=`ns:${ns}`;
+    const ids=new Set(nodes.filter(n=>n.kind!=="file"&&n.kind!=="project"&&
+      edges.some(e=>e.target===nsNode&&e.source===n.id)).map(n=>n.id));
+    let changed=true;
+    while(changed){
+      changed=false;
+      edges.forEach(e=>{
+        if(ids.has(e.source)&&!ids.has(e.target)&&
+           ["binds","field","alias","local-alias"].includes(e.kind)){
+          ids.add(e.target);changed=true;
+        }
+      });
+    }
+    const m=nodes.filter(n=>ids.has(n.id));
     frameFor("namespace",`set: !${ns}!/`,m,KIND_COLOR.namespace);
-  }
+  });
   nodes.filter(n=>n.kind==="group").forEach(g=>{
     const m=edges.filter(e=>e.source===g.id&&e.kind==="member").map(e=>byId.get(e.target)).filter(Boolean);
     frameFor("group",`set: ${g.label}`,m,KIND_COLOR.group);

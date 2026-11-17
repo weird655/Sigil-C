@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from .codegen import CodeGenerator
 from .lexer import EXTERNAL_C_SPELLING, SIGIL_KEYWORDS, SIGIL_OPERATORS, Lexer, LexerError
-from .netlist import render_graph, render_netlist
+from .netlist import merge_project_graphs, render_graph, render_graph_data, render_netlist
 from .nodes import EnumDefNode, ExternalTypeNode, FuncDefNode, ParseError, SemanticError, StructDefNode, VarDeclStmt
 from .parser import Parser
 
@@ -44,6 +44,33 @@ def netlist_source(src: str, filename: str = "input.sigil",
     parser = Parser(tokens, filename, defines, strict_provenance=strict)
     parser.parse_program()
     return render_netlist(parser) if format == "text" else render_graph(parser, format)
+
+def project_netlist_source(root: str, defines: Optional[Dict[str, str]] = None,
+                           strict: bool = False, format: str = "json") -> str:
+    """Merge every .sigil under root into one project graph."""
+    sources = _collect_sources(root)
+    if not sources:
+        raise ValueError(f"no .sigil files under '{root}'")
+    items = []
+    for src_path in sources:
+        rel = os.path.relpath(src_path, root)
+        with open(src_path, "r", encoding="utf-8") as f:
+            src = f.read()
+        # The single-file parser does not know !math[n]!; replace external
+        # calls with 0 for structural parsing. The original src still feeds
+        # the uses edges and file labels.
+        parse_src = re.sub(r"!([a-z][a-z0-9_]*)\[(\d+)\]!\s*\([^()]*\)", "0", src)
+        parse_src = re.sub(r"!([a-z][a-z0-9_]*)\[(\d+)\]!", "0", parse_src)
+        parse_src = re.sub(r"!/\s*(\d+)\s*/!\s*\([^()]*\)", "0", parse_src)
+        items.append((rel, src, json.loads(netlist_source(
+            parse_src, rel, defines, strict, format="json"))))
+    if format == "text":
+        parts = [f"# project: {os.path.abspath(root)}"]
+        for rel, src, _ in items:
+            parts.append(f"\n# file: {rel}\n{netlist_source(src, rel, defines, strict, format='text')}")
+        return "\n".join(parts)
+    return render_graph_data(merge_project_graphs(root, items), format)
+
 
 def _header_guard(header_name: str) -> str:
     base = os.path.basename(header_name).upper()

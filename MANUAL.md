@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.13.0**
+**版本：v1.14.0**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -240,7 +240,7 @@ sigilc --netlist src/!math!/core.sigil
 sigilc --fmt src --fmt-check
 ```
 
-`--netlist` 是单文件网表；`--netlist-format dot|json|mermaid|html` 导出对象/态射图，HTML 可拖拽/缩放/看相连信息；跨文件包索引看 `.sigil-build/packages.txt`。
+`--netlist` 是单文件网表；`--build DIR --netlist` 导出跨文件项目图；`--netlist-format dot|json|mermaid|html` 导出对象/态射图，HTML 可拖拽/缩放/看相连信息；跨文件包索引看 `.sigil-build/packages.txt`。
 
 ---
 

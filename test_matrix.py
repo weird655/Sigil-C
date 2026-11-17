@@ -19,6 +19,7 @@ from sigilc import (
     compile_source,
     format_c_declarator,
     netlist_source,
+    project_netlist_source,
 )
 
 
@@ -69,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.13 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.14 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3111,6 +3112,25 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("62. html viewer", "standalone HTML net graph with drag, zoom, detail panel and set frames", test_html_netlist)
 
+    # Layer 63: cross-file project graph
+    def test_project_graph():
+        work = tempfile.mkdtemp(prefix="projgraph-")
+        os.makedirs(os.path.join(work, "!math!"))
+        os.makedirs(os.path.join(work, "!main!"))
+        with open(os.path.join(work, "!math!", "a.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 add(i4 a, i4 b) { r; a + b; }\n!1! P;\n!1! m, add;\n")
+        with open(os.path.join(work, "!main!", "m.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { r; !math[1]!(2, 3); }\n")
+        data = json.loads(project_netlist_source(work, format="json"))
+        assert data["namespaces"] == ["main", "math"], data["namespaces"]
+        assert data["project"].startswith("project:")
+        assert any(o["kind"] == "file" for o in data["objects"])
+        assert any(m["kind"] == "uses" for m in data["morphisms"])
+        html = project_netlist_source(work, format="html")
+        assert '"namespaces"' in html and "project:" in html and "uses" in html
+
+    assert_ok("63. project graph", "cross-file graph merges files/namespaces and adds uses edges", test_project_graph)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3118,7 +3138,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 62-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 63-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

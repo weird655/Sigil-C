@@ -1,6 +1,6 @@
 """Sigil-C compiler package: lexer, types, AST, parser, codegen, API, CLI."""
 
-from .api import check_source, compile_header, compile_source, format_source, netlist_source
+from .api import check_source, compile_header, compile_source, format_source, netlist_source, project_netlist_source
 from .cli import cli, main
 from .codegen import CodeGenerator
 from .lexer import (
@@ -188,6 +188,7 @@ __all__ = [
     "compile_header",
     "compile_source",
     "netlist_source",
+    "project_netlist_source",
     "format_source",
     "cli",
     "main",

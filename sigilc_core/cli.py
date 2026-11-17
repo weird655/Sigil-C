@@ -16,6 +16,7 @@ from .api import (
     compile_header,
     compile_source,
     netlist_source,
+    project_netlist_source,
 )
 from .lexer import LexerError
 from .nodes import ParseError, SemanticError
@@ -86,6 +87,20 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.init is not None:
         return _init_project(args.init, args.force)
+
+    if args.build is not None and args.netlist:
+        try:
+            out = project_netlist_source(args.build, defines, args.strict, args.netlist_format)
+        except (LexerError, ParseError, SemanticError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        if args.output_opt:
+            with open(args.output_opt, "w", encoding="utf-8", newline="\n") as f:
+                f.write(out)
+            print(f"Netlist   {args.output_opt}")
+        else:
+            sys.stdout.write(out)
+        return 0
 
     if args.build is not None:
         if args.header:
