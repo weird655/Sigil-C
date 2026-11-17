@@ -474,6 +474,11 @@ class Parser:
             raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed overflow")
 
     def _infer_expr_type(self, expr: ExprNode) -> TypeNode:
+        t = self._infer_expr_type_impl(expr)
+        setattr(expr, "sem_type", t)
+        return t
+
+    def _infer_expr_type_impl(self, expr: ExprNode) -> TypeNode:
         if isinstance(expr, CompoundLiteral):
             return expr.target_type
         if isinstance(expr, VaArgExpr):

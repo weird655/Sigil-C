@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.23 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.24 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3326,6 +3326,26 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("70. const UB", "constant signed overflow, invalid shifts, division/modulo by zero are rejected", test_const_ub)
 
+    # Layer 71: checked C generation
+    def test_checked_c():
+        src = "i4 main(v.) { o! i4 a m, 2147483647; a m+ 1; r; a; }\n"
+        checked = compile_source(src, "checked.sigil", checked=True)
+        for needle in ("sigil_add_i4", "sigil_div_i4", "sigil_shl_i4", "sigil_f2i_i4"):
+            assert needle in checked, needle
+        assert "sigil_add_i4" not in compile_source(src, "unchecked.sigil")
+        work = tempfile.mkdtemp(prefix="checked-")
+        c_path = os.path.join(work, "checked.c")
+        exe = os.path.join(work, "checked.exe")
+        with open(c_path, "w", encoding="utf-8") as f:
+            f.write(checked)
+        cc = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+                             c_path, "-o", exe], capture_output=True, text=True)
+        assert cc.returncode == 0, cc.stderr[-800:]
+        run = subprocess.run([exe], capture_output=True, text=True)
+        assert run.returncode != 0
+
+    assert_ok("71. checked C", "checked arithmetic emits helper calls and traps signed overflow", test_checked_c)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3333,7 +3353,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 70-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 71-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

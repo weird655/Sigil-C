@@ -4,6 +4,17 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.24.0] - 2026-11-16
+
+* 新增 `--checked`：生成 checked C helper。
+* 覆盖 i1/i2/i4/i8/u1/u2/u4/u8 的有符号 + - *、负号、除/模、移位。
+* 覆盖 `(i4)float` 等浮转整；简单 `a m+ 1` 复合赋值也走 helper。
+* helper 用 GCC/Clang `__builtin_*_overflow`；失败 `SIGIL_TRAP()`。
+* 第 71 层：生成 helper、编译、运行时 signed overflow abort。
+* 230 项 / 71 层；`--checked` 非默认，C 边界/复杂 lvalue 仍不保证。
+
+---
+
 ## [1.23.0] - 2026-11-16
 
 * 常量 UB 编译期拒绝：signed + - * 溢出、除零、`INT_MIN/-1`、非法移位。

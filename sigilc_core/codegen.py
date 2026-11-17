@@ -14,6 +14,7 @@ from .nodes import (
     ForStmt,
     FuncDefNode,
     GotoStmt,
+    IdentExpr,
     IfStmt,
     JumpStmt,
     LabelStmt,
@@ -27,11 +28,13 @@ from .nodes import (
     VarDeclStmt,
     VaStmt,
     WhileStmt,
+    checked_binary,
     emit_expr,
+    set_checked_arith,
     slice_mask,
     slice_uint_type,
 )
-from .preamble import C99_HEADER, C99_HEADER_BODY
+from .preamble import C99_HEADER, C99_HEADER_BODY, CHECKED_HEADER
 from .type_system import ArrayType, BaseType, PointerType, format_c_declarator
 
 
@@ -53,7 +56,7 @@ class CodeGenerator:
                  prelude_include: Optional[str] = None, bounds_check: bool = False,
                  cli_defines: Optional[Dict[str, str]] = None,
                  line_directives: bool = True, trap_trace: bool = False,
-                 shadow_stack: bool = False, namespace: str = ""):
+                 shadow_stack: bool = False, namespace: str = "", checked_arith: bool = False):
         self.safe_filename = filename.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '')
         self.line_directives = line_directives
         self.header_mode = header_mode
@@ -61,6 +64,7 @@ class CodeGenerator:
         self.bounds_check = bounds_check
         self.trap_trace = trap_trace
         self.shadow_stack = shadow_stack
+        self.checked_arith = checked_arith
         self.namespace = namespace
         self.cli_defines = cli_defines or {}
         self.lines: List[str] = []
@@ -90,8 +94,11 @@ class CodeGenerator:
             self.lines.append(f"#ifndef {name}\n#define {name} {value}\n#endif\n")
 
     def generate(self, nodes: List[StmtNode]) -> str:
+        set_checked_arith(self.checked_arith)
         if self.bounds_check:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
+        if self.checked_arith:
+            self.lines.append("#define SIGIL_CHECKED_ARITH 1\n")
         if self.trap_trace:
             self.lines.append("#define SIGIL_TRAP_TRACE 1\n")
         if self.shadow_stack:
@@ -100,6 +107,8 @@ class CodeGenerator:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
             self.lines.append(C99_HEADER)
+        if self.checked_arith:
+            self.lines.append(CHECKED_HEADER)
         self._emit_cli_defines()
         for node in nodes:
             self.gen_top(node)
@@ -110,6 +119,8 @@ class CodeGenerator:
         self.lines.append(f"#ifndef {guard}\n#define {guard}\n\n")
         if self.bounds_check:
             self.lines.append("#define SIGIL_BOUNDS_CHECK 1\n")
+        if self.checked_arith:
+            self.lines.append("#define SIGIL_CHECKED_ARITH 1\n")
         if self.prelude_include:
             self.lines.append(f'#include "{self.prelude_include}"\n')
         else:
@@ -292,7 +303,15 @@ class CodeGenerator:
             if isinstance(s.target, BitSliceExpr):
                 self._emit_slice_assign(s, indent)
             else:
-                self._emit(f"{emit_expr(s.target)} {s.op} {emit_expr(s.value)};", s.line, indent)
+                target = emit_expr(s.target)
+                value = emit_expr(s.value)
+                call = None
+                if self.checked_arith and isinstance(s.target, IdentExpr) and s.op != "=":
+                    call = checked_binary(s.op[:-1], target, value, getattr(s.target, "sem_type", None))
+                if call is not None:
+                    self._emit(f"{target} = {call};", s.line, indent)
+                else:
+                    self._emit(f"{target} {s.op} {value};", s.line, indent)
         elif isinstance(s, ExprStmt):
             self._emit(f"{emit_expr(s.expr)};", s.line, indent)
         elif isinstance(s, ReturnStmt):

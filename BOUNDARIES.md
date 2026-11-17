@@ -1,6 +1,6 @@
 # 规范前强边界
 
-**版本：v1.23.0**
+**版本：v1.24.0**
 
 > 这些不是建议，是当前实现的**硬边界**。在正式规范冻结之前，按此使用；越过边界，编译器不替你兜底。
 
@@ -93,8 +93,11 @@ P0 不是完整生命周期系统：
 `--ub-check` 只对 `--build` 生效：
 
 - 追加 `-fsanitize=undefined -fno-sanitize-recover=all -ftrapv`
+- `--checked` 为 i1/i2/i4/i8/u1/u2/u4/u8 生成 checked C helper
 - 常量有符号溢出、除零、移位越界在编译期拒绝
 - 能在运行时抓住：非常量的有符号溢出、除零、移位越界、浮转整越界等
+- `--checked` 依赖 GCC/Clang `__builtin_*_overflow`；其他 C 编译器不支持
+- `--checked` 只覆盖简单左值复合赋值；复杂 lvalue 仍可能绕过
 - 不改变生成 C 的语义，也不做编译期证明
 - 未覆盖：越界/悬垂之外的 C UB、外部 C、线程、信号、`setjmp`
 - 单文件输出需自己给 C 编译器加 sanitizer 参数

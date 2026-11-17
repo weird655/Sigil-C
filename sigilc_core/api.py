@@ -18,7 +18,7 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
                    line_directives: bool = True, strict: bool = False,
                    trap_trace: bool = False, shadow_stack: bool = False, namespace: str = "",
-                   effects: Optional[Dict[str, Any]] = None) -> str:
+                   effects: Optional[Dict[str, Any]] = None, checked: bool = False) -> str:
     if trap_trace and shadow_stack:
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
@@ -27,7 +27,7 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives,
                          trap_trace=trap_trace, shadow_stack=shadow_stack,
-                         namespace=namespace).generate(ast)
+                         namespace=namespace, checked_arith=checked).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None,
                  strict: bool = False) -> None:
@@ -1048,7 +1048,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict,
-                                   effects=effects)
+                                   effects=effects, checked=getattr(args, "checked", False))
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, rel, src)
             return 1

@@ -3,7 +3,46 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
-from .type_system import TypeNode, format_c_declarator
+from .type_system import BaseType, TypeNode, format_c_declarator
+
+_CHECKED_ARITH = False
+
+def set_checked_arith(on: bool) -> None:
+    global _CHECKED_ARITH
+    _CHECKED_ARITH = on
+
+_CHECK_TYPES = {
+    "i1": ("i1", True), "int8_t": ("i1", True),
+    "i2": ("i2", True), "int16_t": ("i2", True),
+    "i4": ("i4", True), "int32_t": ("i4", True),
+    "i8": ("i8", True), "int64_t": ("i8", True),
+    "u1": ("u1", False), "uint8_t": ("u1", False),
+    "u2": ("u2", False), "uint16_t": ("u2", False),
+    "u4": ("u4", False), "uint32_t": ("u4", False),
+    "u8": ("u8", False), "uint64_t": ("u8", False),
+}
+
+
+def _checked_kind(t) -> Optional[Tuple[str, bool]]:
+    return _CHECK_TYPES.get(t.c_name) if isinstance(t, BaseType) else None
+
+def checked_binary(op: str, left: str, right: str, t) -> Optional[str]:
+    if not _CHECKED_ARITH:
+        return None
+    k = _checked_kind(t)
+    if k is None:
+        return None
+    suf, signed = k
+    if op in ("+", "-", "*") and signed:
+        name = {"+": "add", "-": "sub", "*": "mul"}[op]
+        return f"sigil_{name}_{suf}({left}, {right})"
+    if op in ("/", "%"):
+        name = {"/": "div", "%": "mod"}[op]
+        return f"sigil_{name}_{suf}({left}, {right})"
+    if op in ("<<", ">>"):
+        name = {"<<": "shl", ">>": "shr"}[op]
+        return f"sigil_{name}_{suf}({left}, {right})"
+    return None
 
 
 @dataclass
@@ -294,7 +333,13 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, IdentExpr):
         return e.name
     if isinstance(e, CastExpr):
-        return f"(({format_c_declarator(e.target_type)})({emit_expr(e.operand)}))"
+        operand = emit_expr(e.operand)
+        if _CHECKED_ARITH:
+            k = _checked_kind(e.target_type)
+            src = getattr(e.operand, "sem_type", None)
+            if k is not None and isinstance(src, BaseType) and src.c_name in ("float", "double", "long double", "f4", "f8"):
+                return f"sigil_f2i_{k[0]}((double)({operand}))"
+        return f"(({format_c_declarator(e.target_type)})({operand}))"
     if isinstance(e, SizeofExpr):
         if e.target_type is not None:
             return f"sizeof({format_c_declarator(e.target_type)})"
@@ -303,9 +348,18 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, AlignofExpr):
         return f"SIGIL_ALIGNOF({format_c_declarator(e.target_type)})"
     if isinstance(e, UnaryExpr):
-        return f"({e.op}{emit_expr(e.operand)})"
+        operand = emit_expr(e.operand)
+        if _CHECKED_ARITH and e.op == "-":
+            k = _checked_kind(getattr(e, "sem_type", None))
+            if k is not None and k[1]:
+                return f"sigil_neg_{k[0]}({operand})"
+        return f"({e.op}{operand})"
     if isinstance(e, BinaryExpr):
-        return f"({emit_expr(e.left)} {e.op} {emit_expr(e.right)})"
+        left, right = emit_expr(e.left), emit_expr(e.right)
+        checked = checked_binary(e.op, left, right, getattr(e, "sem_type", None))
+        if checked is not None:
+            return checked
+        return f"({left} {e.op} {right})"
     if isinstance(e, TernaryExpr):
         return f"({emit_expr(e.cond)} ? {emit_expr(e.then_expr)} : {emit_expr(e.else_expr)})"
     if isinstance(e, CallExpr):
