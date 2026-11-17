@@ -126,6 +126,7 @@ class Parser:
         self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str], Dict[str, Tuple[str, int]]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         self.pending_pkg_calls: List[Tuple[str, List[Optional[str]], int, int]] = []
+        self.pending_pkg_ret_calls: List[Tuple[str, List[Optional[str]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
         self.escape_taint: Dict[str, str] = {}
@@ -870,6 +871,19 @@ class Parser:
     def _target_is_global(self, lhs: ExprNode) -> bool:
         return isinstance(lhs, IdentExpr) and lhs.name in self.scopes[0] and lhs.name not in self.local_objects
 
+    def _target_roots_global(self, lhs: ExprNode) -> bool:
+        if isinstance(lhs, IdentExpr):
+            return self._target_is_global(lhs)
+        if isinstance(lhs, MemberExpr):
+            return self._target_roots_global(lhs.base)
+        if isinstance(lhs, IndexExpr):
+            return self._target_roots_global(lhs.base)
+        if isinstance(lhs, UnaryExpr) and lhs.op == '*':
+            return self._target_roots_global(lhs.operand)
+        if isinstance(lhs, CastExpr):
+            return self._target_roots_global(lhs.operand)
+        return False
+
     def _check_restricted_base(self, expr: ExprNode) -> None:
         if isinstance(expr, IdentExpr) and expr.name in self.restricted:
             if self.restricted[expr.name] < len(self.scopes):
@@ -894,6 +908,18 @@ class Parser:
                     raise SemanticError(
                         f"{self.filename}:{line}:{col}: local package !/{pid}/! is passed to "
                         f"'{fname}' argument {idx + 1}, but that argument escapes the call")
+        for fname, taints, line, col in self.pending_pkg_ret_calls:
+            summary = self.func_summaries.get(fname)
+            if fname not in self.func_defined or summary is None or summary.unknown:
+                raise SemanticError(
+                    f"{self.filename}:{line}:{col}: cannot prove '{fname}' does not return a local package address")
+            for idx, pid in enumerate(taints):
+                if pid is None:
+                    continue
+                if any(r.param == idx for r in summary.returns):
+                    raise SemanticError(
+                        f"{self.filename}:{line}:{col}: local package !/{pid}/! is passed to '{fname}' argument "
+                        f"{idx + 1} and returned by the callee")
         for fname, provs, line, col in self.pending_calls:
             sig = self.func_sigs.get(fname)
             if sig is None:
@@ -2514,7 +2540,7 @@ class Parser:
                     self._note_prov(lhs.name, lhs_t, rhs)
                 if self.cur_func_name is not None:
                     src = self._param_source(rhs)
-                    if src is not None and self._target_is_global(lhs):
+                    if src is not None and self._target_roots_global(lhs):
                         self.cur_escape.add(src)
             else:
                 self._check_compound_assign_types(op_tok.kind, lhs_t, rhs_t, op_tok)
@@ -2767,11 +2793,9 @@ class Parser:
                     self.pending_calls.append(
                         (node.name, [(a, self._prov_of(a)) for a in args], node.line, node.col))
                     if any(t is not None for t in taints):
-                        if isinstance(strip_top_qualifiers(self.func_sigs[node.name][1]), PointerType):
-                            raise SemanticError(
-                                f"{self.filename}:{node.line}:{node.col}: call to '{node.name}' returns a pointer "
-                                f"and may return the local package address")
                         self.pending_pkg_calls.append((node.name, taints, node.line, node.col))
+                        if isinstance(strip_top_qualifiers(self.func_sigs[node.name][1]), PointerType):
+                            self.pending_pkg_ret_calls.append((node.name, taints, node.line, node.col))
                 elif any(t is not None for t in taints):
                     raise SemanticError(
                         f"{self.filename}:{node.line}:{node.col}: cannot prove indirect call does not retain a local package address")

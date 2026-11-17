@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.19.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.20 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3257,7 +3257,7 @@ i4 f1(v.) { r; !/2/!; }
             ("i4 f(f^(p* i4) -> i4 cb) { o! i4 x m, 1; !1! m, x; cb(p@ !/1/!); r; 0; }",
              "indirect call"),
             ("p* i4 id(p* i4 q) { r; q; }\np* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; id(p@ !/1/!); }",
-             "returns a pointer"),
+             "returned by the callee"),
         ]
         for src, needle in bad:
             try:
@@ -3269,6 +3269,27 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("67. lifecycle sinks", "P0 rejects retaining calls and field/aggregate pointer sinks", test_lifecycle_sinks)
 
+    # Layer 68: P1 return/retains summaries
+    def test_lifecycle_p1():
+        safe = ("p* i4 choose(p* i4 a, p* i4 b) { r; b; }\n"
+                "p* i4 f(v.) { o! i4 x m, 1; o! i4 y m, 2; !1! m, x; r; choose(p@ !/1/!, p@ y); }")
+        assert check_source(safe, "life.sigil") is None
+        bad = [
+            ("p* i4 id(p* i4 q) { r; q; }\np* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; id(p@ !/1/!); }",
+             "returned by the callee"),
+            ("s{ S { p* i4 p; };\no! S gs;\nv. keep(p* i4 q) { gs.p m, q; }\ni4 f(v.) { o! i4 x m, 1; !1! m, x; keep(p@ !/1/!); r; 0; }",
+             "escapes the call"),
+        ]
+        for src, needle in bad:
+            try:
+                check_source(src, "life.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("expected P1 summary rejection: " + src)
+
+    assert_ok("68. lifecycle P1", "returned-parameter and field-retains summaries drive P1 call checks", test_lifecycle_p1)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3276,7 +3297,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 67-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 68-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
