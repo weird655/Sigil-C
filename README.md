@@ -74,12 +74,12 @@ python3 dist/sigilc.pyz --version
 ## KK
 | 项 | 口径 |
 |---|---|
-| 版本 | 1.10.3 |
+| 版本 | 1.11.0 |
 | Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
 | libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
 | 支持范围 | 缺陷修复、文档、C99 完备性、函数级多文件；不加新语言记号 |
-| 命名预算 | 16 个命名空间；每空间 64 个包（0–63）；每空间 32 个函数包导出 |
+| 命名预算 | 16 个命名空间；每空间 64 个包（0–63）；每空间 64 个函数包导出 |
 | 不做 | GC、借用检查、包管理、运行时、安全认证、跨文件分析 |
 | 退出路径 | 生成的 C99 + `#line` 可独立编译、交付、修改 |
 | 性能目标 | 生成的 C 不拖后腿；不是“比 C 快”，先量再改，见 [`BENCHMARKS.md`](BENCHMARKS.md) |
@@ -636,7 +636,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.10.3**，tag `v1.10.3` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.10.3) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 又称 **Sunberry-C**；版本 **1.11.0**，tag `v1.11.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.11.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
 - 219 项测试 / 60 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。

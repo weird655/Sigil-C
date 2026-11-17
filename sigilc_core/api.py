@@ -643,7 +643,7 @@ _PROJECT_NS_RE = re.compile(r"^[a-z][a-z0-9_]{0,7}$")
 _PROJECT_MAX_NAMESPACES = 16
 _PROJECT_MAX_PACKAGES = 64
 _PROJECT_MAX_PACKAGE_ID = 63
-_PROJECT_MAX_EXPORTS = 32
+_PROJECT_MAX_EXPORTS = 64
 
 
 def _project_package_ids(src: str) -> List[str]:
