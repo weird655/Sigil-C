@@ -23,7 +23,8 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename, defines, strict_provenance=strict, effects=effects).parse_program()
+    ast = Parser(tokens, filename, defines, strict_provenance=strict, effects=effects,
+                checked=checked).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives,
                          trap_trace=trap_trace, shadow_stack=shadow_stack,

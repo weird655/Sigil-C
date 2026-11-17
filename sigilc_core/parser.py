@@ -91,9 +91,11 @@ from .type_system import (
 class Parser:
     def __init__(self, tokens: List[Token], filename: str = "<input>",
                  defines: Optional[Dict[str, str]] = None,
-                 strict_provenance: bool = False, effects: Optional[Dict[str, Any]] = None):
+                 strict_provenance: bool = False, effects: Optional[Dict[str, Any]] = None,
+                 checked: bool = False):
         self.tokens = tokens
         self.strict_provenance = strict_provenance
+        self.checked = checked
         self.pos = 0
         self.filename = filename
         self.user_types: Dict[str, str] = {}
@@ -689,6 +691,10 @@ class Parser:
                 if self._is_numeric_type(lt) and self._is_numeric_type(rt):
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
                 if isinstance(lt, PointerType) and isinstance(rt, PointerType) and not is_void_type(lt.pointee) and types_equal(strip_top_qualifiers(lt.pointee), strip_top_qualifiers(rt.pointee)):
+                    if self.checked:
+                        raise SemanticError(
+                            f"{self.filename}:{expr.line}:{expr.col}: pointer relational comparison is "
+                            f"undefined unless both pointers are in the same array; checked mode rejects it")
                     return BaseType(line=expr.line, col=expr.col, c_name='bool')
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Invalid operands to relational operator '{op}'")
             if op == '+':
@@ -713,6 +719,10 @@ class Parser:
                 if isinstance(lt, PointerType) and isinstance(rt, PointerType):
                     if not self._is_complete_object_type(lt.pointee) or not types_equal(strip_top_qualifiers(lt.pointee), strip_top_qualifiers(rt.pointee)):
                         raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Pointer subtraction requires pointers to compatible complete object types")
+                    if self.checked:
+                        raise SemanticError(
+                            f"{self.filename}:{expr.line}:{expr.col}: pointer subtraction is undefined unless "
+                            f"both pointers are in the same array; checked mode rejects it")
                     return BaseType(line=expr.line, col=expr.col, c_name='ptrdiff_t')
                 raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Invalid operands to binary '-'")
             if op in ('*', '/'):

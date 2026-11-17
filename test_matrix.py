@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.24.5 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.25 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3362,6 +3362,22 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("71. checked C", "checked arithmetic emits helper calls and traps signed overflow", test_checked_c)
 
+    # Layer 72: checked pointer UB policy
+    def test_checked_pointer_policy():
+        bad = [
+            "i4 f(p* i4 p, p* i4 q) { r; (i4)(p - q); }",
+            "i4 f(p* i4 p, p* i4 q) { r; p < q; }",
+        ]
+        for src in bad:
+            try:
+                compile_source(src, "ptr.sigil", checked=True)
+            except SemanticError as e:
+                assert "same array" in str(e), e
+            else:
+                raise AssertionError("expected checked pointer UB rejection: " + src)
+
+    assert_ok("72. checked pointers", "checked mode rejects pointer subtraction and relational comparison", test_checked_pointer_policy)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3369,7 +3385,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 71-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 72-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
