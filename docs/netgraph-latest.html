@@ -57,7 +57,7 @@ button:hover,select:hover{background:var(--panel-bar);border-color:var(--line-da
 <header>
   <b>[IDA GRAPH]</b><span class="prompt">&gt; NETLIST_CFG</span><span class="stat" id="stats"></span>
   <div class="search-box">
-    <input id="search-input" type="text" placeholder="FILTER..." spellcheck="false">
+    <input id="search-input" type="text" placeholder="SEARCH / 搜索..." spellcheck="false">
     <button class="clear-btn" id="search-clear">[X]</button><span class="match-badge" id="search-count"></span>
   </div>
   <div id="toolbar">
@@ -101,13 +101,13 @@ const I18N = {
   zh: {
     inspector: "[INSPECTOR / 检视器]", egress: ">> 出度 (OUT)", ingress: "<< 入度 (IN)", none: "(无)",
     center: "[对焦居中]", copyRef: "[复制引用]", copied: "[已复制]", endpoints: "[连线端点]", source: "起点", target: "终点", morphism: "态射 (Morphism)",
-    hint: "[鼠标拖拽:平移 · 滚轮:缩放 · 点击框头:折叠/展开]",
+    hint: "[鼠标拖拽:平移 · 滚轮:缩放 · 双击框/节点:折叠/展开]",
     kinds: {namespace:"命名空间",package:"包",target:"目标",field:"切片",group:"组",gate:"门",landmine:"地雷",slot:"槽",alias:"别名",file:"文件",project:"工程",plant:"发电厂"}
   },
   en: {
     inspector: "[OBJECT INSPECTOR]", egress: ">> EGRESS (OUT)", ingress: "<< INGRESS (IN)", none: "(NONE)",
     center: "[CENTER]", copyRef: "[COPY REF]", copied: "[COPIED]", endpoints: "[ENDPOINTS]", source: "SOURCE", target: "TARGET", morphism: "MORPHISM",
-    hint: "[DRAG:PAN · WHEEL:ZOOM · CLICK HEADER:FOLD/EXPAND]",
+    hint: "[DRAG:PAN · WHEEL:ZOOM · DOUBLE-CLICK FRAME/NODE:FOLD/EXPAND]",
     kinds: {namespace:"NAMESPACE",package:"PACKAGE",target:"TARGET",field:"SLICE",group:"GROUP",gate:"GATE",landmine:"LANDMINE",slot:"SLOT",alias:"ALIAS",file:"FILE",project:"PROJECT",plant:"PLANT"}
   }
 };
@@ -184,20 +184,20 @@ function initLayout(){
     members.filter(n=>!used.has(n.id) && !["file","package"].includes(n.kind))
       .sort((a,b)=>a.label.localeCompare(b.label)).forEach(n=>cells.push([n]));
     const cols = Math.min(6, Math.max(4, Math.ceil(Math.sqrt(Math.max(cells.length,1)))));
-    const cellW=235, cellH=270;
+    const cellW=235, cellH=300;
     let y=160;
     files.forEach((n,i)=>{n.x=cursorX+80+i*210;n.y=y;});
     y += files.length ? 100 : 0;
     const gridTop=y;
     cells.forEach((cell,idx)=>{
       const c=idx%cols,r=Math.floor(idx/cols);
-      cell.forEach((n,k)=>{n.x=cursorX+110+c*cellW;n.y=gridTop+r*cellH+k*60;});
+      cell.forEach((n,k)=>{n.x=cursorX+110+c*cellW;n.y=gridTop+r*cellH+k*78;});
     });
     collapsedAnchors.set(`ns:${ns}`, {x:160+nsList.indexOf(ns)*270, y:190});
     cursorX += cols*cellW + 170;
   });
 }
-function shapeFor(kind){return {w:180,h:54,hdr:18};}
+function shapeFor(kind){return {w:190,h:70,hdr:18};}
 const proj=n=>({x:n.x,y:n.y});
 function addVia(x,y){const c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.classList.add("via");c.setAttribute("cx",x);c.setAttribute("cy",y);c.setAttribute("r",2.5);frames.append(c);}
 function frameFor(kind,title,members,color,key){
@@ -227,7 +227,8 @@ function frameFor(kind,title,members,color,key){
       if(collapsedSets.has(key)) collapsedSets.delete(key); else collapsedSets.add(key);
       draw();fit();
     };
-    bg.onclick = toggle; r.onclick = toggle; t.onclick = toggle;
+    bg.ondblclick = toggle; r.ondblclick = toggle; t.ondblclick = toggle;
+    bg.title = "double-click to fold"; r.title = "double-click to fold"; t.title = "double-click to fold";
   }
   frames.append(bg, r, t);
 }
@@ -256,7 +257,14 @@ function buildGraph(data){
     const hdr=document.createElementNS("http://www.w3.org/2000/svg","rect");hdr.classList.add("node-header");hdr.setAttribute("width",sh.w);hdr.setAttribute("height",sh.hdr);hdr.setAttribute("fill",KIND_HEADER[n.kind]||"#f1f5f9");
     const th=document.createElementNS("http://www.w3.org/2000/svg","text");th.setAttribute("x",6);th.setAttribute("y",13);th.setAttribute("fill",KIND_COLOR[n.kind]||"#334155");th.setAttribute("font-size","9");th.setAttribute("font-weight","700");th.textContent=`[${(t[n.kind]||n.kind).toUpperCase()}]`;
     const tb=document.createElementNS("http://www.w3.org/2000/svg","text");tb.setAttribute("x",8);tb.setAttribute("y",38);tb.setAttribute("fill","#0f172a");tb.setAttribute("font-size","11");tb.setAttribute("font-weight","600");tb.textContent=n.label.length>22?n.label.slice(0,21)+"…":n.label;
-    g.append(box,hdr,th,tb);nodeLayer.append(g);nodeEls.set(n.id,g);
+    const shortRef = id => {const m=byId.get(id);const s=m?m.label:id;return s.length>15?s.slice(0,14)+"…":s;};
+    const ins = edges.filter(e=>e.target===n.id && !STRUCTURAL.has(e.kind)).map(e=>shortRef(e.source));
+    const outs = edges.filter(e=>e.source===n.id && !STRUCTURAL.has(e.kind)).map(e=>shortRef(e.target));
+    const lineIn = "← " + (ins.length ? [...new Set(ins)].slice(0,2).join(",")+(ins.length>2?` +${ins.length-2}`:"") : "—");
+    const lineOut = "→ " + (outs.length ? [...new Set(outs)].slice(0,2).join(",")+(outs.length>2?` +${outs.length-2}`:"") : "—");
+    const ti=document.createElementNS("http://www.w3.org/2000/svg","text");ti.setAttribute("x",8);ti.setAttribute("y",53);ti.setAttribute("fill","#64748b");ti.setAttribute("font-size","8");ti.textContent=lineIn;
+    const to=document.createElementNS("http://www.w3.org/2000/svg","text");to.setAttribute("x",8);to.setAttribute("y",65);to.setAttribute("fill","#475569");to.setAttribute("font-size","8");to.textContent=lineOut;
+    g.append(box,hdr,th,tb,ti,to);g.setAttribute("title",lineIn+"  "+lineOut);nodeLayer.append(g);nodeEls.set(n.id,g);
   });
   edges.forEach((e,i)=>{
     const p=document.createElementNS("http://www.w3.org/2000/svg","path");p.classList.add("edge");p.dataset.idx=i;p.setAttribute("marker-end","url(#arrow)");p.setAttribute("stroke",EDGE_COLOR[e.kind]||"#64748b");
@@ -266,7 +274,6 @@ function buildGraph(data){
   const legend=document.getElementById("legend");
   Object.keys(I18N[lang].kinds).forEach(k=>{if(!nodes.some(n=>n.kind===k))return;const s=document.createElement("span");s.innerHTML=`<i class="dot" style="background:${KIND_HEADER[k]}"></i>${t[k]||k}`;legend.append(s);});
   renderKindFilters();initLayout();
-  if(nodes.length>80){collapsedSets.clear();(GRAPH.namespaces||[]).forEach(ns=>collapsedSets.add(`ns:${ns}`));}
   draw();fit();startWind();
 }
 function draw(){
@@ -393,11 +400,17 @@ function toggleSection(id){
   btn.textContent = isC ? "[+]" : "[-]";
 }
 nodeLayer.addEventListener("click",ev=>{const g=ev.target.closest(".node");if(g)select(g.dataset.id);});
+nodeLayer.addEventListener("dblclick",ev=>{const g=ev.target.closest(".node");if(!g)return;const n=byId.get(g.dataset.id);const ns=n&&nsOfNode(n);if(ns){const k=`ns:${ns}`;if(collapsedSets.has(k))collapsedSets.delete(k);else collapsedSets.add(k);draw();fit();}});
 edgeLayer.addEventListener("click",ev=>{
   const p=ev.target.closest(".edge");if(!p)return;const {e}=edgeEls[+p.dataset.idx];const t=I18N[lang];
   panel.innerHTML=`<div class="label">${t.morphism}</div><div class="kind">[${esc(e.kind)}] · ${esc(e.label)}</div><h2><span>${t.endpoints}</span></h2><ul><li onclick="focusNode('${esc(e.source)}')"><b>${t.source}</b> ${esc(e.source)}</li><li onclick="focusNode('${esc(e.target)}')"><b>${t.target}</b> ${esc(e.target)}</li></ul>`;
 });
-const searchInput=document.getElementById("search-input");searchInput.addEventListener("input",e=>{searchQuery=e.target.value;updateFilterDisplay();});document.getElementById("search-clear").onclick=()=>{searchInput.value="";searchQuery="";updateFilterDisplay();};
+const searchInput=document.getElementById("search-input");
+function searchHits(){const q=searchQuery.toLowerCase().trim();return q?nodes.filter(n=>n.label.toLowerCase().includes(q)||n.id.toLowerCase().includes(q)):[];}
+function expandSearchHits(){searchHits().forEach(n=>{const ns=nsOfNode(n);if(ns)collapsedSets.delete(`ns:${ns}`);});}
+searchInput.addEventListener("input",e=>{searchQuery=e.target.value;if(searchQuery.trim()){expandSearchHits();draw();fit();}updateFilterDisplay();});
+searchInput.addEventListener("keydown",e=>{if(e.key==="Enter"){const hit=searchHits()[0];if(hit)focusNode(hit.id);}if(e.key==="Escape"){searchInput.value="";searchQuery="";updateFilterDisplay();}});
+document.getElementById("search-clear").onclick=()=>{searchInput.value="";searchQuery="";updateFilterDisplay();};
 drop.addEventListener("dragover",ev=>{ev.preventDefault();drop.classList.add("hot");});drop.addEventListener("dragleave",()=>drop.classList.remove("hot"));window.addEventListener("dragover",ev=>{ev.preventDefault();drop.classList.add("hot");});
 window.addEventListener("drop",async ev=>{ev.preventDefault();drop.classList.remove("hot");const file=ev.dataTransfer.files&&ev.dataTransfer.files[0];if(!file)return;try{const data=JSON.parse(await file.text());collapsedSets.clear();buildGraph(data);drop.style.display="none";}catch(err){drop.classList.add("hot");drop.querySelector(".box").innerHTML=`[ DROP_ERR ]<br><small>${esc(err.message)}</small>`;}});
 function startWind(){}
