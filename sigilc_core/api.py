@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from .codegen import CodeGenerator
 from .lexer import EXTERNAL_C_SPELLING, SIGIL_KEYWORDS, SIGIL_OPERATORS, Lexer, LexerError
-from .netlist import render_netlist
+from .netlist import render_graph, render_netlist
 from .nodes import EnumDefNode, ExternalTypeNode, FuncDefNode, ParseError, SemanticError, StructDefNode, VarDeclStmt
 from .parser import Parser
 
@@ -36,13 +36,14 @@ def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict
     Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
 
 def netlist_source(src: str, filename: str = "input.sigil",
-                   defines: Optional[Dict[str, str]] = None, strict: bool = False, namespace: str = "") -> str:
+                   defines: Optional[Dict[str, str]] = None, strict: bool = False, namespace: str = "",
+                   format: str = "text") -> str:
     """解析并返回飞线网表，不生成 C。"""
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
     parser = Parser(tokens, filename, defines, strict_provenance=strict)
     parser.parse_program()
-    return render_netlist(parser)
+    return render_netlist(parser) if format == "text" else render_graph(parser, format)
 
 def _header_guard(header_name: str) -> str:
     base = os.path.basename(header_name).upper()

@@ -2063,12 +2063,12 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6600, (total, sizes)
+        assert total <= 6800, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
-        assert sizes["netlist"] <= 200, sizes["netlist"]
+        assert sizes["netlist"] <= 300, sizes["netlist"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -3065,6 +3065,33 @@ i4 main(v.) {
 
     assert_ok("60. local ref", "same-namespace sibling !/1/! resolves to the exported function", test_same_namespace_local_ref)
 
+    # Layer 61: graph netlist export
+    def test_graph_netlist():
+        src = """o! i4 base m, 1;
+!1! P;
+!1! m, base;
+!/[0]/! m, f1, f2;
+![10]! !/[0]/! {
+    !2! X;
+    !2! m, base;
+}
+!3!! MINE;
+!3!! m, base;
+i4 f1(v.) { r; !/2/!; }
+"""
+        data = json.loads(netlist_source(src, "!math!/meter.sigil", format="json"))
+        assert data["namespace"] == "math"
+        assert any(o["kind"] == "package" for o in data["objects"])
+        assert any(o["kind"] == "landmine" for o in data["objects"])
+        assert any(m["kind"] == "binds" for m in data["morphisms"])
+        assert any(m["kind"] == "member" for m in data["morphisms"])
+        dot = netlist_source(src, "!math!/meter.sigil", format="dot")
+        assert dot.startswith("digraph sigil") and "->" in dot
+        mm = netlist_source(src, "!math!/meter.sigil", format="mermaid")
+        assert mm.startswith("flowchart LR") and "-->" in mm
+
+    assert_ok("61. graph netlist", "netlist exports objects/morphisms as JSON, DOT and Mermaid", test_graph_netlist)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3072,7 +3099,7 @@ i4 main(v.) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 60-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 61-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
