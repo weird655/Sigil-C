@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.17.1**
+**版本：v1.18.0**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -240,7 +240,7 @@ sigilc --netlist src/!math!/core.sigil
 sigilc --fmt src --fmt-check
 ```
 
-`!<+cat+>! on|off;` 写在 `plant.sigil`，是 plant 容器：管直属 ≤16 个配电箱，并带总闸；`--netlist` 是单文件网表；`--build DIR --netlist` 导出跨文件项目图；`--netlist-format dot|json|mermaid|html|viewer` 导出对象/态射图。2D HTML 是复古 PCB 视图+风场，支持拖拽/缩放/相连信息；`viewer` 是空壳，拖入 JSON 才渲染。跨文件包索引看 `.sigil-build/packages.txt`。
+生命周期 P0 只拒绝局部包目标地址的直接逃逸（return/全局/参数）；`!<+cat+>! on|off;` 写在 `plant.sigil`，是 plant 容器：管直属 ≤16 个配电箱，并带总闸；`--netlist` 是单文件网表；`--build DIR --netlist` 导出跨文件项目图；`--netlist-format dot|json|mermaid|html|viewer` 导出对象/态射图。2D HTML 是复古 PCB 视图+风场，支持拖拽/缩放/相连信息；`viewer` 是空壳，拖入 JSON 才渲染。跨文件包索引看 `.sigil-build/packages.txt`。
 
 ---
 

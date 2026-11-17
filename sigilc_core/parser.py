@@ -122,7 +122,7 @@ class Parser:
         self.file_gate_seen: bool = False
         self.file_gate_line: int = 0
         self.pending_slots: List[StmtNode] = []
-        self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str]]] = []
+        self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str], Dict[str, Tuple[str, int]]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
@@ -808,6 +808,24 @@ class Parser:
             if isinstance(inner, MemberExpr) and isinstance(inner.base, IdentExpr) \
                     and inner.base.name in self.local_objects:
                 return inner.base.name
+        return None
+
+    def _local_pkg_address(self, expr: Optional[ExprNode]) -> Optional[str]:
+        """Return the local package id if expr takes the address of its target."""
+        if expr is None:
+            return None
+        if isinstance(expr, UnaryExpr) and expr.op == '&':
+            inner = expr.operand
+            if isinstance(inner, UnaryExpr) and inner.op == '*':
+                cast = inner.operand
+                if isinstance(cast, CastExpr):
+                    cast = cast.operand
+                if isinstance(cast, IdentExpr) and cast.name.startswith("__sigil_pkg_"):
+                    pid = cast.name[len("__sigil_pkg_"):]
+                    if pid in self.pkgs.local_regions:
+                        return pid
+        if isinstance(expr, CastExpr):
+            return self._local_pkg_address(expr.operand)
         return None
 
     def _param_source(self, expr: Optional[ExprNode]) -> Optional[str]:
@@ -2150,6 +2168,11 @@ class Parser:
                 raise SemanticError(
                     f"{self.filename}:{tok.line}:{tok.col}: Returning the address of local object '{bad}' would dangle "
                     f"after return")
+            pkg_bad = self._local_pkg_address(expr)
+            if pkg_bad is not None:
+                raise SemanticError(
+                    f"{self.filename}:{tok.line}:{tok.col}: Returning the address of local package target "
+                    f"!/{pkg_bad}/! would dangle after return")
             ret_stmt = ReturnStmt(line=tok.line, col=tok.col, expr=expr)
             provenance.note_return(self, ret_stmt)
             return ret_stmt
@@ -2425,6 +2448,14 @@ class Parser:
                         raise SemanticError(
                             f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local object "
                             f"'{bad}' into '{lhs.name}' would dangle after this function returns")
+                pkg_bad = self._local_pkg_address(rhs)
+                if pkg_bad is not None and isinstance(lhs, IdentExpr):
+                    escaping = lhs.name in self.param_names or (
+                        lhs.name in self.scopes[0] and lhs.name not in self.local_objects)
+                    if escaping:
+                        raise SemanticError(
+                            f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local package "
+                            f"target !/{pkg_bad}/! into '{lhs.name}' would dangle after this function returns")
                 if isinstance(lhs, IdentExpr) and isinstance(strip_top_qualifiers(lhs_t), PointerType):
                     self._note_prov(lhs.name, lhs_t, rhs)
                 if self.cur_func_name is not None:

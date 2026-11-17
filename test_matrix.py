@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.17 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.18 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2064,10 +2064,10 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 7400, (total, sizes)
-        assert sizes["parser"] <= 2750, sizes["parser"]
+        assert total <= 7600, (total, sizes)
+        assert sizes["parser"] <= 2800, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
-        assert sizes["packages"] <= 450, sizes["packages"]
+        assert sizes["packages"] <= 500, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
         assert sizes["netlist"] <= 700, sizes["netlist"]
 
@@ -3215,6 +3215,30 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("65. plants", "each plant.sigil owns up to 16 boxes; 18 namespaces across 2 plants", test_plants)
 
+    # Layer 66: P0 direct lifecycle escapes
+    def test_lifecycle_p0():
+        safe = [
+            "i4 f(v.) { o! i4 x m, 1; !1! m, x; r; !/1/!; }",
+            "o! i4 gx m, 1; p* i4 f(v.) { !1! m, gx; r; p@ !/1/!; }",
+            "i4 f(v.) { { o! i4 x m, 1; !1! m, x; r; !/1/!; } }",
+        ]
+        for src in safe:
+            assert check_source(src, "life.sigil") is None, src
+        bad = [
+            ("p* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; p@ !/1/!; }", "local package"),
+            ("o! p* i4 gp; i4 f(v.) { o! i4 x m, 1; !1! m, x; gp m, p@ !/1/!; r; 0; }", "local package"),
+            ("v. f(p* i4 out) { o! i4 x m, 1; !1! m, x; out m, p@ !/1/!; }", "local package"),
+        ]
+        for src, needle in bad:
+            try:
+                check_source(src, "life.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("expected direct local package escape to fail: " + src)
+
+    assert_ok("66. lifecycle P0", "direct local package address escapes are rejected; safe local/static uses pass", test_lifecycle_p0)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3222,7 +3246,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 65-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 66-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

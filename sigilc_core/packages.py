@@ -29,6 +29,7 @@ class PackageTable:
         self.aliases: Dict[str, str] = {}    # global alias B -> A
         self.slot_types: Dict[str, object] = {}
         self.local: Dict[str, str] = {}
+        self.local_regions: Dict[str, Tuple[str, int]] = {}
         self.local_alias: Dict[str, str] = {}  # name -> package id
         self.fields: Dict[str, Tuple[object, int, int, Optional[int], str]] = {}
         self.armed: Set[str] = set()
@@ -299,6 +300,34 @@ def parse_decl(parser) -> Optional[VarDeclStmt]:
     return None
 
 
+def _mark_local_region(parser, pid: str, target: str, src_pid: Optional[str] = None) -> None:
+    """Record the block region of a local package whose target is stack-backed."""
+    if src_pid is not None and src_pid in parser.pkgs.local_regions:
+        parser.pkgs.local_regions[pid] = parser.pkgs.local_regions[src_pid]
+        return
+    if target in parser.func_sigs or target in parser.func_defined:
+        return
+    depth = None
+    for i, scope in enumerate(parser.scopes):
+        if target in scope:
+            depth = i
+    if depth is not None and depth > 0:
+        parser.pkgs.local_regions[pid] = (parser.cur_func_name or "", depth)
+
+
+def _check_local_region(parser, pid: str, tok) -> None:
+    region = parser.pkgs.local_regions.get(pid)
+    if region is None:
+        return
+    func, depth = region
+    if parser.cur_func_name != func:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: local package !/{pid}/! escapes its function")
+    if len(parser.scopes) < depth:
+        raise SemanticError(
+            f"{parser.filename}:{tok.line}:{tok.col}: local package !/{pid}/! escapes its block")
+
+
 def parse_bind_local(parser, tok):
     parser._eat()
     parser._eat('OP_ASSIGN')
@@ -324,11 +353,14 @@ def parse_bind_local(parser, tok):
         src_tok = parser._eat()
         parser._eat('SEMI')
         if parser.pkgs.has_slot(src_tok.value):
-            return _copy_slot(parser, pid, src_tok.value, tok)
+            node = _copy_slot(parser, pid, src_tok.value, tok)
+            _mark_local_region(parser, pid, parser.pkgs.local.get(pid, ""), src_tok.value)
+            return node
         src = parser.pkgs.target(parser, src_tok.value, src_tok)
         src_type = parser._lookup_symbol(src, src_tok)
         parser.pkgs.slot_types[pid] = src_type
         parser.pkgs.local[pid] = src
+        _mark_local_region(parser, pid, src)
         slot = _ensure_slot(parser, pid, tok)
         cast = CastExpr(line=tok.line, col=tok.col, target_type=_void_ptr(tok.line, tok.col),
                         operand=UnaryExpr(line=tok.line, col=tok.col, op='&',
@@ -340,6 +372,7 @@ def parse_bind_local(parser, tok):
     target_type = parser._lookup_symbol(target.value, target)
     parser.pkgs.slot_types[pid] = target_type
     parser.pkgs.local[pid] = target.value
+    _mark_local_region(parser, pid, target.value)
     slot = _ensure_slot(parser, pid, tok)
     addr = UnaryExpr(line=tok.line, col=tok.col, op='&',
                      operand=IdentExpr(line=target.line, col=target.col, name=target.value))
@@ -382,6 +415,7 @@ def parse_link_local(parser, tok):
 def parse_use(parser, tok):
     parser._eat()
     pid = tok.value
+    _check_local_region(parser, pid, tok)
     if pid in parser.pkgs.fields:
         base_type, offset, width, byte_index, base_name = parser.pkgs.fields[pid]
         if parser.pkgs.has_slot(pid):
@@ -401,6 +435,7 @@ def parse_use(parser, tok):
 
 def local_expr(parser, name: str, tok):
     pid = parser.pkgs.local_alias[name]
+    _check_local_region(parser, pid, tok)
     return _deref(parser, pid, tok)
 
 
@@ -423,10 +458,12 @@ def parse_link(parser) -> None:
 
 
 def begin_function(parser) -> None:
-    parser._pkg_saved.append((dict(parser.pkgs.local_alias), dict(parser.pkgs.local)))
+    parser._pkg_saved.append((dict(parser.pkgs.local_alias), dict(parser.pkgs.local),
+                              dict(parser.pkgs.local_regions)))
 
 
 def end_function(parser) -> None:
-    local_alias, local = parser._pkg_saved.pop()
+    local_alias, local, regions = parser._pkg_saved.pop()
     parser.pkgs.local_alias = local_alias
     parser.pkgs.local = local
+    parser.pkgs.local_regions = regions
