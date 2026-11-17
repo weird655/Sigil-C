@@ -16,8 +16,10 @@ from .nodes import (
     GotoStmt,
     IdentExpr,
     IfStmt,
+    IndexExpr,
     JumpStmt,
     LabelStmt,
+    MemberExpr,
     PreprocNode,
     ReturnStmt,
     StaticAssertStmt,
@@ -25,6 +27,7 @@ from .nodes import (
     StructDefNode,
     SwitchStmt,
     TrapStmt,
+    UnaryExpr,
     VarDeclStmt,
     VaStmt,
     WhileStmt,
@@ -65,6 +68,7 @@ class CodeGenerator:
         self.trap_trace = trap_trace
         self.shadow_stack = shadow_stack
         self.checked_arith = checked_arith
+        self._tmp_counter = 0
         self.namespace = namespace
         self.cli_defines = cli_defines or {}
         self.lines: List[str] = []
@@ -306,10 +310,22 @@ class CodeGenerator:
                 target = emit_expr(s.target)
                 value = emit_expr(s.value)
                 call = None
-                if self.checked_arith and isinstance(s.target, IdentExpr) and s.op != "=":
-                    call = checked_binary(s.op[:-1], target, value, getattr(s.target, "sem_type", None))
+                if self.checked_arith and s.op != "=":
+                    t = getattr(s.target, "sem_type", None)
+                    if isinstance(s.target, IdentExpr):
+                        call = checked_binary(s.op[:-1], target, value, t)
+                    elif isinstance(s.target, (IndexExpr, MemberExpr, UnaryExpr)):
+                        call = checked_binary(s.op[:-1], f"(*__sigil_ck_{self._tmp_counter + 1})", value, t)
+                        if call is not None:
+                            self._tmp_counter += 1
+                            tmp = f"__sigil_ck_{self._tmp_counter}"
+                            assert t is not None
+                            self._emit(f"{format_c_declarator(t)} *{tmp} = &({target});", s.line, indent)
+                            self._emit(f"*{tmp} = {call};", s.line, indent)
+                            call = ""
                 if call is not None:
-                    self._emit(f"{target} = {call};", s.line, indent)
+                    if call:
+                        self._emit(f"{target} = {call};", s.line, indent)
                 else:
                     self._emit(f"{target} {s.op} {value};", s.line, indent)
         elif isinstance(s, ExprStmt):
