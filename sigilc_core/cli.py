@@ -36,13 +36,6 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="also emit a C header next to the output (same basename, .h)")
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
     ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
-    ap.add_argument("--asm-abi", choices=("sysv", "win64"),
-                    default=("win64" if os.name == "nt" else "sysv"),
-                    help="calling convention for --asm (platform default)")
-    ap.add_argument("--asm", "-S", action="store_true",
-                    help="compile Sigil-C source to experimental x86-64 assembly")
-    ap.add_argument("--raw-asm", action="store_true",
-                    help=argparse.SUPPRESS)
     ap.add_argument("--netlist", action="store_true", help="print the !...! rewiring netlist; write nothing")
     ap.add_argument("--netlist-format", choices=("text", "dot", "json", "mermaid", "html", "viewer"), default="text",
                     help="netlist output format (default: text)")
@@ -168,19 +161,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     with open(in_path, "r", encoding="utf-8") as f:
         src = f.read()
     fname = os.path.basename(in_path)
-
-    if args.asm or args.raw_asm:
-        from .asmgen import AsmError, compile_asm
-        out_path = args.output_opt or args.output or (os.path.splitext(in_path)[0] + ".s")
-        try:
-            asm = compile_asm(src, fname, args.asm_abi)
-        except (AsmError, LexerError, ParseError, SemanticError) as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write(asm)
-        print(f"ASM      {in_path} -> {out_path}")
-        return 0
 
     if args.emit_prelude:
         with open(args.emit_prelude, "w", encoding="utf-8") as f:

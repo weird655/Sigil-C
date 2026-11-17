@@ -21,7 +21,6 @@ from sigilc import (
     netlist_source,
     project_netlist_source,
 )
-from sigilc_core import compile_asm
 
 
 def run_test_matrix():
@@ -71,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.30 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.28.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2028,11 +2027,10 @@ int main(void) {
             "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
             "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system"},
-            "asmgen": {"lexer", "nodes", "parser", "type_system"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "netlist", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
-            "__init__": {"api", "asmgen", "cli", "codegen", "lexer", "nodes", "parser",
+            "__init__": {"api", "cli", "codegen", "lexer", "nodes", "parser",
                          "preamble", "type_system", "version"},
         }
         stdlib = set(sys.stdlib_module_names)
@@ -2060,13 +2058,13 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "netlist", "confine", "packages", "provenance", "parser", "asmgen", "codegen", "api", "cli", "__init__"]
+                 "netlist", "confine", "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 9000, (total, sizes)
+        assert total <= 7800, (total, sizes)
         assert sizes["parser"] <= 2950, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
@@ -3428,26 +3426,6 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("75. external C", "checked-external rejects unknown/indirect C calls and honors allowlist", test_checked_external)
 
-    # Layer 76: Sigil-ASM smoke
-    def test_asm_smoke():
-        src = """i4 add(i4 a, i4 b) { r; a + b; }
-i4 main(v.) { o! i4 x m, 2; o! i4 y m, 3; r; add(x, y); }
-"""
-        abi = "win64" if os.name == "nt" else "sysv"
-        asm = compile_asm(src, "asm.sigil", abi=abi)
-        assert "addq" in asm and ".globl main" in asm
-        work = tempfile.mkdtemp(prefix="asm-")
-        spath = os.path.join(work, "main.s")
-        exe = os.path.join(work, "main.exe")
-        with open(spath, "w", encoding="utf-8") as f:
-            f.write(asm)
-        cc = subprocess.run(["gcc", spath, "-o", exe], capture_output=True, text=True)
-        assert cc.returncode == 0, cc.stderr[-800:]
-        run = subprocess.run([exe], capture_output=True, text=True)
-        assert run.returncode == 5, run.returncode
-
-    assert_ok("76. asm smoke", "Sigil-ASM emits linkable x86-64 and returns 5", test_asm_smoke)
-
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3455,7 +3433,7 @@ i4 main(v.) { o! i4 x m, 2; o! i4 y m, 3; r; add(x, y); }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 76-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 75-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
