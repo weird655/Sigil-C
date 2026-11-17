@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.18 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.19 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2065,7 +2065,7 @@ int main(void) {
 
         total = sum(sizes.values())
         assert total <= 7600, (total, sizes)
-        assert sizes["parser"] <= 2800, sizes["parser"]
+        assert sizes["parser"] <= 2850, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
@@ -3243,6 +3243,28 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("66. lifecycle P0", "direct local package address escapes are rejected; safe local/static uses pass", test_lifecycle_p0)
 
+    # Layer 67: P0 call and field sinks
+    def test_lifecycle_sinks():
+        good = "v. use(p* i4 q) { q[0] m, 2; }\ni4 f(v.) { o! i4 x m, 1; !1! m, x; use(p@ !/1/!); r; 0; }"
+        assert check_source(good, "life.sigil") is None
+        bad = [
+            ("o! p* i4 gp;\nv. keep(p* i4 q) { gp m, q; }\ni4 f(v.) { o! i4 x m, 1; !1! m, x; keep(p@ !/1/!); r; 0; }",
+             "escapes the call"),
+            ("s{ S { p* i4 p; };\nv. f(v.) { o! S s; o! i4 x m, 1; !1! m, x; s.p m, p@ !/1/!; }",
+             "non-local lvalue"),
+            ("s{ S { p* i4 p; };\ni4 f(v.) { o! i4 x m, 1; !1! m, x; o! S s m, { p@ !/1/! }; r; (i4)s.p; }",
+             "local package"),
+        ]
+        for src, needle in bad:
+            try:
+                check_source(src, "life.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("expected P0 sink rejection: " + src)
+
+    assert_ok("67. lifecycle sinks", "P0 rejects retaining calls and field/aggregate pointer sinks", test_lifecycle_sinks)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3250,7 +3272,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 66-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 67-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

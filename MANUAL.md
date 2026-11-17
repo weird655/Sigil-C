@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.18.1**
+**版本：v1.19.0**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -240,7 +240,7 @@ sigilc --netlist src/!math!/core.sigil
 sigilc --fmt src --fmt-check
 ```
 
-- 生命周期 P0：拒绝局部包目标地址的直接/别名逃逸（return/全局/参数；cast/算术/三元）
+- 生命周期 P0：拒绝局部包目标地址的直接/别名/调用/字段逃逸（return/全局/参数；cast/算术/三元；retains callee；非局部 lvalue）
 - `!<+cat+>! on|off;` 写在 `plant.sigil`：plant 容器，管直属 ≤16 个配电箱，并带总闸
 - `--build DIR --netlist`：跨文件项目图，含 plant / file / namespace / uses
 - `--netlist-format text|json|dot|mermaid|html|viewer`：2D HTML 是复古 PCB+风场；`viewer` 是空壳，拖入 JSON 才渲染

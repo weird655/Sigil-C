@@ -124,6 +124,7 @@ class Parser:
         self.pending_slots: List[StmtNode] = []
         self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str], Dict[str, Tuple[str, int]]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
+        self.pending_pkg_calls: List[Tuple[str, List[Optional[str]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
         self.escape_taint: Dict[str, str] = {}
@@ -840,6 +841,11 @@ class Parser:
             return self._local_pkg_address(expr.base)
         if isinstance(expr, MemberExpr):
             return self._local_pkg_address(expr.base)
+        if isinstance(expr, AggregateInit):
+            for el in expr.elements:
+                p = self._local_pkg_address(el)
+                if p is not None:
+                    return p
         return None
 
     def _param_source(self, expr: Optional[ExprNode]) -> Optional[str]:
@@ -871,6 +877,22 @@ class Parser:
                     f"'r@' (restrict) pointer claims exclusive access to it")
 
     def _check_calls(self) -> None:
+        for fname, taints, line, col in self.pending_pkg_calls:
+            esc = self.escape_params.get(fname, set())
+            pnames = self.func_param_names.get(fname, [])
+            if fname not in self.func_defined:
+                if any(taints):
+                    raise SemanticError(
+                        f"{self.filename}:{line}:{col}: cannot prove external function '{fname}' "
+                        f"does not retain a local package address")
+                continue
+            for idx, pid in enumerate(taints):
+                if pid is None:
+                    continue
+                if idx >= len(pnames) or pnames[idx] in esc:
+                    raise SemanticError(
+                        f"{self.filename}:{line}:{col}: local package !/{pid}/! is passed to "
+                        f"'{fname}' argument {idx + 1}, but that argument escapes the call")
         for fname, provs, line, col in self.pending_calls:
             sig = self.func_sigs.get(fname)
             if sig is None:
@@ -2481,6 +2503,10 @@ class Parser:
                             f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local package "
                             f"target !/{pkg_bad}/! into '{lhs.name}' would dangle after this function returns")
                     self.escape_taint[lhs.name] = pkg_bad
+                elif pkg_bad is not None:
+                    raise SemanticError(
+                        f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local package "
+                        f"target !/{pkg_bad}/! through a non-local lvalue can escape this function")
                 if isinstance(lhs, IdentExpr) and isinstance(strip_top_qualifiers(lhs_t), PointerType):
                     self._note_prov(lhs.name, lhs_t, rhs)
                 if self.cur_func_name is not None:
@@ -2736,6 +2762,9 @@ class Parser:
                 if isinstance(node, IdentExpr) and node.name in self.func_sigs:
                     self.pending_calls.append(
                         (node.name, [(a, self._prov_of(a)) for a in args], node.line, node.col))
+                    taints = [self._local_pkg_address(a) for a in args]
+                    if any(t is not None for t in taints):
+                        self.pending_pkg_calls.append((node.name, taints, node.line, node.col))
                 node = CallExpr(line=tok.line, col=tok.col, callee=node, args=args)
                 provenance.apply_call(self, node)
             else:
