@@ -74,7 +74,7 @@ python3 dist/sigilc.pyz --version
 ## KK
 | 项 | 口径 |
 |---|---|
-| 版本 | 1.28.1 |
+| 版本 | 1.30.0 |
 | Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
 | libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
@@ -98,7 +98,24 @@ python3 dist/sigilc.pyz --version
   要交给 C 程序员时加 `--no-line`，每行不再插 `#line`。
   
 
-## 边界状态（v1.28.1）
+## Sigil-ASM（实验）
+
+新增直出 x86-64 汇编的后端：
+
+```bash
+python sigilc.py --asm src/main.sigil -o main.s
+gcc main.s -o main
+```
+
+- Linux/WSL 默认 SysV
+- Windows 默认 Win64
+- `--asm-abi sysv|win64` 可显式选
+
+源语法仍是 `.sigil`，复用 Sigil-C 的 Lexer/Parser；`!` 飞线保留，不做风险检查。当前是暴力栈机版：整数/指针、局部变量、算术、分支、循环、直接调用、字符串。结构体/数组/浮点/短参数/优化暂不支持。
+
+详见 [`ASM.md`](ASM.md)。
+
+## 边界状态（v1.30.0）
 
 完整账本见 [`BOUNDARIES.md`](BOUNDARIES.md) B0。
 
@@ -555,7 +572,7 @@ int main(void) {
 
 ## 测试矩阵
 
-234 项 / 75 层，每层一个主题：
+235 项 / 76 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -611,11 +628,12 @@ int main(void) {
 | 73 | `--checked-strict`：未知对象大小 trap |
 | 74 | ASan/TSan 构建门禁 |
 | 75 | `--checked-external` 外部 C 白名单 |
+| 76 | Sigil-ASM x86-64 smoke |
 
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 234 项 / 75 层，需要 gcc
+python3 test_matrix.py        # 235 项 / 76 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -661,8 +679,8 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.28.1**，tag `v1.28.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.28.1) 已发布；Core v1 语法冻结（v1.x 只加不改）。
-- 234 项测试 / 75 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 又称 **Sunberry-C**；版本 **1.30.0**，tag `v1.30.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.30.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 235 项测试 / 76 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 80%（ASM 实验期）。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理。
