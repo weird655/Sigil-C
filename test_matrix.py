@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.22 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.23 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2065,7 +2065,7 @@ int main(void) {
 
         total = sum(sizes.values())
         assert total <= 7600, (total, sizes)
-        assert sizes["parser"] <= 2850, sizes["parser"]
+        assert sizes["parser"] <= 2950, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
@@ -3306,6 +3306,26 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("69. project P1", "cross-file retains summary reaches the caller under --build", test_project_p1)
 
+    # Layer 70: constant UB rejection
+    def test_const_ub():
+        bad = [
+            ("i4 main(v.) { r; 2147483647 + 1; }", "overflow"),
+            ("i4 main(v.) { r; 1 << 32; }", "shift count"),
+            ("i4 main(v.) { r; -2147483648 / -1; }", "signed / overflow"),
+            ("i4 main(v.) { r; 10 % 0; }", "by zero"),
+        ]
+        for src, needle in bad:
+            try:
+                check_source(src, "ub.sigil")
+            except SemanticError as e:
+                assert needle in str(e), e
+            else:
+                raise AssertionError("expected constant UB rejection: " + src)
+        assert check_source("i4 main(v.) { r; 2147483647 + 0; }", "ub.sigil") is None
+        assert check_source("u4 main(v.) { r; 1u << 31; }", "ub.sigil") is None
+
+    assert_ok("70. const UB", "constant signed overflow, invalid shifts, division/modulo by zero are rejected", test_const_ub)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3313,7 +3333,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 69-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 70-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

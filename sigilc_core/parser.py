@@ -435,6 +435,44 @@ class Parser:
             if expr.op == '||': return int(bool(lv) or bool(rv))
         return None
 
+    _CONST_WIDTHS = {"i1":8,"int8_t":8,"u1":8,"uint8_t":8,
+                     "i2":16,"int16_t":16,"u2":16,"uint16_t":16,
+                     "i4":32,"int32_t":32,"u4":32,"uint32_t":32,
+                     "i8":64,"int64_t":64,"u8":64,"uint64_t":64}
+
+    def _check_const_ub(self, expr: BinaryExpr, lt: TypeNode, rt: TypeNode) -> None:
+        if not (isinstance(lt, BaseType) and isinstance(rt, BaseType)):
+            return
+        if lt.c_name not in self._CONST_WIDTHS or rt.c_name not in self._CONST_WIDTHS:
+            return
+        op = expr.op
+        if op not in ('+','-','*','/','%','<<','>>'):
+            return
+        a = self._eval_const_int_expr(expr.left)
+        b = self._eval_const_int_expr(expr.right)
+        if a is None or b is None:
+            return
+        bits = self._CONST_WIDTHS[lt.c_name]
+        signed = lt.c_name[0] in ('i','u') and lt.c_name[0] == 'i' or lt.c_name.startswith('int')
+        if op in ('/', '%'):
+            if b == 0:
+                raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant {op} by zero is undefined")
+            if signed and a == -(1 << (bits - 1)) and b == -1:
+                raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed {op} overflow")
+            return
+        if op in ('<<','>>'):
+            if b < 0 or b >= bits:
+                raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant shift count {b} is undefined for {bits}-bit type")
+            if op == '<<' and signed and (a < 0 or a > ((1 << (bits - 1)) - 1) >> b):
+                raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed left shift overflow")
+            return
+        if op == '+' and signed and a + b > (1 << (bits - 1)) - 1 or            op == '+' and signed and a + b < -(1 << (bits - 1)):
+            raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed overflow")
+        if op == '-' and signed and a - b > (1 << (bits - 1)) - 1 or            op == '-' and signed and a - b < -(1 << (bits - 1)):
+            raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed overflow")
+        if op == '*' and signed and a * b > (1 << (bits - 1)) - 1 or            op == '*' and signed and a * b < -(1 << (bits - 1)):
+            raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Constant signed overflow")
+
     def _infer_expr_type(self, expr: ExprNode) -> TypeNode:
         if isinstance(expr, CompoundLiteral):
             return expr.target_type
@@ -623,6 +661,7 @@ class Parser:
             lt = self._decay_rvalue(self._infer_expr_type(expr.left))
             rt = self._decay_rvalue(self._infer_expr_type(expr.right))
             op = expr.op
+            self._check_const_ub(expr, lt, rt)
             if op in ('&&', '||'):
                 if not self._is_scalar_type(lt) or not self._is_scalar_type(rt):
                     raise SemanticError(f"{self.filename}:{expr.line}:{expr.col}: Logical operator '{op}' requires scalar operands")

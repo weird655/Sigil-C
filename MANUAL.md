@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.22.0**
+**版本：v1.23.0**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >
@@ -241,7 +241,8 @@ sigilc --fmt src --fmt-check
 ```
 
 - 生命周期 P0/P1：拒绝局部包目标地址的直接/别名/调用/字段逃逸；P1 用 returns_arg / retains_arg 摘要处理函数返回值与全局字段
-- `--ub-check`（仅 `--build`）：追加 UBSan + signed overflow trap，运行时暴露整数/除零/移位/浮转整 UB；`--build` 会合并跨文件摘要
+- 常量 UB 编译期拒绝：signed 溢出、除零、非法移位、INT_MIN/-1
+- `--ub-check`（仅 `--build`）：追加 UBSan + signed overflow trap，运行时暴露非恒定 UB；`--build` 会合并跨文件摘要
 - `!<+cat+>! on|off;` 写在 `plant.sigil`：plant 容器，管直属 ≤16 个配电箱，并带总闸
 - `--build DIR --netlist`：跨文件项目图，含 plant / file / namespace / uses
 - `--netlist-format text|json|dot|mermaid|html|viewer`：2D HTML 是复古 PCB+风场；`viewer` 是空壳，拖入 JSON 才渲染
