@@ -105,6 +105,7 @@ class Parser:
         self.prov: Dict[str, Prov] = {}
         self._prov_saved: List[Dict[str, Optional[Prov]]] = []
         self.local_objects: Set[str] = set()
+        self.static_locals: Set[str] = set()
         self.param_names: Set[str] = set()
         # 跨函数逃逸：函数名 -> 被写进全局的参数名
         self.cur_func_name: Optional[str] = None
@@ -1806,12 +1807,14 @@ class Parser:
             self._eat('SEMI')
         if not global_scope:
             self.local_objects.add(name_tok.value)
+        if is_static and not global_scope:
+            self.static_locals.add(name_tok.value)
         self._note_prov(name_tok.value, decl_type, init_expr)
         pkg_bad = self._local_pkg_address(init_expr)
         if pkg_bad is not None:
-            if global_scope:
+            if global_scope or is_static:
                 raise SemanticError(
-                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Global initializer for '{name_tok.value}' "
+                    f"{self.filename}:{name_tok.line}:{name_tok.col}: Static/global initializer for '{name_tok.value}' "
                     f"cannot store the address of local package target !/{pkg_bad}/!")
             self.escape_taint[name_tok.value] = pkg_bad
         if isinstance(decl_type, PointerType) and decl_type.is_restrict and name_tok.value in self.prov:
@@ -2496,8 +2499,8 @@ class Parser:
                             f"'{bad}' into '{lhs.name}' would dangle after this function returns")
                 pkg_bad = self._local_pkg_address(rhs)
                 if pkg_bad is not None and isinstance(lhs, IdentExpr):
-                    escaping = lhs.name in self.param_names or (
-                        lhs.name in self.scopes[0] and lhs.name not in self.local_objects)
+                    escaping = (lhs.name in self.param_names or lhs.name in self.static_locals or (
+                        lhs.name in self.scopes[0] and lhs.name not in self.local_objects))
                     if escaping:
                         raise SemanticError(
                             f"{self.filename}:{op_tok.line}:{op_tok.col}: Storing the address of local package "
@@ -2759,12 +2762,19 @@ class Parser:
                 else:
                     raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Called object is not a function or function pointer")
 
+                taints = [self._local_pkg_address(a) for a in args]
                 if isinstance(node, IdentExpr) and node.name in self.func_sigs:
                     self.pending_calls.append(
                         (node.name, [(a, self._prov_of(a)) for a in args], node.line, node.col))
-                    taints = [self._local_pkg_address(a) for a in args]
                     if any(t is not None for t in taints):
+                        if isinstance(strip_top_qualifiers(self.func_sigs[node.name][1]), PointerType):
+                            raise SemanticError(
+                                f"{self.filename}:{node.line}:{node.col}: call to '{node.name}' returns a pointer "
+                                f"and may return the local package address")
                         self.pending_pkg_calls.append((node.name, taints, node.line, node.col))
+                elif any(t is not None for t in taints):
+                    raise SemanticError(
+                        f"{self.filename}:{node.line}:{node.col}: cannot prove indirect call does not retain a local package address")
                 node = CallExpr(line=tok.line, col=tok.col, callee=node, args=args)
                 provenance.apply_call(self, node)
             else:

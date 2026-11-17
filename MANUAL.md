@@ -1,6 +1,6 @@
 # Sigil-C 使用手册
 
-**版本：v1.19.0**
+**版本：v1.19.1**
 
 > Core v1 是稳定面；`!` 飞线层是 Layer 2 实验面。使用 `!` 前先读 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 >

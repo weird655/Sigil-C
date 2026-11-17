@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.19 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.19.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3254,6 +3254,10 @@ i4 f1(v.) { r; !/2/!; }
              "non-local lvalue"),
             ("s{ S { p* i4 p; };\ni4 f(v.) { o! i4 x m, 1; !1! m, x; o! S s m, { p@ !/1/! }; r; (i4)s.p; }",
              "local package"),
+            ("i4 f(f^(p* i4) -> i4 cb) { o! i4 x m, 1; !1! m, x; cb(p@ !/1/!); r; 0; }",
+             "indirect call"),
+            ("p* i4 id(p* i4 q) { r; q; }\np* i4 f(v.) { o! i4 x m, 1; !1! m, x; r; id(p@ !/1/!); }",
+             "returns a pointer"),
         ]
         for src, needle in bad:
             try:
