@@ -1072,6 +1072,8 @@ def _build_project(args, defines: Dict[str, str]) -> int:
     if os.name == "nt" and not exe.lower().endswith(".exe"):
         exe += ".exe"
     cflags = args.cflags
+    if getattr(args, "checked", False):
+        cflags += " -fno-strict-aliasing"
     if getattr(args, "ub_check", False):
         cflags += " -fsanitize=undefined -fno-sanitize-recover=all -ftrapv"
     cmd = [args.cc] + cflags.split() + c_paths + ["-o", exe]

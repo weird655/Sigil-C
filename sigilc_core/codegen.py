@@ -302,7 +302,13 @@ class CodeGenerator:
             attr = self._attrs_c(s.attrs)
             if attr:
                 decl = f"{decl} {attr}"
-            self._emit(f"{decl}{f' = {emit_expr(s.init_expr)}' if s.init_expr else ''};", s.line, indent)
+            if s.init_expr is not None:
+                init = f" = {emit_expr(s.init_expr)}"
+            elif self.checked_arith and not s.is_static:
+                init = " = {0}"
+            else:
+                init = ""
+            self._emit(f"{decl}{init};", s.line, indent)
         elif isinstance(s, AssignStmt):
             if isinstance(s.target, BitSliceExpr):
                 self._emit_slice_assign(s, indent)

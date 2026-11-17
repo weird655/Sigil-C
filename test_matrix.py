@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.24.4 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.24.5 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3347,6 +3347,8 @@ i4 f1(v.) { r; !/2/!; }
         assert "sigil_cidx" in compile_source(idxsrc, "idx.sigil", checked=True)
         bfsrc = "s{ B { i4 x w! 4; };\ni4 main(v.) { o! B b; b.x m, 7; b.x m+ 1; r; b.x; }\n"
         assert "__sigil_ck_bf" in compile_source(bfsrc, "bf.sigil", checked=True)
+        zerosrc = "i4 main(v.) { o! i4 x; o! i4[2] a; r; x + a[0]; }\n"
+        assert "= {0}" in compile_source(zerosrc, "zero.sigil", checked=True)
         work = tempfile.mkdtemp(prefix="checked-")
         c_path = os.path.join(work, "checked.c")
         exe = os.path.join(work, "checked.exe")
