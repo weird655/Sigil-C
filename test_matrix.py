@@ -3182,7 +3182,7 @@ i4 f1(v.) { r; !/2/!; }
         work = tempfile.mkdtemp(prefix="plants-")
         make_plants(work)
         r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
-                            "--build", work], capture_output=True, text=True)
+                            "--build", work], capture_output=True, text=True, cwd=work)
         assert r.returncode == 0, (r.returncode, r.stdout[-500:], r.stderr[-800:])
         data = json.loads(project_netlist_source(work, format="json"))
         assert len(data["namespaces"]) == 18, data["namespaces"]
