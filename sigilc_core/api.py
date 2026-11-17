@@ -1071,7 +1071,10 @@ def _build_project(args, defines: Dict[str, str]) -> int:
     exe = args.output_opt or args.output or "a.out"
     if os.name == "nt" and not exe.lower().endswith(".exe"):
         exe += ".exe"
-    cmd = [args.cc] + args.cflags.split() + c_paths + ["-o", exe]
+    cflags = args.cflags
+    if getattr(args, "ub_check", False):
+        cflags += " -fsanitize=undefined -fno-sanitize-recover=all -ftrapv"
+    cmd = [args.cc] + cflags.split() + c_paths + ["-o", exe]
     print("Link      " + " ".join(cmd))
     rc = subprocess.run(cmd).returncode
     if rc != 0:
