@@ -4,6 +4,19 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.13.0] - 2026-11-16
+
+* `--netlist-format html`：自包含 SVG 网图，离线可开。
+* 交互：节点拖拽、画布缩放/平移、Fit/Reset、边标签开关；
+  点节点显示入/出边，点边显示 source/target/kind。
+* 布局：力导向 + 按类别分层；命名空间/组用虚线集合框包围成员；
+  并行边用不同曲率的曲线，避免叠成一条。
+* `-o graph.html` 可直接写文件；不写则输出 stdout。
+* 第 62 层：HTML 含 doctype、GRAPH、pointerdown、wheel、frameFor、集合标题。
+* 221 项 / 62 层；netlist 预算 600，总预算 7000。
+
+---
+
 ## [1.12.0] - 2026-11-16
 
 * `--netlist --netlist-format json|dot|mermaid`：导出 `!` 的**对象 + 态射**图，

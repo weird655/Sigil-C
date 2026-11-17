@@ -69,7 +69,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.9 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.13 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2063,12 +2063,12 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 6800, (total, sizes)
+        assert total <= 7000, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
-        assert sizes["netlist"] <= 300, sizes["netlist"]
+        assert sizes["netlist"] <= 600, sizes["netlist"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -3092,6 +3092,25 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("61. graph netlist", "netlist exports objects/morphisms as JSON, DOT and Mermaid", test_graph_netlist)
 
+    # Layer 62: standalone HTML graph viewer
+    def test_html_netlist():
+        src = """o! i4 base m, 1;
+!1! P;
+!1! m, base;
+!/[0]/! m, f1, f2;
+![10]! !/[0]/! {
+    !2! X;
+    !2! m, base;
+}
+i4 f1(v.) { r; !/2/!; }
+"""
+        html = netlist_source(src, "!math!/viewer.sigil", format="html")
+        for needle in ("<!doctype html>", "const GRAPH", "pointerdown", "wheel",
+                       "frameFor", "set: !", '"namespace": "math"', "!1! P"):
+            assert needle in html, needle
+
+    assert_ok("62. html viewer", "standalone HTML net graph with drag, zoom, detail panel and set frames", test_html_netlist)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3099,7 +3118,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 61-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 62-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

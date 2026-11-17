@@ -36,7 +36,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
     ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
     ap.add_argument("--netlist", action="store_true", help="print the !...! rewiring netlist; write nothing")
-    ap.add_argument("--netlist-format", choices=("text", "dot", "json", "mermaid"), default="text",
+    ap.add_argument("--netlist-format", choices=("text", "dot", "json", "mermaid", "html"), default="text",
                     help="netlist output format (default: text)")
     ap.add_argument("--emit-prelude", metavar="PATH",
                     help="write the shared Sigil-C C prelude (macros) to PATH")
@@ -104,8 +104,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             with open(args.input, "r", encoding="utf-8") as f:
                 src = f.read()
-            sys.stdout.write(netlist_source(src, os.path.basename(args.input), defines, args.strict,
-                                            format=args.netlist_format))
+            out = netlist_source(src, args.input, defines, args.strict,
+                                 format=args.netlist_format)
+            if args.output_opt:
+                with open(args.output_opt, "w", encoding="utf-8", newline="\n") as f:
+                    f.write(out)
+                print(f"Netlist   {args.output_opt}")
+            else:
+                sys.stdout.write(out)
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, os.path.basename(args.input), src)
             return 1
