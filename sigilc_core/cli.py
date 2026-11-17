@@ -37,7 +37,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--header", metavar="PATH", help="explicit header output path (implies --emit-header)")
     ap.add_argument("--check", action="store_true", help="parse and type-check only; write nothing")
     ap.add_argument("--netlist", action="store_true", help="print the !...! rewiring netlist; write nothing")
-    ap.add_argument("--netlist-format", choices=("text", "dot", "json", "mermaid", "html"), default="text",
+    ap.add_argument("--netlist-format", choices=("text", "dot", "json", "mermaid", "html", "viewer"), default="text",
                     help="netlist output format (default: text)")
     ap.add_argument("--emit-prelude", metavar="PATH",
                     help="write the shared Sigil-C C prelude (macros) to PATH")

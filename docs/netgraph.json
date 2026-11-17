@@ -1,0 +1,105 @@
+{
+  "namespace": null,
+  "namespaces": [
+    "main",
+    "math"
+  ],
+  "project": "project:netgraph",
+  "objects": [
+    {
+      "id": "project:netgraph",
+      "label": "project:netgraph",
+      "kind": "project"
+    },
+    {
+      "id": "file:!main!\\main.sigil",
+      "label": "!main!\\main.sigil",
+      "kind": "file"
+    },
+    {
+      "id": "ns:main",
+      "label": "!main!/",
+      "kind": "namespace"
+    },
+    {
+      "id": "file:!math!\\core.sigil",
+      "label": "!math!\\core.sigil",
+      "kind": "file"
+    },
+    {
+      "id": "ns:math",
+      "label": "!math!/",
+      "kind": "namespace"
+    },
+    {
+      "id": "file:!math!\\core.sigil:pkg:1",
+      "label": "!1! P",
+      "kind": "package"
+    },
+    {
+      "id": "file:!math!\\core.sigil:target:add",
+      "label": "add",
+      "kind": "target"
+    },
+    {
+      "id": "file:!math!\\core.sigil:alias:P",
+      "label": "P",
+      "kind": "alias"
+    }
+  ],
+  "morphisms": [
+    {
+      "source": "file:!main!\\main.sigil",
+      "target": "ns:main",
+      "kind": "in-file",
+      "label": "in file"
+    },
+    {
+      "source": "file:!math!\\core.sigil",
+      "target": "ns:math",
+      "kind": "in-file",
+      "label": "in file"
+    },
+    {
+      "source": "file:!main!\\main.sigil",
+      "target": "file:!math!\\core.sigil:pkg:1",
+      "kind": "uses",
+      "label": "!math[1]!"
+    },
+    {
+      "source": "file:!math!\\core.sigil:pkg:1",
+      "target": "ns:math",
+      "kind": "in",
+      "label": "in namespace"
+    },
+    {
+      "source": "file:!math!\\core.sigil:pkg:1",
+      "target": "file:!math!\\core.sigil:target:add",
+      "kind": "binds",
+      "label": "binds"
+    },
+    {
+      "source": "file:!math!\\core.sigil:alias:P",
+      "target": "file:!math!\\core.sigil:target:add",
+      "kind": "alias",
+      "label": "alias"
+    },
+    {
+      "source": "ns:main",
+      "target": "project:netgraph",
+      "kind": "in-project",
+      "label": "in project"
+    },
+    {
+      "source": "ns:math",
+      "target": "project:netgraph",
+      "kind": "in-project",
+      "label": "in project"
+    }
+  ],
+  "category": {
+    "objects": 8,
+    "morphisms": 8,
+    "composition": "files contain namespaces; namespaces contain packages; uses edges cross files"
+  }
+}

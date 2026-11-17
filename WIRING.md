@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.14.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.15.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -239,14 +239,17 @@ sigilc --netlist file.sigil                         # 文本网表
 sigilc --netlist --netlist-format json file.sigil  # 对象/态射 JSON
 sigilc --netlist --netlist-format dot file.sigil   # Graphviz DOT
 sigilc --netlist --netlist-format mermaid file.sigil # Mermaid
-sigilc --netlist --netlist-format html file.sigil -o graph.html # 交互式 HTML
+sigilc --netlist --netlist-format html file.sigil -o graph.html # 自包含 HTML\nsigilc --build src --netlist --netlist-format json -o graph.json   # 先导出数据\nsigilc --build src --netlist --netlist-format viewer -o viewer.html # 空壳，拖 JSON 进去
 sigilc --build src --netlist --netlist-format html -o project.html # 跨文件项目图
 ```
 
+- `viewer` 是空壳 HTML：把 `--netlist-format json` 导出的 `.json` 拖进去才开始渲染
+- 2D PCB 视图：直角走线、过孔、暗色网格；复古终端 UI + 动态风场背景
 - `--netlist` 文本模式打印 `# namespace:`、`[qualified]` 与 packages/fields/links/groups/gates/landmines/confinement
 - 图模式输出 `objects` + `morphisms`（有向多重图，不是树）；包、目标、字段、组、门、地雷都是对象
 - `--build DIR --netlist` 合并整个项目：文件节点、共享命名空间、跨文件 `uses` 边
 - HTML 模式自带 SVG 视图：节点拖拽、画布缩放/平移、点节点看入/出边、集合框、并行边曲线
+- 示例：[`docs/netgraph-2d.png`](docs/netgraph-2d.png) / [`docs/viewer.png`](docs/viewer.png)
 - **单文件**，不跨文件
 - `--trap-trace` 与 `--shadow-stack` 互斥、默认关；调试用，不进 release
 - `--shadow-stack` 不是生命周期检查

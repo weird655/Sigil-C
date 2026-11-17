@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.14 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.15 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2064,12 +2064,12 @@ int main(void) {
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 7000, (total, sizes)
+        assert total <= 7400, (total, sizes)
         assert sizes["parser"] <= 2700, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
-        assert sizes["netlist"] <= 600, sizes["netlist"]
+        assert sizes["netlist"] <= 700, sizes["netlist"]
 
     assert_ok("34. architecture", "module graph is one-way, stdlib-only and inside budget", test_architecture)
 
@@ -3106,9 +3106,13 @@ i4 f1(v.) { r; !/2/!; }
 i4 f1(v.) { r; !/2/!; }
 """
         html = netlist_source(src, "!math!/viewer.sigil", format="html")
-        for needle in ("<!doctype html>", "const GRAPH", "pointerdown", "wheel",
-                       "frameFor", "set: !", '"namespace": "math"', "!1! P"):
+        for needle in ("<!doctype html>", "const EMBEDDED", "pointerdown", "wheel",
+                       "wind", "DROP GRAPH", "addVia", "frameFor", "set: !",
+                       '"namespace": "math"', "!1! P"):
             assert needle in html, needle
+        assert "mode3d" not in html and "setMode" not in html
+        viewer = netlist_source(src, "!math!/viewer.sigil", format="viewer")
+        assert "DROP GRAPH" in viewer and '"objects": []' in viewer
 
     assert_ok("62. html viewer", "standalone HTML net graph with drag, zoom, detail panel and set frames", test_html_netlist)
 
