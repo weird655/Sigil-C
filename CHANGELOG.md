@@ -4,6 +4,15 @@
 
 > **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
+## [1.15.1] - 2026-11-16
+
+* 修复 CI：跨文件示例从 `examples/` 移到 `docs/netgraph-src/`，避免
+  “semantic check every example” 把 `!math[1]!` 当单文件解析。
+* 重新生成 docs/netgraph.json、viewer.html、netgraph.html 与两张截图。
+* 222 项 / 63 层；无语言/生成物语义变化。
+
+---
+
 ## [1.15.0] - 2026-11-16
 
 * HTML 网图改为复古终端 UI：暗色网格、琥珀/绿色、扫描线、等宽字体。

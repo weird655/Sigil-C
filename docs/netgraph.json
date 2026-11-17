@@ -4,11 +4,11 @@
     "main",
     "math"
   ],
-  "project": "project:netgraph",
+  "project": "project:netgraph-src",
   "objects": [
     {
-      "id": "project:netgraph",
-      "label": "project:netgraph",
+      "id": "project:netgraph-src",
+      "label": "project:netgraph-src",
       "kind": "project"
     },
     {
@@ -86,13 +86,13 @@
     },
     {
       "source": "ns:main",
-      "target": "project:netgraph",
+      "target": "project:netgraph-src",
       "kind": "in-project",
       "label": "in project"
     },
     {
       "source": "ns:math",
-      "target": "project:netgraph",
+      "target": "project:netgraph-src",
       "kind": "in-project",
       "label": "in project"
     }
