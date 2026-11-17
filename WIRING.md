@@ -1,6 +1,6 @@
 # Sigil-C 飞线层教程（Layer 2）
 
-**状态：v1.16.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
+**状态：v1.17.0，允许使用，实验性，不纳入 Core v1 冻结。** 见 [`COMPATIBILITY.md`](COMPATIBILITY.md)。
 
 > 这是 `!` 家族的唯一教程。`SYNTAX.md` 是规范速查，`MULTIFILE.md` 只讲 `--build` 的多文件行为。
 >
@@ -26,7 +26,7 @@
 | 本地引用 | `!/1/!` | 本文件优先；同命名空间的导出函数包也可解析 |
 | 外部引用 | `!math[1]!` | 跨文件访问，只支持函数包 |
 | 导出 | `!1! m, function;` | 外部可见的函数包 |
-| 文件总闸 | `!<+cat+>! on;` / `off;` | 文件级 plant，位于配电箱之上；每个文件独立 |
+| Plant 容器 | `!<+cat+>! on;` / `off;` | `plant.sigil` 清单；管直属 ≤16 个配电箱，并带总闸 |
 
 ---
 
@@ -196,33 +196,58 @@ i4 f3(v.) { r; !/1/!; }    /* 放行 */
 
 ---
 
-## 6.5 文件总闸 `!<+cat+>!`
+## 6.5 Plant 容器 `!<+cat+>!`
 
-文件总闸是**文件级 plant**，位置在配电箱（命名空间）之上，管住本文件下的箱；它不替代箱内的 `![mask]!` 总闸，而是叠加在它们之上。
+`!<+cat+>!` 不是文件总闸，而是 **plant 容器**，有两个功能：
+
+1. **管理最多 16 个配电箱**（命名空间），是 `!` 的最大集合；
+2. **带一个总闸** `on/off`，控制这个 plant 下的所有箱。
+
+多个 plant 各自 16 个箱，解决全局 16 个命名空间不够的问题。
+
+### 目录
+
+```text
+src/
+  core/
+    plant.sigil          !<+core+>! on;
+    !math!/core.sigil
+    !io!/io.sigil
+  gpu/
+    plant.sigil          !<+gpu+>! on;
+    !gfx!/gfx.sigil
+    !mem!/mem.sigil
+```
+
+- `plant.sigil` 是清单文件，放在 plant 根目录
+- 该目录直属的 `!name!/` 是这个 plant 的配电箱
+- 一个 plant 最多 16 个箱
+- 多个 plant 可以有超过 16 个命名空间；箱名仍全项目唯一
+- `!<+cat+>!` 只能写在 `plant.sigil`；写进普通箱文件，`--build` 报错
 
 ### 声明
 
 ```sigil
-/* 文件第一行或任意顶层位置，每文件最多一个 */
+/* plant.sigil */
 !<+core+>! on;
 
-/* 或者 */
+/* 或 */
 !<+core+>! off;
 ```
 
 - `cat` 是自由字符串，1–18 字节，允许字母/数字/`_`/`.`/`-`；区分大小写，不含 `+`
-- `on`：本文件下的配电箱供电，箱内 `![mask]!` 照常工作
-- `off`：本文件全部 `!` 重布线下电，编译期拒绝；C 代码不受影响
-- 每个文件独立，文件之间互不干扰
-- 只能在文件作用域；不能写进函数/块
-- 外部不能命名、引用、开关这个总闸
-- 没有项目级总闸；16 个配电箱仍按命名空间计
+- `on`：plant 下所有箱供电；箱内 `![mask]!` 照常工作
+- `off`：plant 下所有文件的 `!` 重布线下电，编译期拒绝；C 代码不受影响
+- 每个 plant 独立，互不干扰
+- 外部不能命名、引用、开关这个 plant
 
 ### 与箱内总闸的关系
 
 ```sigil
+/* plant.sigil */
 !<+core+>! on;
 
+/* !math!/core.sigil */
 i4 main(v.) { r; 0; }
 
 !/[0]/! m, main;
@@ -233,14 +258,14 @@ i4 main(v.) { r; 0; }
 ```
 
 - plant on + 箱内 `![1]!` 允许 → 正常
-- plant off → 整个文件拒绝，不再看箱内 `![mask]!`
-- plant 只管“本文件是否供电”，不改变 `![mask]!` 的位含义
+- plant off → plant 下整个文件拒绝，不再看箱内 `![mask]!`
+- plant 只决定“这个 plant 是否供电”，不改变 `![mask]!` 的位含义
 
 ### netlist
 
-- 文本：`[file gate]` 段，`!<+core+>! = on/off`
-- 图：对象 `gate:file`，边 `gates-file` 指向本文件命名空间
-- 项目图：`gate:file` 会被文件前缀，不会跨文件共享
+- 单文件：`[file gate]` 段、`gate:file` / `gates-file`（单文件兼容）
+- 项目图：`plant:<dir>` 节点、`powers` 边连向 16 个箱、`in-plant` 边连向文件
+- plant 节点带 `on/off` 状态
 
 ---
 

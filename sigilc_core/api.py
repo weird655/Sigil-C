@@ -69,7 +69,43 @@ def project_netlist_source(root: str, defines: Optional[Dict[str, str]] = None,
         for rel, src, _ in items:
             parts.append(f"\n# file: {rel}\n{netlist_source(src, rel, defines, strict, format='text')}")
         return "\n".join(parts)
-    return render_graph_data(merge_project_graphs(root, items), format)
+    plants, plant_error = _project_plant_scan(root, sources)
+    if plant_error:
+        raise ValueError(plant_error)
+    graph = merge_project_graphs(root, items)
+    _attach_plant_nodes(graph, root, plants)
+    return render_graph_data(graph, format)
+
+
+def _attach_plant_nodes(graph, root: str, plants) -> None:
+    objects = {o["id"]: o for o in graph["objects"]}
+    edges = graph["morphisms"]
+    seen = {(e["source"], e["target"], e["kind"]) for e in edges}
+    for plant_dir, info in sorted(plants.items()):
+        rel = os.path.relpath(plant_dir, root).replace("\\", "/")
+        pid = f"plant:{rel}"
+        if pid not in objects:
+            objects[pid] = {"id": pid, "label": f"!<+{info['category']}+>! {'on' if info['on'] else 'off'}",
+                            "kind": "plant"}
+            graph["objects"].append(objects[pid])
+        for box in info["boxes"]:
+            ns = box[1:-1]
+            nid = f"ns:{ns}"
+            if nid in objects:
+                key = (pid, nid, "powers")
+                if key not in seen:
+                    seen.add(key)
+                    edges.append({"source": pid, "target": nid, "kind": "powers",
+                                  "label": f"plant {'on' if info['on'] else 'off'}"})
+        prefix = f"file:{rel}"
+        for oid in list(objects):
+            if oid.startswith(prefix) and oid != pid:
+                key = (oid, pid, "in-plant")
+                if key not in seen:
+                    seen.add(key)
+                    edges.append({"source": oid, "target": pid, "kind": "in-plant", "label": "in plant"})
+    graph["category"]["objects"] = len(graph["objects"])
+    graph["category"]["morphisms"] = len(edges)
 
 
 def _header_guard(header_name: str) -> str:
@@ -668,10 +704,56 @@ def _project_namespace(rel: str) -> str:
 
 
 _PROJECT_NS_RE = re.compile(r"^[a-z][a-z0-9_]{0,7}$")
+_PLANT_FILE = "plant.sigil"
+_PLANT_GATE_RE = re.compile(r"^\s*!<\+([^+>]+)\+>!\s*(on|off)\s*;", re.M)
+_PLANT_CAT_RE = re.compile(r"^[A-Za-z0-9_.-]{1,18}$")
 _PROJECT_MAX_NAMESPACES = 16
 _PROJECT_MAX_PACKAGES = 64
 _PROJECT_MAX_PACKAGE_ID = 63
 _PROJECT_MAX_EXPORTS = 64
+
+
+def _project_plant_scan(root: str, sources: List[str]):
+    """Find plant.sigil manifests and the 16-box limit per plant."""
+    plants = {}
+    for src_path in sources:
+        if os.path.basename(src_path) != _PLANT_FILE:
+            continue
+        plant_dir = os.path.dirname(src_path)
+        with open(src_path, "r", encoding="utf-8") as f:
+            text = f.read()
+        m = _PLANT_GATE_RE.search(text)
+        if not m:
+            return None, f"{src_path}: plant manifest needs !<+cat+>! on; or off;"
+        category, state = m.group(1), m.group(2)
+        if not _PLANT_CAT_RE.fullmatch(category):
+            return None, f"{src_path}: invalid plant category '{category}' (1-18 ASCII letters/digits/_.-)"
+        boxes = []
+        try:
+            entries = sorted(os.listdir(plant_dir))
+        except OSError as e:
+            return None, f"{src_path}: cannot list plant directory: {e}"
+        for name in entries:
+            full = os.path.join(plant_dir, name)
+            if os.path.isdir(full) and re.fullmatch(r"![^!]+!", name):
+                boxes.append(name)
+        if len(boxes) > _PROJECT_MAX_NAMESPACES:
+            return None, (f"{src_path}: too many boxes in plant '{category}' "
+                          f"({len(boxes)} > {_PROJECT_MAX_NAMESPACES})")
+        plants[plant_dir] = {"category": category, "on": state == "on", "boxes": boxes}
+    return plants, None
+
+
+def _project_plant_for(path: str, plants: Dict[str, Dict[str, object]]) -> Optional[str]:
+    d = os.path.dirname(path)
+    while True:
+        if d in plants:
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
 
 
 def _project_package_ids(src: str) -> List[str]:
@@ -782,18 +864,35 @@ def _build_project(args, defines: Dict[str, str]) -> int:
     if not sources:
         print(f"error: no .sigil files under '{root}'", file=sys.stderr)
         return 1
+    plants, plant_error = _project_plant_scan(root, sources)
+    if plant_error:
+        print(f"error: {plant_error}", file=sys.stderr)
+        return 1
+    compile_sources = [s for s in sources if os.path.basename(s) != _PLANT_FILE]
+    if not compile_sources:
+        print(f"error: no compilable .sigil files under '{root}'", file=sys.stderr)
+        return 1
 
     out_dir = os.path.join(root, ".sigil-build")
     c_paths: List[str] = []
     sources_text: Dict[str, str] = {}
     prototypes: Dict[str, List[str]] = {}
     raw_prototypes: Dict[str, List[str]] = {}
-    for src_path in sources:
+    for src_path in compile_sources:
         rel = os.path.relpath(src_path, root)
         with open(src_path, "r", encoding="utf-8") as f:
-            sources_text[rel] = f.read()
-        raw_prototypes[rel] = _project_prototypes(sources_text[rel], mangle=False)
-        prototypes[rel] = _project_prototypes(sources_text[rel], _project_namespace(rel))
+            text = f.read()
+        plant_dir = _project_plant_for(src_path, plants)
+        if plant_dir is not None:
+            if _PLANT_GATE_RE.search(text):
+                print(f"error: {rel}: !<+cat+>! is only allowed in plant.sigil", file=sys.stderr)
+                return 1
+            plant = plants[plant_dir]
+            if not plant["on"]:
+                text = f"/* plant off: {plant['category']} */\n!<+{plant['category']}+>! off;\n" + text
+        sources_text[rel] = text
+        raw_prototypes[rel] = _project_prototypes(text, mangle=False)
+        prototypes[rel] = _project_prototypes(text, _project_namespace(rel))
     package_index: Dict[str, Dict[str, str]] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
@@ -836,7 +935,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                 print(f"error: package !{pid}! in {rel} has a non-canonical ID "
                       f"(leading zero)", file=sys.stderr)
                 return 1
-    if len(namespaces) > _PROJECT_MAX_NAMESPACES:
+    if not plants and len(namespaces) > _PROJECT_MAX_NAMESPACES:
         print(f"error: too many namespaces ({len(namespaces)} > "
               f"{_PROJECT_MAX_NAMESPACES})", file=sys.stderr)
         return 1
@@ -896,7 +995,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                 f.write(f"{ns + '.' if ns else ''}{pid} -> {rel}\n")
         for key, target in exports.items():
             f.write(f"{key} target -> {target}\n")
-    for src_path in sources:
+    for src_path in compile_sources:
         rel = os.path.relpath(src_path, root)
         c_path = os.path.join(out_dir, os.path.splitext(rel)[0] + ".c")
         os.makedirs(os.path.dirname(c_path) or out_dir, exist_ok=True)

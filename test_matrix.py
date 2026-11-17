@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.16 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.17 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3163,6 +3163,58 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("64. file gate", "file-local !<+cat+>! on/off gate; off rejects all ! rewiring", test_file_gate)
 
+    # Layer 65: plant containers, 16 boxes per plant
+    def test_plants():
+        def make_plants(root):
+            for plant, cat, prefix in (("A", "core", "a"), ("B", "gpu", "b")):
+                pdir = os.path.join(root, plant)
+                os.makedirs(pdir)
+                with open(os.path.join(pdir, "plant.sigil"), "w", encoding="utf-8") as f:
+                    f.write(f"!<+{cat}+>! on;\n")
+                for i in range(9):
+                    ns = os.path.join(pdir, f"!{prefix}{i}!")
+                    os.makedirs(ns)
+                    body = ("i4 main(v.) { r; 0; }\n" if (plant == "A" and i == 0)
+                            else f"i4 f{prefix}{i}(v.) {{ r; {i}; }}\n")
+                    with open(os.path.join(ns, "core.sigil"), "w", encoding="utf-8") as f:
+                        f.write(body)
+
+        work = tempfile.mkdtemp(prefix="plants-")
+        make_plants(work)
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work], capture_output=True, text=True)
+        assert r.returncode == 0, (r.returncode, r.stdout[-500:], r.stderr[-800:])
+        data = json.loads(project_netlist_source(work, format="json"))
+        assert len(data["namespaces"]) == 18, data["namespaces"]
+        plants = [o for o in data["objects"] if o["kind"] == "plant"]
+        assert len(plants) == 2, plants
+        assert sum(1 for m in data["morphisms"] if m["kind"] == "powers") == 18
+
+        one = tempfile.mkdtemp(prefix="oneplant-")
+        os.makedirs(os.path.join(one, "A"))
+        with open(os.path.join(one, "A", "plant.sigil"), "w", encoding="utf-8") as f:
+            f.write("!<+core+>! on;\n")
+        for i in range(17):
+            ns = os.path.join(one, "A", f"!n{i}!")
+            os.makedirs(ns)
+            with open(os.path.join(ns, "core.sigil"), "w", encoding="utf-8") as f:
+                f.write(f"i4 f{i}(v.) {{ r; {i}; }}\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", one], capture_output=True, text=True)
+        assert r.returncode != 0 and "too many boxes" in (r.stdout + r.stderr)
+
+        off = tempfile.mkdtemp(prefix="offplant-")
+        os.makedirs(os.path.join(off, "A", "!m!"))
+        with open(os.path.join(off, "A", "plant.sigil"), "w", encoding="utf-8") as f:
+            f.write("!<+core+>! off;\n")
+        with open(os.path.join(off, "A", "!m!", "core.sigil"), "w", encoding="utf-8") as f:
+            f.write("!1! P;\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", off], capture_output=True, text=True)
+        assert r.returncode != 0 and "gate is off" in (r.stdout + r.stderr)
+
+    assert_ok("65. plants", "each plant.sigil owns up to 16 boxes; 18 namespaces across 2 plants", test_plants)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3170,7 +3222,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 64-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 65-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

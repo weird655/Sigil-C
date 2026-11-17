@@ -12,6 +12,16 @@
       "kind": "project"
     },
     {
+      "id": "file:plant.sigil",
+      "label": "plant.sigil",
+      "kind": "file"
+    },
+    {
+      "id": "file:plant.sigil:gate:file",
+      "label": "!<+core+>! on",
+      "kind": "gate"
+    },
+    {
       "id": "file:!main!\\main.sigil",
       "label": "!main!\\main.sigil",
       "kind": "file"
@@ -45,6 +55,11 @@
       "id": "file:!math!\\core.sigil:alias:P",
       "label": "P",
       "kind": "alias"
+    },
+    {
+      "id": "plant:.",
+      "label": "!<+core+>! on",
+      "kind": "plant"
     }
   ],
   "morphisms": [
@@ -95,11 +110,23 @@
       "target": "project:netgraph-src",
       "kind": "in-project",
       "label": "in project"
+    },
+    {
+      "source": "plant:.",
+      "target": "ns:main",
+      "kind": "powers",
+      "label": "plant on"
+    },
+    {
+      "source": "plant:.",
+      "target": "ns:math",
+      "kind": "powers",
+      "label": "plant on"
     }
   ],
   "category": {
-    "objects": 8,
-    "morphisms": 8,
+    "objects": 11,
+    "morphisms": 10,
     "composition": "files contain namespaces; namespaces contain packages; uses edges cross files"
   }
 }

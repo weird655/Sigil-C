@@ -441,17 +441,18 @@ stroke-width:3px;stroke-linejoin:round;opacity:0;transition:opacity .15s}
 const EMBEDDED = __GRAPH__;
 const KIND_COLOR = {namespace:"#79c0ff",package:"#9fd356",target:"#ffb000",field:"#bc8cff",
   group:"#ff6b4a",gate:"#ff9f43",landmine:"#ff5c5c",slot:"#b9985a",alias:"#79c0ff",
-  file:"#8a6a38",project:"#d2a8ff"};
+  file:"#8a6a38",project:"#a371f7",plant:"#ff9f43"};
 const KIND_LABEL = {namespace:"命名空间",package:"包",target:"目标",field:"字段切片",group:"集合/组",
-  gate:"门",landmine:"地雷",slot:"局部槽",alias:"别名",file:"文件",project:"工程"};
+  gate:"门",landmine:"地雷",slot:"局部槽",alias:"别名",file:"文件",project:"工程",plant:"发电厂"};
 const EDGE_COLOR = {in:"#79c0ff",binds:"#9fd356",alias:"#79c0ff",field:"#bc8cff",member:"#ff6b4a",
   gates:"#ff9f43",allows:"#ff9f43",confined:"#ff5c5c",armed:"#ff5c5c",bound:"#ff5c5c",
-  "in-file":"#8a6a38","in-project":"#d2a8ff",uses:"#ffb000","uses-local":"#ffb000",gates-file:"#ff6b4a"};
+  "in-file":"#8a6a38","in-project":"#d2a8ff",uses:"#ffb000","uses-local":"#ffb000","gates-file":"#ff6b4a",
+  "in-plant":"#ff9f43",powers:"#ff9f43"};
 const svg=document.getElementById("svg"), viewport=document.getElementById("viewport");
 const frames=document.getElementById("frames"), edgeLayer=document.getElementById("edges"), nodeLayer=document.getElementById("nodes");
 const panel=document.getElementById("detail"), stats=document.getElementById("stats");
 const drop=document.getElementById("drop");
-const RANK={project:-1,file:0,namespace:1,group:2,gate:2,landmine:3,package:4,field:5,alias:5,slot:6,target:7};
+const RANK={plant:-2,project:-1,file:0,namespace:1,group:2,gate:2,landmine:3,package:4,field:5,alias:5,slot:6,target:7};
 let GRAPH={objects:[],morphisms:[],namespaces:[]};
 let nodes=[],edges=[],byId=new Map(),adj=new Map();
 const nodeEls=new Map();let edgeEls=[];
