@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.27 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.28 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3405,6 +3405,27 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("74. sanitizers", "ASan/TSan are build-only and mutually exclusive", test_sanitizer_modes)
 
+    # Layer 75: checked external-C boundary
+    def test_checked_external():
+        src = '#include <stdio.h>\ni4 main(v.) { printf("x"); r; 0; }\n'
+        try:
+            compile_source(src, "ext.sigil", checked_external=True)
+        except SemanticError as e:
+            assert "external C function 'printf'" in str(e), e
+        else:
+            raise AssertionError("expected checked_external rejection")
+        compiled = compile_source(src, "ext.sigil", checked_external=True, allow_external={"printf"})
+        assert "#define SIGIL_CHECKED_ARITH 1" in compiled
+        indirect = "i4 f(f^(i4) -> i4 cb) { r; cb(1); }\n"
+        try:
+            compile_source(indirect, "ind.sigil", checked_external=True)
+        except SemanticError as e:
+            assert "indirect call" in str(e), e
+        else:
+            raise AssertionError("expected checked_external indirect rejection")
+
+    assert_ok("75. external C", "checked-external rejects unknown/indirect C calls and honors allowlist", test_checked_external)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3412,7 +3433,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 74-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 75-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

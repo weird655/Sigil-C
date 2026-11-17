@@ -92,10 +92,16 @@ class Parser:
     def __init__(self, tokens: List[Token], filename: str = "<input>",
                  defines: Optional[Dict[str, str]] = None,
                  strict_provenance: bool = False, effects: Optional[Dict[str, Any]] = None,
-                 checked: bool = False):
+                 checked: bool = False, checked_external: bool = False,
+                 allow_external: Optional[Set[str]] = None,
+                 known_functions: Optional[Set[str]] = None):
         self.tokens = tokens
         self.strict_provenance = strict_provenance
         self.checked = checked
+        self.checked_external = checked_external
+        self.allow_external = allow_external or set()
+        self.known_functions = known_functions or set()
+        self.external_builtins: Set[str] = set()
         self.pos = 0
         self.filename = filename
         self.user_types: Dict[str, str] = {}
@@ -652,9 +658,26 @@ class Parser:
             return ft
 
         if isinstance(expr, CallExpr):
+            if isinstance(expr.callee, IdentExpr) and expr.callee.name in self.external_builtins:
+                fname = expr.callee.name
+                if self.checked_external and fname not in self.allow_external:
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: call to external C function '{fname}' "
+                        f"is outside the checked guarantee; allow it with --allow-external {fname}")
+                ent = self.scopes[0].get(fname)
+                if isinstance(ent, FunctionPointerType):
+                    return ent.return_type
             if isinstance(expr.callee, IdentExpr) and expr.callee.name in self.func_sigs:
-                _, ret_t = self.func_sigs[expr.callee.name]
+                fname = expr.callee.name
+                if self.checked_external and fname not in self.func_defined and fname not in self.known_functions and fname not in self.allow_external:
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: call to external C function '{fname}' "
+                        f"is outside the checked guarantee; allow it with --allow-external {fname}")
+                _, ret_t = self.func_sigs[fname]
                 return ret_t
+            if self.checked_external:
+                raise SemanticError(
+                    f"{self.filename}:{expr.line}:{expr.col}: indirect call is outside the checked external-C guarantee")
             callee_t = self._infer_expr_type(expr.callee)
             if isinstance(callee_t, FunctionPointerType):
                 return callee_t.return_type
@@ -1140,6 +1163,7 @@ class Parser:
         t_double = BaseType(ln, cl, 'double')
 
         def reg_fn(name: str, params: List[TypeNode], ret: TypeNode, variadic: bool = False):
+            self.external_builtins.add(name)
             if name not in self.scopes[0]:
                 self.scopes[0][name] = FunctionPointerType(ln, cl, [(p, f"p{i}") for i, p in enumerate(params)], ret, is_variadic=variadic)
                 if not variadic:

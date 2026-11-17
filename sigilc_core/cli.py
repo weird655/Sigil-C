@@ -67,6 +67,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--cc", default="gcc", help="C compiler used by --build (default: gcc)")
     ap.add_argument("--cflags", default="-std=c99 -Wall -Wextra -Werror -pedantic",
                     help="compiler flags used by --build")
+    ap.add_argument("--checked-external", action="store_true",
+                    help="checked mode; reject external C calls unless allowed")
+    ap.add_argument("--allow-external", metavar="NAME", action="append", default=[],
+                    help="with --checked-external: allow this external C function")
     ap.add_argument("--checked-strict", action="store_true",
                     help="checked mode + trap when __builtin_object_size is unknown")
     ap.add_argument("--checked", action="store_true",
@@ -173,7 +177,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         c_src = compile_source(src, fname, prelude=args.prelude, bounds_check=args.bounds_check,
                                defines=defines, line_directives=not args.no_line,
                                strict=args.strict, trap_trace=args.trap_trace,
-                               shadow_stack=args.shadow_stack)
+                               shadow_stack=args.shadow_stack,
+                               checked=getattr(args, "checked", False),
+                               checked_strict=getattr(args, "checked_strict", False),
+                               checked_external=getattr(args, "checked_external", False),
+                               allow_external=set(args.allow_external))
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(c_src)
         print(f"Compiled {in_path} -> {out_path}")

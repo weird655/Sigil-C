@@ -19,17 +19,21 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
                    line_directives: bool = True, strict: bool = False,
                    trap_trace: bool = False, shadow_stack: bool = False, namespace: str = "",
                    effects: Optional[Dict[str, Any]] = None, checked: bool = False,
-                   checked_strict: bool = False) -> str:
+                   checked_strict: bool = False, checked_external: bool = False,
+                   allow_external: Optional[Set[str]] = None,
+                   known_functions: Optional[Set[str]] = None) -> str:
     if trap_trace and shadow_stack:
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
     ast = Parser(tokens, filename, defines, strict_provenance=strict, effects=effects,
-                checked=checked or checked_strict).parse_program()
+                checked=checked or checked_strict or checked_external,
+                checked_external=checked_external, allow_external=allow_external,
+                known_functions=known_functions).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives,
                          trap_trace=trap_trace, shadow_stack=shadow_stack,
-                         namespace=namespace, checked_arith=checked,
+                         namespace=namespace, checked_arith=checked or checked_external,
                          checked_strict=checked_strict).generate(ast)
 
 def check_source(src: str, filename: str = "input.sigil", defines: Optional[Dict[str, str]] = None,
@@ -927,6 +931,12 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         raw_prototypes[rel] = _project_prototypes(text, mangle=False)
         prototypes[rel] = _project_prototypes(text, _project_namespace(rel))
     effects = _project_effects(sources_text, raw_prototypes)
+    project_functions = set()
+    for _protos in prototypes.values():
+        for _proto in _protos:
+            _m = re.search(r'([A-Za-z_]\w*)\s*\(', _proto)
+            if _m:
+                project_functions.add(_m.group(1))
     package_index: Dict[str, Dict[str, str]] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
@@ -1052,7 +1062,10 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict,
                                    effects=effects, checked=getattr(args, "checked", False),
-                                   checked_strict=getattr(args, "checked_strict", False))
+                                   checked_strict=getattr(args, "checked_strict", False),
+                                   checked_external=getattr(args, "checked_external", False),
+                                   allow_external=set(getattr(args, "allow_external", []) or []),
+                                   known_functions=project_functions)
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, rel, src)
             return 1
