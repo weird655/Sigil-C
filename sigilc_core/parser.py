@@ -1,7 +1,7 @@
 """Sigil-C parser (generated split of sigilc.py)."""
 
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import confine, packages, provenance
 from .lexer import (
@@ -91,7 +91,7 @@ from .type_system import (
 class Parser:
     def __init__(self, tokens: List[Token], filename: str = "<input>",
                  defines: Optional[Dict[str, str]] = None,
-                 strict_provenance: bool = False):
+                 strict_provenance: bool = False, effects: Optional[Dict[str, Any]] = None):
         self.tokens = tokens
         self.strict_provenance = strict_provenance
         self.pos = 0
@@ -113,6 +113,10 @@ class Parser:
         self.escape_params: Dict[str, Set[str]] = {}
         self.func_param_names: Dict[str, List[str]] = {}
         self.func_summaries: Dict[str, provenance.FuncProvSummary] = {}
+        for _name, _eff in (effects or {}).items():
+            self.func_summaries[_name] = _eff["summary"]
+            self.escape_params[_name] = set(_eff.get("escape", set()))
+            self.func_param_names[_name] = list(_eff.get("params", []))
         self.cur_summary: Optional[provenance.FuncProvSummary] = None
         self.cur_params: List[str] = []
         self._summary_stack: List[Tuple[object, List[str]]] = []
@@ -895,7 +899,7 @@ class Parser:
         for fname, taints, line, col in self.pending_pkg_calls:
             esc = self.escape_params.get(fname, set())
             pnames = self.func_param_names.get(fname, [])
-            if fname not in self.func_defined:
+            if fname not in self.func_defined and fname not in self.func_summaries:
                 if any(taints):
                     raise SemanticError(
                         f"{self.filename}:{line}:{col}: cannot prove external function '{fname}' "
@@ -910,7 +914,7 @@ class Parser:
                         f"'{fname}' argument {idx + 1}, but that argument escapes the call")
         for fname, taints, line, col in self.pending_pkg_ret_calls:
             summary = self.func_summaries.get(fname)
-            if fname not in self.func_defined or summary is None or summary.unknown:
+            if summary is None or summary.unknown:
                 raise SemanticError(
                     f"{self.filename}:{line}:{col}: cannot prove '{fname}' does not return a local package address")
             for idx, pid in enumerate(taints):

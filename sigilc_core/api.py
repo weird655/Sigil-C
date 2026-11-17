@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .codegen import CodeGenerator
 from .lexer import EXTERNAL_C_SPELLING, SIGIL_KEYWORDS, SIGIL_OPERATORS, Lexer, LexerError
@@ -17,12 +17,13 @@ from .parser import Parser
 def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[str] = None,
                    bounds_check: bool = False, defines: Optional[Dict[str, str]] = None,
                    line_directives: bool = True, strict: bool = False,
-                   trap_trace: bool = False, shadow_stack: bool = False, namespace: str = "") -> str:
+                   trap_trace: bool = False, shadow_stack: bool = False, namespace: str = "",
+                   effects: Optional[Dict[str, Any]] = None) -> str:
     if trap_trace and shadow_stack:
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
     tokens = Lexer(src, filename).tokenize()
-    ast = Parser(tokens, filename, defines, strict_provenance=strict).parse_program()
+    ast = Parser(tokens, filename, defines, strict_provenance=strict, effects=effects).parse_program()
     return CodeGenerator(filename, prelude_include=prelude, bounds_check=bounds_check,
                          cli_defines=defines, line_directives=line_directives,
                          trap_trace=trap_trace, shadow_stack=shadow_stack,
@@ -755,6 +756,31 @@ def _project_plant_for(path: str, plants: Dict[str, Dict[str, object]]) -> Optio
         d = parent
 
 
+def _project_effects(sources_text: Dict[str, str],
+                     raw_prototypes: Dict[str, List[str]]) -> Dict[str, Dict[str, Any]]:
+    """Collect P1 return/retains effects across project files."""
+    effects: Dict[str, Dict[str, Any]] = {}
+    for rel, text in sources_text.items():
+        prepared = "\n".join(raw_prototypes.get(rel, [])) + "\n" + text
+        prepared = re.sub(r"!([A-Za-z_]\w*)\[(\d+)\]!\s*\([^()]*\)", "0", prepared)
+        prepared = re.sub(r"!([A-Za-z_]\w*)\[(\d+)\]!", "0", prepared)
+        try:
+            parser = Parser(Lexer(prepared, rel).tokenize(), rel)
+            parser.parse_program()
+        except Exception:
+            continue
+        ns = _project_namespace(rel)
+        for name, summary in parser.func_summaries.items():
+            key = f"{ns}_{name}" if ns and name != "main" else name
+            effects[key] = {
+                "summary": summary,
+                "escape": set(parser.escape_params.get(name, set())),
+                "params": list(parser.func_param_names.get(name, [])),
+            }
+    return effects
+
+
+
 
 def _project_package_ids(src: str) -> List[str]:
     """Package IDs declared in one source (not references like !/1/!)."""
@@ -893,6 +919,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         sources_text[rel] = text
         raw_prototypes[rel] = _project_prototypes(text, mangle=False)
         prototypes[rel] = _project_prototypes(text, _project_namespace(rel))
+    effects = _project_effects(sources_text, raw_prototypes)
     package_index: Dict[str, Dict[str, str]] = {}
     for rel, text in sources_text.items():
         ns = _project_namespace(rel)
@@ -1016,7 +1043,8 @@ def _build_project(args, defines: Dict[str, str]) -> int:
                                              bindings_all, namespaces, rel)
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
                                    bounds_check=args.bounds_check, defines=defines,
-                                   line_directives=not args.no_line, strict=args.strict)
+                                   line_directives=not args.no_line, strict=args.strict,
+                                   effects=effects)
         except (LexerError, ParseError, SemanticError) as e:
             _print_error(e, rel, src)
             return 1

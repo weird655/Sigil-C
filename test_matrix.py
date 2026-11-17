@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.20 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.21 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3290,6 +3290,22 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("68. lifecycle P1", "returned-parameter and field-retains summaries drive P1 call checks", test_lifecycle_p1)
 
+    # Layer 69: project-wide P1 summaries
+    def test_project_p1():
+        work = tempfile.mkdtemp(prefix="p1x-")
+        os.makedirs(os.path.join(work, "!math!"))
+        os.makedirs(os.path.join(work, "!main!"))
+        with open(os.path.join(work, "!math!", "core.sigil"), "w", encoding="utf-8") as f:
+            f.write("s{ S { p* i4 p; };\no! S gs;\nv. keep(p* i4 q) { gs.p m, q; }\n!1! P;\n!1! m, keep;\n")
+        with open(os.path.join(work, "!main!", "main.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) { o! i4 x m, 1; !1! m, x; !math[1]!(p@ !/1/!); r; 0; }\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            "--build", work], capture_output=True, text=True, cwd=work)
+        out = r.stdout + r.stderr
+        assert r.returncode != 0 and "math_keep" in out and "escapes the call" in out, out[-800:]
+
+    assert_ok("69. project P1", "cross-file retains summary reaches the caller under --build", test_project_p1)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3297,7 +3313,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 68-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 69-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
