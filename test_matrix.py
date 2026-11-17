@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.15.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.16 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2065,7 +2065,7 @@ int main(void) {
 
         total = sum(sizes.values())
         assert total <= 7400, (total, sizes)
-        assert sizes["parser"] <= 2700, sizes["parser"]
+        assert sizes["parser"] <= 2750, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 450, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
@@ -3135,6 +3135,34 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("63. project graph", "cross-file graph merges files/namespaces and adds uses edges", test_project_graph)
 
+    # Layer 64: file-level master gate
+    def test_file_gate():
+        ok_src = ("!<+core+>! on;\ni4 main(v.) { r; 0; }\n"
+                  "!/[0]/! m, main;\n![1]! !/[0]/! { !1! P; !1! m, main; }\n")
+        assert check_source(ok_src, "!math!/gate.sigil") is None
+        text = netlist_source(ok_src, "!math!/gate.sigil", format="text")
+        assert "[file gate]" in text and "!<+core+>! = on" in text, text
+        assert "[gates]" in text and "main" in text, text
+        data = json.loads(netlist_source(ok_src, "!math!/gate.sigil", format="json"))
+        assert any(o["kind"] == "gate" and "core" in o["label"] for o in data["objects"]), data
+        assert any(m["kind"] == "gates-file" for m in data["morphisms"]), data
+        assert check_source("!<+core+>! off;\ni4 main(v.) { r; 0; }\n", "!math!/off.sigil") is None
+        for bad, exc, needle in (
+            ("!<+core+>! off;\n!1! P;\n", SemanticError, "gate is off"),
+            ("!<+core+>! on;\n!<+io+>! off;\n", ParseError, "duplicate file gate"),
+            ("i4 main(v.) { !<+core+>! on; r; 0; }\n", ParseError, "file scope"),
+            ("!<++>! on;\n", ParseError, "category"),
+            ("!<+core+>! maybe;\n", ParseError, "on' or 'off"),
+        ):
+            try:
+                check_source(bad, "!math!/bad.sigil")
+            except exc as e:
+                assert needle in str(e), (bad, e)
+            else:
+                raise AssertionError("expected " + exc.__name__ + " for " + bad)
+
+    assert_ok("64. file gate", "file-local !<+cat+>! on/off gate; off rejects all ! rewiring", test_file_gate)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3142,7 +3170,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 63-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 64-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

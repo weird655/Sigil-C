@@ -117,6 +117,10 @@ class Parser:
         self._summary_stack: List[Tuple[object, List[str]]] = []
         self.pkgs = packages.PackageTable()
         self.confine = confine.Confinement()
+        self.file_gate_category: Optional[str] = None
+        self.file_gate_on: bool = True
+        self.file_gate_seen: bool = False
+        self.file_gate_line: int = 0
         self.pending_slots: List[StmtNode] = []
         self._pkg_saved: List[Tuple[Dict[str, str], Dict[str, str]]] = []
         self.pending_calls: List[Tuple[str, List[Tuple[ExprNode, Optional['Prov']]], int, int]] = []
@@ -1391,9 +1395,33 @@ class Parser:
 
         return base_node
 
+    def parse_file_gate(self) -> None:
+        tok = self._eat('KW_FILE_GATE')
+        if self.file_gate_seen:
+            raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: duplicate file gate; one per file")
+        category = tok.value.strip()
+        if not (1 <= len(category) <= 18) or any(
+                not (c.isascii() and (c.isalnum() or c in "_.-")) for c in category):
+            raise ParseError(
+                f"{self.filename}:{tok.line}:{tok.col}: file gate category must be 1-18 ASCII "
+                f"letters/digits/_.- and contain no '+', got '{category}'")
+        state_tok = self._eat('IDENT')
+        state = state_tok.value
+        if state not in ('on', 'off'):
+            raise ParseError(
+                f"{self.filename}:{state_tok.line}:{state_tok.col}: file gate state must be 'on' or 'off', got '{state}'")
+        self.file_gate_category = category
+        self.file_gate_on = state == 'on'
+        self.file_gate_seen = True
+        self.file_gate_line = tok.line
+        self._eat('SEMI')
+
     def parse_program(self) -> List[StmtNode]:
         top_nodes: List[StmtNode] = []
         while self._cur().kind != 'EOF':
+            if self._cur().kind == 'KW_FILE_GATE':
+                self.parse_file_gate()
+                continue
             if self._cur().kind == 'LONG_GROUP':
                 confine.parse_long_group(self)
                 continue
@@ -1466,6 +1494,13 @@ class Parser:
                 tok = self._cur()
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'{c_keyword_hint(tok.value)}")
         self._check_calls()
+        if self.file_gate_seen and not self.file_gate_on:
+            p = self.pkgs
+            if (p.packages or p.fields or p.slot_types or p.targets or p.local
+                    or self.confine.groups or self.confine.long_groups or self.confine.gates):
+                raise SemanticError(
+                    f"{self.filename}:{self.file_gate_line}: file gate is off; "
+                    f"no ! rewiring is allowed in this file")
         return self.pending_slots + top_nodes
 
     def _check_compound_init(self, target: TypeNode, init: AggregateInit, name_tok: Token):
@@ -2016,6 +2051,9 @@ class Parser:
 
     def parse_stmt(self) -> StmtNode:
         tok = self._cur()
+        if tok.kind == 'KW_FILE_GATE':
+            raise ParseError(
+                f"{self.filename}:{tok.line}:{tok.col}: file gate !<+...>! is only allowed at file scope")
         if tok.kind in ('PKG1', 'PKG1_ARMED'):
             return packages.parse_bind_local(self, tok)
         if tok.kind == 'PKG3':

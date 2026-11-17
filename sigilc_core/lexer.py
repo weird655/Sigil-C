@@ -411,6 +411,17 @@ class Lexer:
                         tokens.append(Token('KW_PTR', label, s_line, s_col, s_byte))
                     continue
 
+            if ch == '!' and nxt == '<' and self._peek(2) == '+':
+                j = 3
+                while self._peek(j) not in ('+', ''):
+                    j += 1
+                if self._peek(j) == '+' and self._peek(j + 1) == '>' and self._peek(j + 2) == '!':
+                    category = self.src[self.pos + 3:self.pos + j]
+                    self._advance(j + 3)
+                    tokens.append(Token('KW_FILE_GATE', category, s_line, s_col, s_byte))
+                    continue
+                raise LexerError(f"{self.filename}:{s_line}:{s_col}: Unterminated file gate; expected !<+category+>!")
+
             if ch == '!' and nxt == '/' and self._peek(2) == '[' and self._peek(3) == '[':
                 j = 4
                 while self._peek(j) not in (']', ''):

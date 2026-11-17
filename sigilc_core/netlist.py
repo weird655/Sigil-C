@@ -111,6 +111,13 @@ def _graph(parser) -> Dict[str, Any]:
             obj(f"target:{fn}", fn, "target")
             edge(gate, f"target:{fn}", "allows", "allows")
 
+    if getattr(parser, "file_gate_seen", False):
+        gate = "gate:file"
+        state = "on" if parser.file_gate_on else "off"
+        obj(gate, f"!<+{parser.file_gate_category}+>! {state}", "gate")
+        if ns:
+            edge(gate, f"ns:{ns}", "gates-file", f"file gate {state}")
+
     for pid in p.armed:
         mine = f"landmine:{pid}"
         obj(mine, f"!{pid}!!", "landmine")
@@ -256,6 +263,9 @@ def render_netlist(parser) -> str:
     ns = _namespace(parser.filename)
     lines: List[str] = [f"# Sigil-C netlist: {parser.filename}", "",
                         f"# namespace: {ns or '(none)'}", ""]
+    if getattr(parser, "file_gate_seen", False):
+        state = "on" if parser.file_gate_on else "off"
+        lines += ["[file gate]", f"!<+{parser.file_gate_category}+>! = {state}", ""]
     lines.append("[packages]")
     seen = set()
     for pid, name in p.packages.items():
@@ -436,7 +446,7 @@ const KIND_LABEL = {namespace:"命名空间",package:"包",target:"目标",field
   gate:"门",landmine:"地雷",slot:"局部槽",alias:"别名",file:"文件",project:"工程"};
 const EDGE_COLOR = {in:"#79c0ff",binds:"#9fd356",alias:"#79c0ff",field:"#bc8cff",member:"#ff6b4a",
   gates:"#ff9f43",allows:"#ff9f43",confined:"#ff5c5c",armed:"#ff5c5c",bound:"#ff5c5c",
-  "in-file":"#8a6a38","in-project":"#d2a8ff",uses:"#ffb000","uses-local":"#ffb000"};
+  "in-file":"#8a6a38","in-project":"#d2a8ff",uses:"#ffb000","uses-local":"#ffb000",gates-file:"#ff6b4a"};
 const svg=document.getElementById("svg"), viewport=document.getElementById("viewport");
 const frames=document.getElementById("frames"), edgeLayer=document.getElementById("edges"), nodeLayer=document.getElementById("nodes");
 const panel=document.getElementById("detail"), stats=document.getElementById("stats");
