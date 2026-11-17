@@ -74,7 +74,7 @@ python3 dist/sigilc.pyz --version
 ## KK
 | 项 | 口径 |
 |---|---|
-| 版本 | 1.28.0 |
+| 版本 | 1.28.1 |
 | Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
 | libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
@@ -97,6 +97,16 @@ python3 dist/sigilc.pyz --version
 - **生成物可退出**：纯 C99 + `#line`，随时可以丢掉转译器只留生成代码；
   要交给 C 程序员时加 `--no-line`，每行不再插 `#line`。
   
+
+## 边界状态（v1.28.1）
+
+完整账本见 [`BOUNDARIES.md`](BOUNDARIES.md) B0。
+
+- ✅ 已解封：P1 跨文件摘要、常量 UB、checked 整数/复合赋值/位域、NULL/函数指针、已知对象指针/下标、未初始化局部
+- 🟡 只能遏制：P0 悬垂、未知对象大小、strict aliasing、堆 UAF（ASan）、data race（TSan）、外部 C 白名单
+- ⛔ 仍挡不住：指针减法/关系比较（checked 拒绝）、setjmp/信号、位域 ABI、完整 points-to/所有权、外部 C 任意 UB
+
+**解封只表示有机制，不表示全程序证明。**
 
 ## 文档
 
@@ -651,7 +661,7 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.28.0**，tag `v1.28.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.28.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 又称 **Sunberry-C**；版本 **1.28.1**，tag `v1.28.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.28.1) 已发布；Core v1 语法冻结（v1.x 只加不改）。
 - 234 项测试 / 75 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。

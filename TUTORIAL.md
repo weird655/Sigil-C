@@ -29,7 +29,7 @@ python3 sigilc.py --build examples/tutorial -o app --run
 需要 Python 3.10+ 与 gcc（clang 也可）。仓库里没有依赖要装：
 
 ```bash
-python3 sigilc.py --version          # Sigil-C 1.28.0
+python3 sigilc.py --version          # Sigil-C 1.28.1
 python3 sigilc.py --check src        # 只检查，不写文件
 python3 sigilc.py --build src -o app --run
 ```
