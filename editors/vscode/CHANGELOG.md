@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2
+
+- Simpler white-background SGC icon
+
 ## 1.3.1
 
 - Marketplace icon: cyan C ring + exclamation flyline

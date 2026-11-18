@@ -230,7 +230,7 @@ Helix、Emacs（lsp-mode）、Sublime LSP 等通用客户端用同一行命令�
 VS Code 扩展已内置零依赖 LSP 客户端：打开 `.sigil` 即实时诊断。
 
 编辑器：`editors/vscode/` 提供完整语法高亮、实时 LSP 诊断（错误 + 未使用局部变量警告）、检查/格式化/构建命令；
-复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.3.1` 后重启即可。
+复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.3.2` 后重启即可。
 
 ## 它挡什么
 

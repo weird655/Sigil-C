@@ -6,8 +6,8 @@
 
 把整个 `editors/vscode` 复制到 VS Code 扩展目录，然后重启编辑器：
 
-- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.3.1`
-- macOS / Linux：`~/.vscode/extensions/sigil-c-1.3.1`
+- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.3.2`
+- macOS / Linux：`~/.vscode/extensions/sigil-c-1.3.2`
 
 打开任意 `.sigil` 文件，右下角应显示 **Sigil-C**，底部 Problems 面板会实时刷新诊断。
 
