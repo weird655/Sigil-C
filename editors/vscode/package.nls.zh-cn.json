@@ -1,0 +1,12 @@
+{
+  "displayName": "Sigil-C 中文",
+  "description": "Sigil-C：语法高亮、实时诊断、检查/构建/格式化命令",
+  "command.check": "Sigil-C：检查当前文件",
+  "command.format": "Sigil-C：格式化当前文件",
+  "command.build": "Sigil-C：构建工作区",
+  "command.output": "Sigil-C：显示输出",
+  "command.restart": "Sigil-C：重启语言服务器",
+  "config.pythonPath": "Python 解释器",
+  "config.cliPath": "sigilc.py 路径，绝对路径或工作区相对路径",
+  "config.diagnostics": "启用实时诊断"
+}

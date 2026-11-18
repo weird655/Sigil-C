@@ -1,0 +1,12 @@
+{
+  "displayName": "Sigil-C",
+  "description": "Sigil-C: syntax, live diagnostics, check/build/format commands",
+  "command.check": "Sigil-C: Check Current File",
+  "command.format": "Sigil-C: Format Current File",
+  "command.build": "Sigil-C: Build Workspace",
+  "command.output": "Sigil-C: Show Output",
+  "command.restart": "Sigil-C: Restart Language Server",
+  "config.pythonPath": "Python executable",
+  "config.cliPath": "Path to sigilc.py, absolute or workspace-relative",
+  "config.diagnostics": "Enable live diagnostics"
+}

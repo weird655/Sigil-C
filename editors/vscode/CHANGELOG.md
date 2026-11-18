@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3
+
+- Trilingual icon (中文 / EN / РУС)
+- Marketplace metadata localized in English, Chinese and Russian
+
 ## 1.3.2
 
 - Simpler white-background SGC icon

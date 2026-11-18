@@ -1,8 +1,8 @@
 {
   "name": "sigil-c",
-  "displayName": "Sigil-C",
-  "description": "Sigil-C: syntax, live diagnostics, check/build/format commands",
-  "version": "1.3.2",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "1.3.3",
   "publisher": "weird655",
   "engines": {
     "vscode": "^1.60.0"
@@ -39,44 +39,44 @@
         "sigilC.pythonPath": {
           "type": "string",
           "default": "",
-          "description": "Python executable"
+          "description": "%config.pythonPath%"
         },
         "sigilC.cliPath": {
           "type": "string",
           "default": "sigilc.py",
-          "description": "sigilc.py path, absolute or workspace-relative"
+          "description": "%config.cliPath%"
         },
         "sigilC.diagnostics": {
           "type": "boolean",
           "default": true,
-          "description": "Enable live diagnostics"
+          "description": "%config.diagnostics%"
         }
       }
     },
     "commands": [
       {
         "command": "sigilC.checkFile",
-        "title": "Sigil-C: Check Current File",
+        "title": "%command.check%",
         "category": "Sigil-C"
       },
       {
         "command": "sigilC.formatFile",
-        "title": "Sigil-C: Format Current File",
+        "title": "%command.format%",
         "category": "Sigil-C"
       },
       {
         "command": "sigilC.buildWorkspace",
-        "title": "Sigil-C: Build Workspace",
+        "title": "%command.build%",
         "category": "Sigil-C"
       },
       {
         "command": "sigilC.showOutput",
-        "title": "Sigil-C: Show Output",
+        "title": "%command.output%",
         "category": "Sigil-C"
       },
       {
         "command": "sigilC.restartServer",
-        "title": "Sigil-C: Restart Language Server",
+        "title": "%command.restart%",
         "category": "Sigil-C"
       }
     ],

@@ -1,0 +1,12 @@
+{
+  "displayName": "Sigil-C (RU)",
+  "description": "Sigil-C: подсветка, диагностика в реальном времени, проверка/сборка/форматирование",
+  "command.check": "Sigil-C: Проверить текущий файл",
+  "command.format": "Sigil-C: Форматировать текущий файл",
+  "command.build": "Sigil-C: Собрать рабочую область",
+  "command.output": "Sigil-C: Показать вывод",
+  "command.restart": "Sigil-C: Перезапустить языковой сервер",
+  "config.pythonPath": "Исполняемый файл Python",
+  "config.cliPath": "Путь к sigilc.py (абсолютный или относительно рабочей области)",
+  "config.diagnostics": "Включить диагностику в реальном времени"
+}
