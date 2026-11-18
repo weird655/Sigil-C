@@ -29,7 +29,7 @@ python3 sigilc.py --build examples/tutorial -o app --run
 需要 Python 3.10+ 与 gcc（clang 也可）。仓库里没有依赖要装：
 
 ```bash
-python3 sigilc.py --version          # Sigil-C 1.29.0
+python3 sigilc.py --version          # Sigil-C 1.29.1
 python3 sigilc.py --check src        # 只检查，不写文件
 python3 sigilc.py --build src -o app --run
 ```
@@ -142,6 +142,101 @@ i? (score >= 60) {
 ```
 
 没有 `else if` 关键字；`e:` 里再套一个 `i?` 就是 else-if。
+
+### 1.4b 条件表达式：`? :`
+
+`? :` 是**表达式**，不是 `i?` 语句。
+
+```text
+条件 ? 条件为真时取的值 : 条件为假时取的值
+```
+
+读成：
+
+```text
+如果 条件 那么 真值 否则 假值
+```
+
+例子：
+
+```sigil
+i4 max(i4 a, i4 b) {
+    r; (a > b) ? a : b;
+}
+```
+
+拆开：
+
+```text
+条件：  a > b
+真值：  a
+假值：  b
+```
+
+只走一边，不会两个分支都算。
+
+和 `i?` 对比：
+
+```sigil
+i4 max(i4 a, i4 b) {
+    i? (a > b) {
+        r; a;
+    } e: {
+        r; b;
+    }
+}
+```
+
+两者等价；`? :` 更适合“直接产生一个值”。
+
+链式条件：
+
+```sigil
+i4 sign(i4 x) {
+    r; (x < 0) ? -1 : (x == 0) ? 0 : 1;
+}
+```
+
+读成：
+
+```text
+x < 0 ? -1
+否则 x == 0 ? 0
+否则 1
+```
+
+注意：
+
+- 条件是 `?` **前面**的整个表达式
+- `?` 后面是真值，`:` 后面是假值
+- `? :` 是右结合，`a ? b : c ? d : e` 等于 `a ? b : (c ? d : e)`
+- 两个分支的类型要能兼容；生成 C 时按 C 的规则做转换
+- `i?` 是一个整体关键字；`i ? a : b` 是变量 `i` 做三元条件，别写混
+
+偶数/奇数的互相递归：
+
+```sigil
+i4 is_odd(i4 n);                /* 前向声明，互相递归需要 */
+
+i4 is_even(i4 n) {
+    r; (n == 0) ? 1 : is_odd(n - 1);
+}
+
+i4 is_odd(i4 n) {
+    r; (n == 0) ? 0 : is_even(n - 1);
+}
+```
+
+这段只对 `n >= 0` 成立；负数会无限递归。递归深度等于 `n`，大数会爆栈。
+
+小练习：
+
+```sigil
+/* 用 ? : 写 absolute */
+i4 absolute(i4 x) {
+    r; (x < 0) ? -x : x;
+}
+```
 
 ## 1.5 循环
 
