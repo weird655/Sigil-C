@@ -2,16 +2,25 @@
   "name": "sigil-c",
   "displayName": "Sigil-C",
   "description": "Syntax highlighting for Sigil-C (.sigil)",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "weird655",
-  "engines": { "vscode": "^1.60.0" },
-  "categories": ["Programming Languages"],
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "sigil",
-        "aliases": ["Sigil-C", "sigil"],
-        "extensions": [".sigil"],
+        "aliases": [
+          "Sigil-C",
+          "sigil"
+        ],
+        "extensions": [
+          ".sigil"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -21,6 +30,30 @@
         "scopeName": "source.sigil",
         "path": "./sigil.tmLanguage.json"
       }
-    ]
-  }
+    ],
+    "configuration": {
+      "title": "Sigil-C",
+      "properties": {
+        "sigilC.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Python executable"
+        },
+        "sigilC.cliPath": {
+          "type": "string",
+          "default": "sigilc.py",
+          "description": "sigilc.py path, absolute or workspace-relative"
+        },
+        "sigilC.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable live diagnostics"
+        }
+      }
+    }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:sigil"
+  ]
 }

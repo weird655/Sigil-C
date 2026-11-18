@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.28.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.29 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -3426,6 +3426,17 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("75. external C", "checked-external rejects unknown/indirect C calls and honors allowlist", test_checked_external)
 
+    # Layer 76: LSP live warnings
+    def test_lsp_warnings():
+        import sigilc as _sigilc
+        diags = _sigilc._lsp_diagnostics("file:///tmp/warn.sigil",
+                                          "i4 main(v.) { o! i4 unused; r; 0; }\n")
+        assert len(diags) == 1, diags
+        assert diags[0]["severity"] == 2, diags
+        assert "unused" in diags[0]["message"], diags
+
+    assert_ok("76. lsp warnings", "LSP reports unused locals as warnings", test_lsp_warnings)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3433,7 +3444,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 75-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 76-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

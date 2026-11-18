@@ -341,10 +341,47 @@ def _lsp_uri_path(uri: str) -> str:
     return "buffer.sigil"
 
 
+def _lsp_warnings(text: str):
+    """Cheap, conservative warnings: locals declared but never used."""
+    warnings = []
+    lines = text.splitlines()
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if "o!" in stripped or "s@" in stripped:
+            m = re.search(r"([A-Za-z_]\w*)\s*(?:m,|;|=|\[)", stripped)
+            if not m:
+                continue
+            name = m.group(1)
+            if name.startswith("__") or len(re.findall(r"\b" + re.escape(name) + r"\b", text)) > 1:
+                continue
+            warnings.append({
+                "range": {
+                    "start": {"line": idx, "character": max(0, line.find(name))},
+                    "end": {"line": idx, "character": max(0, line.find(name)) + len(name)},
+                },
+                "severity": 2,
+                "source": "sigil-c",
+                "message": f"unused local '{name}'",
+            })
+        if "f~" in stripped and "(" in stripped:
+            m = re.search(r"\(\s*(?:[A-Za-z_]\w*\s+)+([A-Za-z_]\w*)\s+m,", stripped)
+            if m:
+                name = m.group(1)
+                if len(re.findall(r"\b" + re.escape(name) + r"\b", text)) == 1:
+                    col = max(0, line.find(name))
+                    warnings.append({
+                        "range": {"start": {"line": idx, "character": col},
+                                  "end": {"line": idx, "character": col + len(name)}},
+                        "severity": 2, "source": "sigil-c",
+                        "message": f"unused loop variable '{name}'",
+                    })
+    return warnings
+
+
 def _lsp_diagnostics(uri: str, text: str):
     try:
         check_source(text, _lsp_uri_path(uri))
-        return []
+        return _lsp_warnings(text)
     except (LexerError, ParseError, SemanticError) as e:
         msg = str(e)
         m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)

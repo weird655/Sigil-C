@@ -74,7 +74,7 @@ python3 dist/sigilc.pyz --version
 ## KK
 | 项 | 口径 |
 |---|---|
-| 版本 | 1.28.1 |
+| 版本 | 1.29.0 |
 | Core v1 | 冻结；v1.x 只加不改，破坏性变更先弃用 |
 | libc | 常用 C99 面已覆盖，见 [`STDLIB.md`](STDLIB.md) |
 | Layer 2 `!` | 允许使用，实验性；不纳入 Core v1 冻结 |
@@ -227,10 +227,10 @@ vim.lsp.start({
 ```
 
 Helix、Emacs（lsp-mode）、Sublime LSP 等通用客户端用同一行命令即可。
-VS Code 需要额外的客户端扩展；本仓库的 `editors/vscode/` 只含语法高亮。
+VS Code 扩展已内置零依赖 LSP 客户端：打开 `.sigil` 即实时诊断。
 
-编辑器：`editors/vscode/` 是最小 VS Code 语法扩展（`.sigil` 高亮、注释与括号配置），
-把它复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.2.0` 后重启即可。
+编辑器：`editors/vscode/` 提供语法高亮 + 实时 LSP 诊断（错误 + 未使用局部变量警告）；
+复制到 `%USERPROFILE%\.vscode\extensions\sigil-c-1.2.0` 后重启即可。
 
 ## 它挡什么
 
@@ -555,7 +555,7 @@ int main(void) {
 
 ## 测试矩阵
 
-234 项 / 75 层，每层一个主题：
+235 项 / 76 层，每层一个主题：
 
 | 层 | 主题 |
 |---|---|
@@ -611,11 +611,12 @@ int main(void) {
 | 73 | `--checked-strict`：未知对象大小 trap |
 | 74 | ASan/TSan 构建门禁 |
 | 75 | `--checked-external` 外部 C 白名单 |
+| 76 | LSP 未使用局部变量警告 |
 
 ## 测试与 CI
 
 ```bash
-python3 test_matrix.py        # 234 项 / 75 层，需要 gcc
+python3 test_matrix.py        # 235 项 / 76 层，需要 gcc
 ```
 
 每层都编译并运行生成的 C（`-std=c99 -Wall -Wextra -Werror -pedantic`），其中第 17、18 层直接构建 `examples/` 与教程程序并断言输出。**测试数字以 `test_matrix.py` 的输出为准**，README 与 CHANGELOG 只是引用。
@@ -623,7 +624,7 @@ python3 test_matrix.py        # 234 项 / 75 层，需要 gcc
 本地一键质量门：
 
 ```bash
-python tools/check.py            # py_compile → ruff → mypy → 234 项测试
+python tools/check.py            # py_compile → ruff → mypy → 235 项测试
 python tools/check.py --coverage # 附覆盖率（门槛 85%）
 python tools/fuzz.py --iterations 300   # 确定性变异测试
 python tools/propgen.py --count 30       # 随机合法程序 -> gcc
@@ -661,8 +662,8 @@ CI 在 `ubuntu-latest` 上用 Python 3.10 / 3.12 跑完整矩阵；另有一个 
 ## 状态
 
 - **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（如 libc 原型、跨函数来源摘要）仍会接受。
-- 又称 **Sunberry-C**；版本 **1.28.1**，tag `v1.28.1` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.28.1) 已发布；Core v1 语法冻结（v1.x 只加不改）。
-- 234 项测试 / 75 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
+- 又称 **Sunberry-C**；版本 **1.29.0**，tag `v1.29.0` + [GitHub Release](https://github.com/weird655/Sigil-C/releases/tag/v1.29.0) 已发布；Core v1 语法冻结（v1.x 只加不改）。
+- 235 项测试 / 76 层，Windows、WSL Ubuntu、GitHub Actions 通过；ruff / mypy 零告警，覆盖率门槛 85%。
 - Core v1：45 个印记 + C 运算符、指针来源、跨函数逃逸、`r@` 校验、外部类型 `x!`、头文件输出、LSP、格式化器、多文件构建、栈/堆三写法。
 - **Layer 2 实验**：`!n!` 重布线/飞线层、`--netlist`、切片、trap 诊断；**允许使用**，但不纳入 Core v1 冻结；稳定性见 `COMPATIBILITY.md`。
 - 未做：堆模型、完整头文件解析、跨文件分析、包管理。

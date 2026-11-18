@@ -1,15 +1,34 @@
 # Sigil-C for VS Code
 
-最小语法支持：`.sigil` 的 TextMate 语法、注释与括号配置。不做补全、不做 LSP。
+`.sigil` 语法高亮 + **实时 LSP 诊断**（错误 + 未使用局部变量警告）。
 
 ## 安装（本地目录）
 
-把整个 `editors/vscode` 复制到 VS Code 的扩展目录，然后重启编辑器：
+把整个 `editors/vscode` 复制到 VS Code 扩展目录，然后重启编辑器：
 
-- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.1.0`
-- macOS / Linux：`~/.vscode/extensions/sigil-c-1.1.0`
+- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.2.0`
+- macOS / Linux：`~/.vscode/extensions/sigil-c-1.2.0`
 
-打开任意 `.sigil` 文件，右下角语言模式应显示 **Sigil-C**。
+打开任意 `.sigil` 文件，右下角应显示 **Sigil-C**，底部 Problems 面板会实时刷新诊断。
+
+## 配置
+
+| 设置 | 默认 | 说明 |
+|---|---|---|
+| `sigilC.pythonPath` | `python`（Windows）/ `python3` | Python 解释器 |
+| `sigilC.cliPath` | `sigilc.py` | `sigilc.py` 路径，绝对或工作区相对 |
+| `sigilC.diagnostics` | `true` | 是否启用实时诊断 |
+
+扩展启动：
+
+```text
+<python> <sigilc.py> --lsp
+```
+
+通过 JSON-RPC `publishDiagnostics` 接收：
+
+- 词法/语法/语义错误（severity 1）
+- 未使用局部变量警告（severity 2）
 
 ## 覆盖范围
 
@@ -19,10 +38,19 @@
 | 声明 | `o!` `s@` `i@` `x!` `t!` `g!` `l!` `w!` `a!16` |
 | 指针 / 限定 | `p*` `c@` `v@` `r@` `p@` `f^` `b.` `v.` `z?` `g?` |
 | 赋值 | `m,` `m+` `m-` `m*` `m/` |
-| 运算符 | `==` `!=` `&&` `\||` `\|` `&` `^` `->` `<<` `>>` `<=` `>=` |
-| 其它 | 数字（含 `0x` / `0b` / 八进制）、字符串、字符、`//` 与 `/* */` 注释、预处理行 |
+| 运算符 | `==` `!=` `&&` `||` `|` `&` `^` `->` `<<` `>>` `<=` `>=` |
+| 其它 | 数字、字符串、字符、`//` 与 `/* */` 注释、预处理行 |
 
 ## 未做
 
-- 语义补全 / 跳转 / 诊断（需要 LSP，转译器目前是单文件脚本）
-- 语法高亮之外的 UI
+- 语义补全 / 跳转 / 重命名
+- 跨文件索引
+- 保存时自动修复
+
+补全可以使用：
+
+```bash
+python sigilc.py --lsp --lsp-completion
+```
+
+然后把扩展的启动参数改成带 `--lsp-completion`。
