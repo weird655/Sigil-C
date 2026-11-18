@@ -40,3 +40,4 @@ dist/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+editors/vscode/*.vsix

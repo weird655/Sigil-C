@@ -6,10 +6,31 @@
 
 把整个 `editors/vscode` 复制到 VS Code 扩展目录，然后重启编辑器：
 
-- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.2.0`
-- macOS / Linux：`~/.vscode/extensions/sigil-c-1.2.0`
+- Windows：`%USERPROFILE%\.vscode\extensions\sigil-c-1.3.0`
+- macOS / Linux：`~/.vscode/extensions/sigil-c-1.3.0`
 
 打开任意 `.sigil` 文件，右下角应显示 **Sigil-C**，底部 Problems 面板会实时刷新诊断。
+
+## 命令
+
+| 命令 | 快捷键 |
+|---|---|
+| Sigil-C: Check Current File | `Ctrl+Alt+C` |
+| Sigil-C: Format Current File | `Ctrl+Alt+F` |
+| Sigil-C: Build Workspace | 命令面板 |
+| Sigil-C: Show Output | 命令面板 |
+| Sigil-C: Restart Language Server | 命令面板 |
+
+## 打包 / 发布
+
+```bash
+cd editors/vscode
+npm install
+npx @vscode/vsce package     # 生成 .vsix
+npx @vscode/vsce publish     # 需要 publisher PAT
+```
+
+Marketplace publisher：`weird655`。
 
 ## 配置
 

@@ -2,74 +2,217 @@
   "name": "Sigil-C",
   "scopeName": "source.sigil",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#preprocessor" },
-    { "include": "#strings" },
-    { "include": "#characters" },
-    { "include": "#numbers" },
-    { "include": "#control" },
-    { "include": "#declaration" },
-    { "include": "#pointer" },
-    { "include": "#builtin-type" },
-    { "include": "#assignment" },
-    { "include": "#operator" },
-    { "include": "#literal" },
-    { "include": "#function-call" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#preprocessor"
+    },
+    {
+      "include": "#flylines"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#characters"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#control"
+    },
+    {
+      "include": "#declaration"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#pointer"
+    },
+    {
+      "include": "#literal"
+    },
+    {
+      "include": "#assignment"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#function-call"
+    }
   ],
   "repository": {
     "comments": {
       "patterns": [
-        { "name": "comment.line.double-slash.sigil", "match": "//.*$" },
-        { "name": "comment.block.sigil", "begin": "/\\*", "end": "\\*/" }
+        {
+          "name": "comment.line.double-slash.sigil",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.sigil",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
       ]
     },
     "preprocessor": {
-      "name": "meta.preprocessor.sigil",
-      "match": "^\\s*#.*$"
+      "patterns": [
+        {
+          "name": "meta.preprocessor.include.sigil",
+          "match": "^\\s*#\\s*include\\b.*$"
+        },
+        {
+          "name": "meta.preprocessor.sigil",
+          "match": "^\\s*#.*$"
+        }
+      ]
+    },
+    "flylines": {
+      "patterns": [
+        {
+          "name": "meta.flyline.plant.sigil",
+          "match": "!<\\+?[^>]+>!"
+        },
+        {
+          "name": "meta.flyline.file-gate.sigil",
+          "match": "!\\[[^\\]]*\\]!"
+        },
+        {
+          "name": "meta.flyline.package.sigil",
+          "match": "![A-Za-z_]\\w*\\[\\d+\\]!"
+        },
+        {
+          "name": "meta.flyline.local.sigil",
+          "match": "!/\\d+/!"
+        },
+        {
+          "name": "meta.flyline.short.sigil",
+          "match": "!\\d+!"
+        }
+      ]
     },
     "strings": {
       "name": "string.quoted.double.sigil",
       "begin": "\"",
       "end": "\"",
       "patterns": [
-        { "name": "constant.character.escape.sigil", "match": "\\\\." }
+        {
+          "name": "constant.character.escape.sigil",
+          "match": "\\\\."
+        },
+        {
+          "name": "constant.other.placeholder.sigil",
+          "match": "%[-+ #0]*\\d*(?:\\.\\d+)?[diouxXeEfFgGaAcspn%]"
+        }
       ]
     },
     "characters": {
       "name": "string.quoted.single.sigil",
-      "match": "'(\\\\.|[^'\\\\])'"
+      "match": "'(?:\\\\.|[^'\\\\])'"
     },
     "numbers": {
-      "name": "constant.numeric.sigil",
-      "match": "\\b(0[xX][0-9a-fA-F]+|0[bB][01]+|0[0-7]*|[0-9]+)([uUlL]*)\\b"
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.float.sigil",
+          "match": "\\b0[xX][0-9a-fA-F]+(?:\\.[0-9a-fA-F]*)?[pP][+-]?\\d+[fFlL]?\\b"
+        },
+        {
+          "name": "constant.numeric.float.sigil",
+          "match": "\\b\\d+\\.\\d*(?:[eE][+-]?\\d+)?[fFlL]?\\b|\\b\\d+[eE][+-]?\\d+[fFlL]?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.sigil",
+          "match": "\\b(?:0[xX][0-9a-fA-F]+|0[bB][01]+|0[0-7]*|[0-9]+)(?:[uUlL]*)\\b"
+        }
+      ]
     },
     "control": {
-      "name": "keyword.control.sigil",
-      "match": "(?<![A-Za-z0-9_&;])(?:i\\?|e:|w~|f~|d~|s\\?|k:|d:|r;|b!|c\\^)(?![A-Za-z0-9_])"
+      "patterns": [
+        {
+          "name": "keyword.control.conditional.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:i\\?|e:)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.control.loop.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:w~|f~|d~)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.control.switch.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:s\\?|k:|d:)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.control.jump.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:r;|b!|c\\^|g!|l!)(?![A-Za-z0-9_])"
+        }
+      ]
     },
     "declaration": {
-      "name": "keyword.other.declaration.sigil",
-      "match": "(?<![A-Za-z0-9_])(?:o!|s@|a@|i@|x!|t!|g!|l!|w!|d!|a!\\d+)(?![A-Za-z0-9_])"
+      "patterns": [
+        {
+          "name": "keyword.other.object.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:o!|s@|i@|s\\{|u\\{|e\\{|x!)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.other.assert.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:t!|d!|a!\\d+)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.other.bitfield.sigil",
+          "match": "(?<![A-Za-z0-9_])w!(?![A-Za-z0-9_])"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.builtin.sigil",
+          "match": "\\b(?:i1|i2|i4|i8|u1|u2|u4|u8|f4|f8|c1|size_t|ptrdiff_t|va_list|bool)\\b"
+        },
+        {
+          "name": "storage.type.void.sigil",
+          "match": "(?<![A-Za-z0-9_])v\\.(?![A-Za-z0-9_])"
+        }
+      ]
     },
     "pointer": {
-      "name": "storage.type.pointer.sigil",
-      "match": "(?<![A-Za-z0-9_])(?:p\\*|c@|v@|r@|a&|f\\^|b\\.|v\\.|z\\?|g\\?|a\\?)(?![A-Za-z0-9_])"
+      "patterns": [
+        {
+          "name": "storage.type.pointer.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:p\\*|f\\^|p@)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "storage.modifier.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:c@|v@|r@|a@)(?![A-Za-z0-9_])"
+        },
+        {
+          "name": "keyword.operator.type.sigil",
+          "match": "(?<![A-Za-z0-9_])(?:z\\?|g\\?|a\\?|b\\.)(?![A-Za-z0-9_])"
+        }
+      ]
     },
-    "builtin-type": {
-      "name": "storage.type.builtin.sigil",
-      "match": "\\b(?:i1|i2|i4|i8|u1|u2|u4|u8|f4|f8|c1|size_t|ptrdiff_t|va_list)\\b"
+    "literal": {
+      "name": "constant.language.sigil",
+      "match": "\\b(?:true|false|NULL)\\b"
     },
     "assignment": {
       "name": "keyword.operator.assignment.sigil",
       "match": "(?<![A-Za-z0-9_])m[,\\+\\-\\*/](?![A-Za-z0-9_])"
     },
-    "operator": {
-      "name": "keyword.operator.sigil",
-      "match": "(?:=\\?|!\\?|&\\.|\\|\\.|!\\.|\\|\\^|&\\^|\\^\\^|~\\^|->|<<|>>|<=|>=)"
-    },
-    "literal": {
-      "name": "constant.language.sigil",
-      "match": "\\b(?:true|false|NULL)\\b"
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.sigil",
+          "match": "->|<<|>>|<=|>=|==|!=|&&|\\|\\||\\+\\+|--"
+        },
+        {
+          "name": "keyword.operator.sigil",
+          "match": "[+\\-*/%&|^~!=<>?:]"
+        }
+      ]
     },
     "function-call": {
       "name": "entity.name.function.sigil",

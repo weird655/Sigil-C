@@ -1,14 +1,16 @@
 {
   "name": "sigil-c",
   "displayName": "Sigil-C",
-  "description": "Syntax highlighting for Sigil-C (.sigil)",
-  "version": "1.2.0",
+  "description": "Sigil-C: syntax, live diagnostics, check/build/format commands",
+  "version": "1.3.0",
   "publisher": "weird655",
   "engines": {
     "vscode": "^1.60.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Linters",
+    "Formatters"
   ],
   "contributes": {
     "languages": [
@@ -50,10 +52,113 @@
           "description": "Enable live diagnostics"
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "sigilC.checkFile",
+        "title": "Sigil-C: Check Current File",
+        "category": "Sigil-C"
+      },
+      {
+        "command": "sigilC.formatFile",
+        "title": "Sigil-C: Format Current File",
+        "category": "Sigil-C"
+      },
+      {
+        "command": "sigilC.buildWorkspace",
+        "title": "Sigil-C: Build Workspace",
+        "category": "Sigil-C"
+      },
+      {
+        "command": "sigilC.showOutput",
+        "title": "Sigil-C: Show Output",
+        "category": "Sigil-C"
+      },
+      {
+        "command": "sigilC.restartServer",
+        "title": "Sigil-C: Restart Language Server",
+        "category": "Sigil-C"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sigilC.checkFile",
+          "when": "editorLangId == sigil"
+        },
+        {
+          "command": "sigilC.formatFile",
+          "when": "editorLangId == sigil"
+        },
+        {
+          "command": "sigilC.buildWorkspace"
+        },
+        {
+          "command": "sigilC.showOutput"
+        },
+        {
+          "command": "sigilC.restartServer"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "sigilC.checkFile",
+          "when": "editorLangId == sigil",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sigilC.formatFile",
+          "when": "editorLangId == sigil",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "sigilC.checkFile",
+          "when": "editorLangId == sigil",
+          "group": "sigilC@1"
+        },
+        {
+          "command": "sigilC.formatFile",
+          "when": "editorLangId == sigil",
+          "group": "sigilC@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "sigilC.checkFile",
+        "key": "ctrl+alt+c",
+        "when": "editorLangId == sigil"
+      },
+      {
+        "command": "sigilC.formatFile",
+        "key": "ctrl+alt+f",
+        "when": "editorLangId == sigil"
+      }
+    ]
   },
   "main": "./extension.js",
   "activationEvents": [
     "onLanguage:sigil"
-  ]
+  ],
+  "keywords": [
+    "sigil",
+    "sigil-c",
+    "c99",
+    "transpiler",
+    "lsp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/weird655/Sigil-C"
+  },
+  "scripts": {
+    "package": "npx @vscode/vsce package",
+    "publish": "npx @vscode/vsce publish"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
+  }
 }

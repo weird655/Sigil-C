@@ -127,6 +127,71 @@ function change(doc) {
     });
 }
 
+function runCLI(args, cwd) {
+    return new Promise((resolve, reject) => {
+        const c = config();
+        const p = cp.spawn(c.python, [cliPath(), ...args], { cwd });
+        let out = '';
+        let err = '';
+        p.stdout.on('data', d => { out += d; output.append(d.toString()); });
+        p.stderr.on('data', d => { err += d; output.append(d.toString()); });
+        p.on('error', reject);
+        p.on('close', code => resolve({ code, out, err }));
+    });
+}
+
+function activeSigilDoc() {
+    const doc = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document;
+    return doc && doc.languageId === 'sigil' ? doc : null;
+}
+
+function workspaceRoot() {
+    const folders = vscode.workspace.workspaceFolders;
+    return folders && folders.length ? folders[0].uri.fsPath : undefined;
+}
+
+async function checkActive() {
+    const doc = activeSigilDoc();
+    if (!doc) { vscode.window.showWarningMessage('Sigil-C: open a .sigil file first'); return; }
+    await doc.save();
+    output.show(true);
+    const r = await runCLI(['--check', '--json', doc.uri.fsPath], workspaceRoot());
+    try {
+        const data = JSON.parse(r.out);
+        const diags = (data.diagnostics || []).map(d => {
+            const line = Math.max(0, (d.line || 1) - 1);
+            const col = Math.max(0, (d.column || 1) - 1);
+            const sev = d.severity === 'warning' ? vscode.DiagnosticSeverity.Warning : vscode.DiagnosticSeverity.Error;
+            const diag = new vscode.Diagnostic(new vscode.Range(line, col, line, col + 1), d.message, sev);
+            diag.source = 'sigil-c';
+            return diag;
+        });
+        collection.set(doc.uri, diags);
+        if (!r.code) { vscode.window.showInformationMessage(`Sigil-C: ${data.checked || 1} file(s) OK`); }
+    } catch (e) {
+        vscode.window.showErrorMessage('Sigil-C check failed; see output');
+    }
+}
+
+async function formatActive() {
+    const doc = activeSigilDoc();
+    if (!doc) { vscode.window.showWarningMessage('Sigil-C: open a .sigil file first'); return; }
+    await doc.save();
+    output.show(true);
+    const r = await runCLI(['--fmt', '--write', doc.uri.fsPath], workspaceRoot());
+    if (r.code === 0) { vscode.window.showInformationMessage('Sigil-C: formatted'); }
+    else { vscode.window.showErrorMessage('Sigil-C: format failed; see output'); }
+}
+
+function buildWorkspace() {
+    const root = workspaceRoot();
+    if (!root) { vscode.window.showWarningMessage('Sigil-C: open a workspace folder first'); return; }
+    const c = config();
+    const term = vscode.window.createTerminal({ name: 'Sigil-C build', cwd: root });
+    term.show(true);
+    term.sendText(`"${c.python}" "${cliPath()}" --build "${root}"`);
+}
+
 function activate(context) {
     collection = vscode.languages.createDiagnosticCollection('sigil-c');
     output = vscode.window.createOutputChannel('Sigil-C');
@@ -149,6 +214,14 @@ function activate(context) {
             if (proc) { proc.kill(); proc = null; }
             start(context);
         }
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('sigilC.checkFile', checkActive));
+    context.subscriptions.push(vscode.commands.registerCommand('sigilC.formatFile', formatActive));
+    context.subscriptions.push(vscode.commands.registerCommand('sigilC.buildWorkspace', buildWorkspace));
+    context.subscriptions.push(vscode.commands.registerCommand('sigilC.showOutput', () => output.show(true)));
+    context.subscriptions.push(vscode.commands.registerCommand('sigilC.restartServer', () => {
+        if (proc) { proc.kill(); proc = null; }
+        start(context);
     }));
 }
 
