@@ -2,7 +2,7 @@
   "name": "sigil-c",
   "displayName": "Sigil-C",
   "description": "Sigil-C: syntax, live diagnostics, check/build/format commands",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "publisher": "weird655",
   "engines": {
     "vscode": "^1.60.0"
@@ -160,5 +160,6 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^3.0.0"
-  }
+  },
+  "icon": "icon.png"
 }

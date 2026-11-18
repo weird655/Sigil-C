@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1
+
+- Marketplace icon: cyan C ring + exclamation flyline
+
 ## 1.3.0
 
 - Full Sigil-C TextMate grammar (flylines, gates, types, numbers)
