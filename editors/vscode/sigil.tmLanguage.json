@@ -39,6 +39,9 @@
       "include": "#assignment"
     },
     {
+      "include": "#ternary"
+    },
+    {
       "include": "#operators"
     },
     {
@@ -210,13 +213,25 @@
         },
         {
           "name": "keyword.operator.sigil",
-          "match": "[+\\-*/%&|^~!=<>?:]"
+          "match": "[+\\-*/%&|^~!=<>]"
         }
       ]
     },
     "function-call": {
       "name": "entity.name.function.sigil",
       "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()"
+    },
+    "ternary": {
+      "patterns": [
+        {
+          "name": "keyword.operator.ternary.sigil",
+          "match": "\\?"
+        },
+        {
+          "name": "punctuation.separator.ternary.sigil",
+          "match": ":"
+        }
+      ]
     }
   }
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4
+
+- Dedicated TextMate scopes for ternary `?` and `:`
+
 ## 1.3.3
 
 - Trilingual icon (中文 / EN / РУС)
