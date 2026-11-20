@@ -1,3 +1,17 @@
+## [1.30.0] - 2026-11-20
+
+### vN hard resistors
+- New `v0`–`vFFF` names: `v` + 1–3 hex digits (max 3, uppercase canonical).
+- New `vN { v/ data v/ u1|u2|u4|u8 v/ return ; }` statement/declaration.
+- Exact byte capacity: under-size and redundant over-size both rejected.
+- Literal data uses its minimal byte width; variable data uses its type width.
+- Read-only hard slot: no assignment, no address-of, no external mutation.
+- File-scope slots are `const` globals and can be read by other functions/flylines.
+- Local slots are `const` locals; one `vN` per scope.
+- Errors: V001 capacity mismatch, V002 value overflow, V003 redundant capacity,
+  V004 duplicate, V006 address-of.
+- 4 new tests in Layer 77; matrix 239/239.
+
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 
 本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.3 的版本变更、缺陷修复与 213 项自动化测试矩阵覆盖明细。

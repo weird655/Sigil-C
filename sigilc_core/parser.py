@@ -3,7 +3,7 @@
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from . import confine, packages, provenance
+from . import confine, packages, provenance, vresistor
 from .lexer import (
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
@@ -141,6 +141,7 @@ class Parser:
         self.pending_pkg_ret_calls: List[Tuple[str, List[Optional[str]], int, int]] = []
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
+        self.hard_resistors: Set[str] = set()
         self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
@@ -569,6 +570,9 @@ class Parser:
                 raise SemanticError(
                     f"{self.filename}:{expr.line}:{expr.col}: Cannot dereference non-pointer type{hint}")
             if expr.op == '&':
+                if isinstance(expr.operand, IdentExpr) and expr.operand.name in self.hard_resistors:
+                    raise SemanticError(
+                        f"{self.filename}:{expr.line}:{expr.col}: Cannot take the address of hard resistor '{expr.operand.name}'")
                 self._check_restricted_base(expr.operand)
                 if isinstance(expr.operand, MemberExpr) and self._member_is_bitfield(expr.operand):
                     raise SemanticError(
@@ -1603,6 +1607,9 @@ class Parser:
             if self._cur().kind == 'PKG3':
                 packages.parse_link(self)
                 continue
+            if self._cur().kind == 'KW_VRES':
+                top_nodes.append(self.parse_vresistor(top_level=True))
+                continue
             attrs: List[Attribute] = []
             if self._cur().kind == 'KW_ATTR':
                 attrs = self.parse_attrs()
@@ -2238,6 +2245,8 @@ class Parser:
         if tok.kind == 'PREPROC':
             ptok = self._eat('PREPROC')
             return PreprocNode(line=ptok.line, col=ptok.col, text=ptok.value)
+        if tok.kind == 'KW_VRES' and self.tokens[self.pos + 1].kind == 'LBRACE':
+            return self.parse_vresistor(top_level=False)
         if tok.kind == 'LBRACE':
             return self.parse_block(create_new_scope=True)
         if tok.kind == 'KW_IF':
@@ -2412,6 +2421,9 @@ class Parser:
         stmt = self.parse_assign_or_expr_no_semi()
         self._eat('SEMI')
         return stmt
+
+    def parse_vresistor(self, top_level: bool) -> VarDeclStmt:
+        return vresistor.parse(self, top_level)
 
     def parse_static_assert(self) -> StaticAssertStmt:
         tok = self._eat('KW_STATIC_ASSERT')
@@ -2904,6 +2916,10 @@ class Parser:
         if tok.kind in ('PKG1', 'PKG2'):
             self.confine.check(self, tok.value, tok)
             return packages.parse_use(self, tok)
+        if tok.kind in ('KW_VRES', 'VRES_REF'):
+            self._eat(tok.kind)
+            self._lookup_symbol(tok.value, tok)
+            return IdentExpr(line=tok.line, col=tok.col, name=tok.value)
         if tok.kind == 'IDENT':
             self._eat('IDENT')
             if tok.value in self.pkgs.local_alias:

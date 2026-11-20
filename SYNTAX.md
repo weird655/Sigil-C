@@ -971,3 +971,77 @@ i4 main(v.) { r; dbl(inc(3)); }    /* 中间态同样不可观测 */
 
 内联之后连调用都没有，而且不用新记号。
 
+
+
+---
+
+## 6. 硬电阻 `vN`
+
+`vN` 不是版本号，是只读容量槽。名字是 `v` + **1–3 位十六进制字符**：
+
+```text
+v0  v1  vA  v1F  vFFF    合法
+v1234  vG  v_  v/        非法（v/ 是断言符）
+```
+
+### 写法
+
+```sigil
+v1 {
+    v/ 5 v/ u1 v/ 5 ;
+}
+```
+
+固定三槽：
+
+```text
+v/ <数据包> v/ <容量> v/ <返回> ;
+```
+
+- 数据包：变量名、字面量、飞线包
+- 容量：`u1` / `u2` / `u4` / `u8`
+- 返回：通过时使用的变量/字面量/飞线包
+- 一个 `vN { }` 只能有一个 `v/ ... ;`
+- 不嵌套 `vN`
+
+### 精确容量
+
+不是“小于等于”，而是**精确字节数**：
+
+```sigil
+v1 { v/ 5   v/ u1 v/ 5   ; }   // OK（最小 1 字节）
+v1 { v/ 300 v/ u2 v/ 300 ; }   // OK（最小 2 字节）
+v1 { v/ 5   v/ u2 v/ 5   ; }   // 拒绝：冗余容量（V003）
+v1 { v/ 300 v/ u1 v/ 300 ; }   // 拒绝：溢出（V002）
+```
+
+变量按类型宽度：
+
+```sigil
+o! u1 x m, 5;
+v1 { v/ x v/ u1 v/ x ; }   // OK
+```
+
+### 只读硬电阻
+
+```sigil
+v1 { v/ 5 v/ u1 v/ 5 ; }
+
+i4 get(v.) { r; (i4)v1; }   // 外部函数只读访问：OK
+v1 m, 6;                    // error: const lvalue
+p@ v1;                      // error: hard resistor has no address
+```
+
+文件级 `vN` 生成 `const uint8_t V1` 一类的只读全局；局部 `vN` 生成 `const` 局部。  
+其他函数/飞线可以按 `vN` 或 `!vN!` 读取，不能赋值、取地址或作为写入目标。
+
+### 诊断
+
+```text
+vN capacity mismatch: data is 4 bytes, resistor is u1
+vN redundant capacity: data is 1 bytes, resistor is u4
+vN value overflow: 300 does not fit in u1
+vN return must be a compile-time constant at file scope
+Duplicate hard resistor 'V1' in this scope
+Cannot take the address of hard resistor 'V1'
+```

@@ -70,7 +70,7 @@ def run_test_matrix():
         uname_info = subprocess.run(["uname", "-srm"], capture_output=True, text=True).stdout.strip()
     except FileNotFoundError:
         uname_info = platform.platform()
-    print(f"=== SIGIL-C v1.29.1 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
+    print(f"=== SIGIL-C v1.30.0 AUTOMATED TEST MATRIX ({gcc_ver} | {uname_info}) ===")
 
     # Layer 1: Lexer (9 Tests)
     def test_lexer_basic():
@@ -2026,7 +2026,8 @@ int main(void) {
             "confine": {"nodes"},
             "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
-            "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system"},
+            "vresistor": {"lexer", "nodes", "type_system"},
+            "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system", "vresistor"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "netlist", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
@@ -2058,13 +2059,13 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "netlist", "confine", "packages", "provenance", "parser", "codegen", "api", "cli", "__init__"]
+                 "netlist", "confine", "packages", "provenance", "vresistor", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 7800, (total, sizes)
+        assert total <= 8000, (total, sizes)
         assert sizes["parser"] <= 2950, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
@@ -3437,6 +3438,97 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("76. lsp warnings", "LSP reports unused locals as warnings", test_lsp_warnings)
 
+
+    # Layer 77: vN hard resistors
+    def test_vresistor_ok():
+        src = """
+        v1 { v/ 5 v/ u1 v/ 5 ; }
+        vA { v/ 300 v/ u2 v/ 300 ; }
+        v123 { v/ 7 v/ u1 v/ 7 ; }
+        i4 get(v.) { r; (i4)v1 + (i4)vA + (i4)v123; }
+        i4 main(v.) { r; get() - 312; }
+        """
+        c = compile_source(src, "vres.sigil")
+        assert "const uint8_t V1 = 5;" in c, c
+        assert "const uint16_t VA = 300;" in c, c
+        assert "const uint8_t V123 = 7;" in c, c
+        assert "get()" in c
+        work = tempfile.mkdtemp(prefix="vres-")
+        cp = os.path.join(work, "vres.c")
+        exe = os.path.join(work, "vres.exe")
+        with open(cp, "w", encoding="utf-8") as f:
+            f.write(c)
+        r = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", cp, "-o", exe],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        r = subprocess.run([exe])
+        assert r.returncode == 0, r.returncode
+
+    assert_ok("77. vN", "vN 1-3 hex slots compile, external read, C99 build/run", test_vresistor_ok)
+
+    def test_vresistor_exact_capacity_rejected():
+        cases = [
+            "v1 { v/ 5 v/ u2 v/ 5 ; }\n",
+            "v1 { v/ 300 v/ u1 v/ 300 ; }\n",
+            "v1 { v/ 5 v/ u1 v/ 5 ; }\nv1 { v/ 5 v/ u1 v/ 5 ; }\n",
+        ]
+        for src in cases:
+            try:
+                compile_source(src, "vres_bad.sigil")
+            except SemanticError:
+                pass
+            else:
+                raise AssertionError("expected vN capacity rejection: " + src)
+
+    assert_ok("77. vN", "vN rejects redundant/overflow/duplicate", test_vresistor_exact_capacity_rejected)
+
+    def test_vresistor_readonly():
+        src = "v1 { v/ 5 v/ u1 v/ 5 ; }\ni4 main(v.) { v1 m, 6; r; 0; }\n"
+        try:
+            compile_source(src, "vres_assign.sigil")
+        except SemanticError as e:
+            assert "const-qualified" in str(e), e
+        else:
+            raise AssertionError("expected vN assignment rejection")
+        src = "v1 { v/ 5 v/ u1 v/ 5 ; }\ni4 main(v.) { o! p* u1 p m, p@ v1; r; 0; }\n"
+        try:
+            compile_source(src, "vres_addr.sigil")
+        except SemanticError as e:
+            assert "hard resistor" in str(e), e
+        else:
+            raise AssertionError("expected vN address rejection")
+
+    assert_ok("77. vN", "vN is read-only: no assignment, no address", test_vresistor_readonly)
+
+    def test_vresistor_name_limit():
+        try:
+            compile_source("v1234 { v/ 5 v/ u1 v/ 5 ; }\n", "vres_name.sigil")
+        except LexerError as e:
+            assert "at most 3" in str(e), e
+        else:
+            raise AssertionError("expected vN 4-digit rejection")
+
+    assert_ok("77. vN", "vN names allow 1-3 hex chars, reject 4", test_vresistor_name_limit)
+
+
+    def test_vresistor_flyline_ref():
+        src = """
+        v1 { v/ 5 v/ u1 v/ 5 ; }
+        i4 get(v.) { r; (i4)!v1!; }
+        i4 main(v.) { r; get() - 5; }
+        """
+        c = compile_source(src, "vres_ref.sigil")
+        assert "V1" in c
+        try:
+            compile_source("v1 { v/ 5 v/ u1 v/ 5 ; }\ni4 main(v.) { !v1! m, 6; r; 0; }\n",
+                           "vres_ref_bad.sigil")
+        except SemanticError as e:
+            assert "const-qualified" in str(e), e
+        else:
+            raise AssertionError("expected !vN! write rejection")
+
+    assert_ok("77. vN", "!vN! is a read-only flyline index", test_vresistor_flyline_ref)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3444,7 +3536,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 76-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 77-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

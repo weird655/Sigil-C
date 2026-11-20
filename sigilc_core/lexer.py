@@ -381,6 +381,27 @@ class Lexer:
                 tokens.append(Token('CHAR', ''.join(buf), s_line, s_col, s_byte))
                 continue
 
+            if ch == 'v' and nxt == '/':
+                self._advance(2)
+                tokens.append(Token('VSLASH', 'v/', s_line, s_col, s_byte))
+                continue
+
+            if ch == 'v' and nxt in '0123456789ABCDEFabcdef':
+                j = 1
+                while j < 4 and self._peek(j) in '0123456789ABCDEFabcdef':
+                    j += 1
+                after = self._peek(j)
+                if j == 4 and self._peek(4) in '0123456789ABCDEFabcdef':
+                    raise LexerError(
+                        f"{self.filename}:{s_line}:{s_col}: vN supports at most 3 hex digits")
+                if after.isalnum() or after == '_':
+                    # v123x is an ordinary identifier, not a resistor token
+                    pass
+                else:
+                    self._advance(j)
+                    tokens.append(Token('KW_VRES', ('v' + self.src[self.pos - j + 1:self.pos]).upper(), s_line, s_col, s_byte))
+                    continue
+
             if ch == 'a' and nxt == '!':
                 self._advance(2)
                 num_buf = []
@@ -451,6 +472,18 @@ class Lexer:
                     mask = self.src[self.pos + 2:self.pos + j]
                     self._advance(j + 2)
                     tokens.append(Token('LOCK', mask, s_line, s_col, s_byte))
+                    continue
+
+            if ch == '!' and nxt == 'v' and self._peek(2) in '0123456789ABCDEFabcdef':
+                j = 2
+                while j < 5 and self._peek(j) in '0123456789ABCDEFabcdef':
+                    j += 1
+                if j == 5 and self._peek(5) in '0123456789ABCDEFabcdef':
+                    raise LexerError(
+                        f"{self.filename}:{s_line}:{s_col}: vN reference supports at most 3 hex digits")
+                if self._peek(j) == '!':
+                    self._advance(j + 1)
+                    tokens.append(Token('VRES_REF', ('v' + self.src[self.pos - j + 1:self.pos - 1]).upper(), s_line, s_col, s_byte))
                     continue
 
             if ch == '!' and nxt == '/':
