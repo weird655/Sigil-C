@@ -3539,8 +3539,8 @@ i4 f1(v.) { r; !/2/!; }
         T3B { width 8; payload !handler!; locked; }
         """
         c = compile_source(src, "tnx.sigil")
-        assert "const SigilTnxNode T3A" in c, c
-        assert "const SigilTnxNode T3B" in c, c
+        assert "SigilTnxNode T3A" in c, c
+        assert "SigilTnxNode T3B" in c, c
         assert "&T3B" in c
         work = tempfile.mkdtemp(prefix="tnx-")
         cp = os.path.join(work, "tnx.c")
@@ -3561,6 +3561,8 @@ int main(void) {
     assert(sigil_tnx_pop(&q) == &T3A);
     assert(sigil_tnx_pop(&q) == &T3B);
     assert(sigil_tnx_pop(&q) == 0);
+    assert(T3A.next == &T3B);
+    assert(sigil_tnx_execute(&T3A) == 0);
     return 0;
 }
 """)

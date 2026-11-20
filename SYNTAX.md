@@ -1087,7 +1087,8 @@ Cannot take the address of hard resistor 'V1'
 | 顺序 | 优先级 N 降序；同 N 时 X 升序 |
 | 队列 | `SigilTnxQueue`：10 优先级 × 16 序列槽 |
 | 并发 | 双缓冲 + 自旋锁；GCC/Clang `__atomic`；producer/consumer 双线程 |
-| 本质 | 只读描述符 + 有界优先级信箱；不是执行体 |
+| 运行时链 | `link` 是队列链；`next` 是静态描述符链 |
+| 本质 | 描述符 + 有界优先级信箱；节点可执行 |
 
 ```sigil
 s@ v. handler(v.) { }
@@ -1113,6 +1114,7 @@ SigilTnxQueue q;
 sigil_tnx_queue_init(&q);
 sigil_tnx_push(&q, &T3A);   /* thread-safe; 0 = ok, -1 = full/locked/duplicate */
 sigil_tnx_pop(&q);          /* thread-safe; highest N, then lowest X */
+sigil_tnx_execute(&T3A);    /* call payload.fn; -1 if no function */
 ```
 
 不通过：

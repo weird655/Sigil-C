@@ -57,8 +57,8 @@ def _field_size_expr(ftype) -> Optional[str]:
 
 
 TNX_HELPER = """\
-/* TNX prepared-packet descriptors: 10 priority lanes x 16 sequence slots.
- * Two-buffer queue: producer writes back, consumer reads front, swap on empty.
+/* TNX prepared-packet nodes: 10 priority lanes x 16 sequence slots.
+ * Two-buffer producer/consumer queue with an atomic spinlock.
  * Requires GCC/Clang __atomic builtins; no C11/pthread dependency. */
 typedef union SigilTnxPayload {
     void *data;
@@ -68,14 +68,16 @@ typedef union SigilTnxPayload {
 typedef struct SigilTnxNode {
     int32_t width;
     SigilTnxPayload payload;
-    const struct SigilTnxNode *next;
+    struct SigilTnxNode *next;   /* static descriptor chain */
+    struct SigilTnxNode *link;   /* runtime queue link */
     uint8_t locked;
     uint8_t priority;
     uint8_t seq;
+    uint8_t queued;
 } SigilTnxNode;
 
 typedef struct SigilTnxSlots {
-    const SigilTnxNode *slot[10][16];
+    SigilTnxNode *head[10];
 } SigilTnxSlots;
 
 typedef struct SigilTnxQueue {
@@ -101,54 +103,64 @@ static inline void sigil_tnx_unlock(SigilTnxQueue *q) {
 #endif
 }
 
-static inline void sigil_tnx_slots_clear(SigilTnxSlots *s) {
-    int p, x;
-    for (p = 0; p < 10; p++)
-        for (x = 0; x < 16; x++) s->slot[p][x] = NULL;
-}
-
 static inline void sigil_tnx_queue_init(SigilTnxQueue *q) {
-    sigil_tnx_slots_clear(&q->buffers[0]);
-    sigil_tnx_slots_clear(&q->buffers[1]);
+    int b, p;
+    for (b = 0; b < 2; b++)
+        for (p = 0; p < 10; p++) q->buffers[b].head[p] = NULL;
     q->front = &q->buffers[0];
     q->back = &q->buffers[1];
     q->lock = 0;
 }
 
-static inline int sigil_tnx_push(SigilTnxQueue *q, const SigilTnxNode *n) {
+static inline int sigil_tnx_push(SigilTnxQueue *q, SigilTnxNode *n) {
+    int p;
+    SigilTnxNode **pp;
     int rc = -1;
     if (!q || !n || !n->locked || n->priority > 9 || n->seq > 15) return -1;
+    p = n->priority;
     sigil_tnx_lock(q);
-    if (!q->buffers[0].slot[n->priority][n->seq] &&
-        !q->buffers[1].slot[n->priority][n->seq]) {
-        q->back->slot[n->priority][n->seq] = n;
-        rc = 0;
+    if (!n->queued) {
+        pp = &q->back->head[p];
+        while (*pp && (*pp)->seq < n->seq) pp = &(*pp)->link;
+        if (!*pp || (*pp)->seq > n->seq) {
+            n->link = *pp;
+            *pp = n;
+            n->queued = 1;
+            rc = 0;
+        }
     }
     sigil_tnx_unlock(q);
     return rc;
 }
 
-static inline const SigilTnxNode *sigil_tnx_pop(SigilTnxQueue *q) {
-    int b, p, x, bestb = -1, bestp = -1, bestx = 99;
-    const SigilTnxNode *n = NULL;
+static inline SigilTnxNode *sigil_tnx_pop(SigilTnxQueue *q) {
+    int p, b;
+    SigilTnxNode *best = NULL;
+    int bestb = -1;
     if (!q) return NULL;
     sigil_tnx_lock(q);
-    for (b = 0; b < 2; b++) {
-        for (p = 0; p < 10; p++) {
-            for (x = 0; x < 16; x++) {
-                if (q->buffers[b].slot[p][x] &&
-                    (p > bestp || (p == bestp && x < bestx))) {
-                    bestb = b; bestp = p; bestx = x;
-                }
+    for (p = 9; p >= 0 && !best; p--) {
+        for (b = 0; b < 2; b++) {
+            SigilTnxNode *h = q->buffers[b].head[p];
+            if (h && (!best || h->seq < best->seq)) {
+                best = h;
+                bestb = b;
             }
         }
     }
-    if (bestb >= 0) {
-        n = q->buffers[bestb].slot[bestp][bestx];
-        q->buffers[bestb].slot[bestp][bestx] = NULL;
+    if (best) {
+        q->buffers[bestb].head[best->priority] = best->link;
+        best->link = NULL;
+        best->queued = 0;
     }
     sigil_tnx_unlock(q);
-    return n;
+    return best;
+}
+
+static inline int sigil_tnx_execute(SigilTnxNode *n) {
+    if (!n || !n->payload.fn) return -1;
+    n->payload.fn();
+    return 0;
 }
 
 """
@@ -220,7 +232,7 @@ class CodeGenerator:
         if tnx_nodes:
             self.lines.append(TNX_HELPER)
             for n in tnx_nodes:
-                self.lines.append(f"extern const SigilTnxNode {n.name};\n")
+                self.lines.append(f"extern SigilTnxNode {n.name};\n")
         for node in nodes:
             self.gen_top(node)
         return "".join(self.lines)
@@ -354,8 +366,8 @@ class CodeGenerator:
                 payload = f"{{ .data = (void *)({emit_expr(node.payload)}) }}"
             nxt = f"&{node.next_name}" if node.next_name else "NULL"
             self._emit(
-                f"const SigilTnxNode {node.name} = {{ {node.width}, {payload}, {nxt}, "
-                f"1, {node.priority}, {node.seq} }};", node.line)
+                f"SigilTnxNode {node.name} = {{ {node.width}, {payload}, {nxt}, NULL, "
+                f"1, {node.priority}, {node.seq}, 0 }};", node.line)
         elif isinstance(node, StaticAssertStmt):
             self._emit(f"SIGIL_STATIC_ASSERT({emit_expr(node.cond)}, {node.message});", node.line)
         elif isinstance(node, VarDeclStmt):
