@@ -6,13 +6,13 @@
 - Exact byte capacity: under-size and redundant over-size both rejected.
 - Literal data uses its minimal byte width; variable data uses its type width.
 - Read-only hard slot: no assignment, no address-of, no external mutation.
-- File-scope slots are `const` globals and can be read by other functions/flylines.
+- File-scope slots are `const` globals readable by other functions/flylines in the same translation unit; `--build` does not yet export them across files.
 - Local slots are `const` locals; one `vN` per scope.
 - Errors: V001 capacity mismatch, V002 value overflow, V003 redundant capacity,
   V004 duplicate, V006 address-of.
 - 5 new tests in Layer 77 plus 3 TNX tests in Layer 78; matrix 243/243.
 - Tutorial §1.9/§1.10 and SYNTAX §6/§7 quick cards; examples `23_vresistor.sigil`, `24_tnx.sigil`.
-- TNX prepared-packet descriptors: T0A–T9F, width/payload/next/locked; linked runtime nodes (`link/queued`), executable `payload.fn`, 10×16 priority queue with two-buffer producer/consumer and GCC/Clang atomic spinlock.
+- TNX prepared-packet descriptors: T0A–T9F, width/payload/next/locked; linked runtime nodes (`link/queued`), executable `payload.fn`, 10×16 priority queue with two-buffer producer/consumer and GCC/Clang TAS spinlock. Non-GCC/Clang gets a single-thread fallback; TNX is not lock-free.
 
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 

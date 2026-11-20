@@ -988,7 +988,8 @@ i4 main(v.) { r; dbl(inc(3)); }    /* 中间态同样不可观测 */
 | 检查 | 数据字节数 == 容量；字面量按最小宽度 |
 | 返回 | 类型宽度 <= 容量；文件级必须编译期常量 |
 | 只读 | 不可赋值、不可取地址、不可外部写 |
-| 飞线读 | `!vN!` 与 `vN` 同义 |
+| 跨文件 | `--build` 目前不导出 vN；跨文件读会 Undeclared |
+| 飞线读 | `!vN!` 与 `vN` 同义；**仅同一翻译单元** |
 | 作用域 | 每个作用域每个 `vN` 一次；不嵌套 |
 | C 输出 | 文件级 `const uintN_t VN`；局部 `const` 局部 |
 
@@ -1086,7 +1087,7 @@ Cannot take the address of hard resistor 'V1'
 | locked | 必填；预备包必须强锁 |
 | 顺序 | 优先级 N 降序；同 N 时 X 升序 |
 | 队列 | `SigilTnxQueue`：10 优先级 × 16 序列槽 |
-| 并发 | 双缓冲 + 自旋锁；GCC/Clang `__atomic`；producer/consumer 双线程 |
+| 并发 | 双缓冲 + TAS 自旋锁；GCC/Clang `__atomic` 双线程；非 GCC/Clang 单线程 fallback |
 | 运行时链 | `link` 是队列链；`next` 是静态描述符链 |
 | 本质 | 描述符 + 有界优先级信箱；节点可执行 |
 

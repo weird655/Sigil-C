@@ -379,7 +379,7 @@ p@ v1;         /* error: hard resistor has no address */
 
 ### 1.9.5 外部飞线索引
 
-外部函数/飞线可以按 `vN` 或 `!vN!` 读取：
+同一翻译单元里的其他函数/飞线可以按 `vN` 或 `!vN!` 读取：
 
 ```sigil
 v1 { v/ 5 v/ u1 v/ 5 ; }
@@ -498,10 +498,13 @@ sigil_tnx_pop(&q);   /* N 最大、X 最小 */
 
 ## 当前边界
 
-- 双缓冲 + 自旋锁；GCC/Clang `__atomic`
+- 双缓冲 + TAS 自旋锁；GCC/Clang `__atomic`
 - 目前是 producer/consumer 双线程模型；更多线程需扩展锁粒度和容量
+- 非 GCC/Clang 只有单线程 fallback
 - `next` 是静态描述符链；运行时队列用 `link`
 - payload 可用 `sigil_tnx_execute` 执行
+- TAS 自旋锁；不是 lock-free
+- 非 GCC/Clang 编成单线程 fallback，不保证并发
 
 示例：
 

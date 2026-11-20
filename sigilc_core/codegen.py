@@ -91,7 +91,8 @@ static inline void sigil_tnx_lock(SigilTnxQueue *q) {
 #if defined(__GNUC__) || defined(__clang__)
     while (__atomic_test_and_set(&q->lock, __ATOMIC_ACQUIRE)) { }
 #else
-#error "SigilTnxQueue requires GCC/Clang __atomic builtins"
+    /* Portable single-thread fallback. Not safe for concurrent use. */
+    q->lock = 1;
 #endif
 }
 
@@ -99,7 +100,7 @@ static inline void sigil_tnx_unlock(SigilTnxQueue *q) {
 #if defined(__GNUC__) || defined(__clang__)
     __atomic_clear(&q->lock, __ATOMIC_RELEASE);
 #else
-    (void)q;
+    q->lock = 0;
 #endif
 }
 
