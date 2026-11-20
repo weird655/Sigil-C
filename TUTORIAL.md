@@ -293,6 +293,153 @@ s@ v. helper(p* i4 p) { }      /* static：只在本翻译单元可见 */
 
 `--emit-header` 生成 `.h` 时，`s@` 的符号不会出现——库的私有实现靠它。
 
+## 1.9 硬电阻 `vN`
+
+`vN` 是一个**只读容量槽**，不是版本号。  
+名字是 `v` + 1–3 位十六进制：
+
+```text
+v0  v1  vA  v1F  vFFF
+```
+
+`v1234` 不合法。
+
+### 1.9.1 为什么需要它
+
+C 的窄化转换经常静默截断：
+
+```c
+uint8_t x = 300;   /* 截断，不报错 */
+```
+
+`vN` 把“这个值/类型到底占几字节”变成编译期断言：
+
+```sigil
+v1 {
+    v/ 300 v/ u2 v/ 300 ;
+}
+```
+
+不匹配就报错，不生成静默截断。
+
+### 1.9.2 第一个电阻
+
+```sigil
+v1 {
+    v/ 5 v/ u1 v/ 5 ;
+}
+```
+
+三槽固定：
+
+```text
+v/ <数据包> v/ <容量> v/ <返回> ;
+```
+
+- 数据包：字面量、变量、飞线包
+- 容量：`u1` / `u2` / `u4` / `u8`
+- 返回：通过时使用的值
+
+一个 `vN { }` 只能有一个 `v/ ... ;`，不嵌套。
+
+### 1.9.3 容量是精确匹配
+
+不是“小于等于”：
+
+```sigil
+v/ 5   v/ u1   /* 通过 */
+v/ 300 v/ u2   /* 通过 */
+v/ 5   v/ u2   /* 拒绝：冗余 */
+v/ 300 v/ u1   /* 拒绝：溢出 */
+```
+
+变量按类型宽度：
+
+```sigil
+o! u1 a m, 5;
+v1 { v/ a v/ u1 v/ a ; }
+
+o! i4 b m, 5;
+vA { v/ b v/ u4 v/ b ; }   /* i4 是 4 字节，u1/u2 都拒绝 */
+```
+
+### 1.9.4 只读，硬
+
+`vN` 没有写路径：
+
+```sigil
+v1 { v/ 5 v/ u1 v/ 5 ; }
+
+v1 m, 6;       /* error: const-qualified lvalue */
+p@ v1;         /* error: hard resistor has no address */
+```
+
+文件级生成 `const uint8_t V1`；局部生成 `const` 局部。  
+其他函数可以读，不能改。
+
+### 1.9.5 外部飞线索引
+
+外部函数/飞线可以按 `vN` 或 `!vN!` 读取：
+
+```sigil
+v1 { v/ 5 v/ u1 v/ 5 ; }
+
+i4 get(v.) { r; (i4)!v1!; }
+```
+
+不能写：
+
+```sigil
+!v1! m, 6;    /* error */
+```
+
+### 1.9.6 文件级 vs 局部
+
+文件级：
+
+```sigil
+v1 { v/ 5 v/ u1 v/ 5 ; }
+```
+
+生成只读全局，可被其他函数读。  
+文件级的返回槽必须是**编译期常量**，因为 C 全局 `const` 初始化器必须常量。
+
+局部：
+
+```sigil
+i4 main(v.) {
+    o! u1 x m, 5;
+    v1 { v/ x v/ u1 v/ x ; }
+    r; (i4)v1;
+}
+```
+
+局部可以用运行时变量初始化，生成 `const` 局部。
+
+### 1.9.7 常见错误
+
+```text
+vN capacity mismatch: data is 4 bytes, resistor is u1
+vN redundant capacity: data is 1 bytes, resistor is u4
+vN value overflow: 300 does not fit in u1
+vN return must be a compile-time constant at file scope
+Duplicate hard resistor 'V1' in this scope
+Cannot take the address of hard resistor 'V1'
+```
+
+### 1.9.8 练习
+
+1. 写一个 `u2` 电阻装 `300`。
+2. 把 `u1` 变量塞进 `u2`，看它为什么拒绝。
+3. 用 `!v1!` 在另一个函数里读它。
+4. 试 `v1 m, 6;` 和 `p@ v1;`，确认都拒绝。
+
+可运行示例：
+
+```bash
+python3 sigilc.py examples/tutorial/23_vresistor.sigil --run
+```
+
 ---
 
 # Part 2 · 数据

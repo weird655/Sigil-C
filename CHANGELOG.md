@@ -10,7 +10,8 @@
 - Local slots are `const` locals; one `vN` per scope.
 - Errors: V001 capacity mismatch, V002 value overflow, V003 redundant capacity,
   V004 duplicate, V006 address-of.
-- 4 new tests in Layer 77; matrix 239/239.
+- 4 new tests in Layer 77; matrix 240/240.
+- Tutorial §1.9 and SYNTAX §6 quick card; example `23_vresistor.sigil`.
 
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 

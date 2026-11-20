@@ -1,0 +1,10 @@
+v1 { v/ 5 v/ u1 v/ 5 ; }
+vA { v/ 300 v/ u2 v/ 300 ; }
+
+i4 main(v.) {
+    o! u1 local_value m, 7;
+    v2 {
+        v/ local_value v/ u1 v/ local_value ;
+    }
+    r; (i4)v1 + (i4)vA + (i4)v2 - 312;
+}
