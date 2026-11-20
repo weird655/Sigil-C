@@ -155,11 +155,11 @@ class LexerError(Exception):
     pass
 
 class Lexer:
-    def __init__(self, source: str, filename: str = "<input>"):
+    def __init__(self, source: str, filename: str = "<input>", line_offset: int = 0):
         self.src = source
         self.filename = filename
         self.pos = 0
-        self.line = 1
+        self.line = 1 - line_offset
         self.col = 1
         self.byte_offset = 0
         self.n = len(source)

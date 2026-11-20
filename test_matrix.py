@@ -3706,6 +3706,21 @@ int main(void) {
 
     assert_ok("79. boundaries", "NUL/binary and unterminated inputs rejected", test_binary_and_unterminated)
 
+
+    def test_build_error_line_offset():
+        work = tempfile.mkdtemp(prefix="lineoff-")
+        with open(os.path.join(work, "a.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 helper(v.) { r; 1; }\n")
+        with open(os.path.join(work, "m.sigil"), "w", encoding="utf-8") as f:
+            f.write("i4 main(v.) {\n    o! i4 x m, 1;\n    r;\n    nope;\n}\n")
+        root = os.path.dirname(os.path.abspath(__file__))
+        r = subprocess.run([sys.executable, os.path.join(root, "sigilc.py"), "--build", work],
+                           capture_output=True, text=True)
+        assert r.returncode != 0
+        assert "m.sigil:4:" in r.stderr, r.stderr
+
+    assert_ok("79. boundaries", "build diagnostics keep original source line", test_build_error_line_offset)
+
     # === end of tests: new layers go above this line ===
 
     if failures:

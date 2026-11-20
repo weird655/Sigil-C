@@ -21,11 +21,12 @@ def compile_source(src: str, filename: str = "input.sigil", prelude: Optional[st
                    effects: Optional[Dict[str, Any]] = None, checked: bool = False,
                    checked_strict: bool = False, checked_external: bool = False,
                    allow_external: Optional[Set[str]] = None,
-                   known_functions: Optional[Set[str]] = None) -> str:
+                   known_functions: Optional[Set[str]] = None,
+                   line_offset: int = 0) -> str:
     if trap_trace and shadow_stack:
         raise ValueError("trap_trace and shadow_stack are separate modes; pick one")
     EXTERNAL_C_SPELLING.clear()
-    tokens = Lexer(src, filename).tokenize()
+    tokens = Lexer(src, filename, line_offset=line_offset).tokenize()
     ast = Parser(tokens, filename, defines, strict_provenance=strict, effects=effects,
                 checked=checked or checked_strict or checked_external,
                 checked_external=checked_external, allow_external=allow_external,
@@ -1087,6 +1088,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
         prefix = ""
         if others:
             prefix = "/* project prototypes */\n" + "\n".join(sorted(set(others))) + "\n"
+        prefix_lines = prefix.count("\n")
         src = sources_text[rel]
         try:
             ns = _project_namespace(rel)
@@ -1096,6 +1098,7 @@ def _build_project(args, defines: Dict[str, str]) -> int:
             src = _rewrite_external_packages(src, exports, package_index,
                                              bindings_all, namespaces, rel)
             c_src = compile_source(prefix + src, rel, prelude=args.prelude,
+                                   line_offset=prefix_lines,
                                    bounds_check=args.bounds_check, defines=defines,
                                    line_directives=not args.no_line, strict=args.strict,
                                    effects=effects, checked=getattr(args, "checked", False),

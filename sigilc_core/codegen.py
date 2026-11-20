@@ -190,7 +190,7 @@ class CodeGenerator:
         pad = "    " * indent
         if self.header_mode:
             self.lines.append(f"{pad}{code}\n")
-        elif self.line_directives:
+        elif self.line_directives and line >= 1:
             self.lines.append(f'#line {line} "{self.safe_filename}"\n{pad}{code}\n')
         else:
             self.lines.append(f"{pad}{code}\n")
