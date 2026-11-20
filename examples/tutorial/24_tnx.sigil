@@ -1,0 +1,18 @@
+s@ v. handler(v.) { }
+
+T3A {
+    width 8;
+    payload !handler!;
+    next T3B;
+    locked;
+}
+
+T3B {
+    width 8;
+    payload !handler!;
+    locked;
+}
+
+i4 main(v.) {
+    r; 0;
+}

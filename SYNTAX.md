@@ -1068,3 +1068,60 @@ vN return must be a compile-time constant at file scope
 Duplicate hard resistor 'V1' in this scope
 Cannot take the address of hard resistor 'V1'
 ```
+
+
+---
+
+## 7. TNX 预备包
+
+### 7.1 速查卡
+
+| 项 | 规则 |
+|---|---|
+| 名字 | `T` + 优先级 `0–9` + 序列 `0–9/A–F`，如 `T3A`、`T9F` |
+| 字段 | `width`、`payload`、`next`（可选）、`locked` |
+| width | payload 的字节容量，必须 >= payload 宽度 |
+| payload | 函数包 `!fn!` 或指针表达式；函数按 8 字节 |
+| next | 只能指向**同优先级**的 TNX；可形成链，禁止环/自指 |
+| locked | 必填；预备包必须强锁 |
+| 顺序 | 优先级 N 降序；同 N 时 X 升序 |
+| 队列 | `SigilTnxQueue`：10 优先级 × 16 序列槽 |
+| 并发 | 目前单线程；多线程 front/back 双缓冲未实现 |
+| 本质 | 只读描述符 + 有界优先级信箱；不是执行体 |
+
+```sigil
+s@ v. handler(v.) { }
+
+T3A {
+    width 8;
+    payload !handler!;
+    next T3B;
+    locked;
+}
+
+T3B {
+    width 8;
+    payload !handler!;
+    locked;
+}
+```
+
+C 侧 API：
+
+```c
+SigilTnxQueue q;
+sigil_tnx_queue_init(&q);
+sigil_tnx_push(&q, &T3A);   /* 0 = ok; -1 = full/locked/duplicate */
+sigil_tnx_pop(&q);          /* highest N, then lowest X */
+```
+
+不通过：
+
+```text
+TNX requires width, payload, and locked
+TNX payload is 8 bytes, width is 4
+TNX next target must share priority 3
+TNX next cycle at 'T3A'
+Duplicate TNX container 'T3A'
+```
+

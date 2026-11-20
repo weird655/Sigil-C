@@ -3,7 +3,7 @@
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from . import confine, packages, provenance, vresistor
+from . import confine, packages, provenance, tnx, vresistor
 from .lexer import (
     ATTR_FILE_SCOPE_ONLY,
     ATTR_INT_LIST,
@@ -62,6 +62,8 @@ from .nodes import (
     StructDefNode,
     SwitchStmt,
     TernaryExpr,
+    TnxFnExpr,
+    TnxNode,
     TrapStmt,
     UnaryExpr,
     VaArgExpr,
@@ -142,6 +144,7 @@ class Parser:
         # 局部 r@ 指针承诺独占访问的基对象 -> 声明时的作用域深度
         self.restricted: Dict[str, int] = {}
         self.hard_resistors: Set[str] = set()
+        self.tnx_nodes: Dict[str, TnxNode] = {}
         self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
@@ -518,6 +521,8 @@ class Parser:
             # INT_NUM (包括 0xFE 十六进制整数，严格推导为整型，修复 'E' 误判为浮点的问题)
             return BaseType(line=expr.line, col=expr.col, c_name='uint32_t' if expr.code.lower().endswith('u') else 'int32_t')
 
+        if isinstance(expr, TnxFnExpr):
+            return BaseType(line=expr.line, col=expr.col, c_name='uintptr_t')
         if isinstance(expr, IdentExpr):
             return self._lookup_symbol(expr.name, Token('IDENT', expr.name, expr.line, expr.col, 0))
 
@@ -1610,6 +1615,9 @@ class Parser:
             if self._cur().kind == 'KW_VRES':
                 top_nodes.append(self.parse_vresistor(top_level=True))
                 continue
+            if self._cur().kind == 'KW_TNX':
+                top_nodes.append(tnx.parse(self))
+                continue
             attrs: List[Attribute] = []
             if self._cur().kind == 'KW_ATTR':
                 attrs = self.parse_attrs()
@@ -1665,6 +1673,7 @@ class Parser:
                 tok = self._cur()
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'{c_keyword_hint(tok.value)}")
         self._check_calls()
+        tnx.validate(self)
         if self.file_gate_seen and not self.file_gate_on:
             p = self.pkgs
             if (p.packages or p.fields or p.slot_types or p.targets or p.local
@@ -2920,6 +2929,9 @@ class Parser:
             self._eat(tok.kind)
             self._lookup_symbol(tok.value, tok)
             return IdentExpr(line=tok.line, col=tok.col, name=tok.value)
+        if tok.kind == 'TNX_FN':
+            self._eat('TNX_FN')
+            return TnxFnExpr(line=tok.line, col=tok.col, name=tok.value)
         if tok.kind == 'IDENT':
             self._eat('IDENT')
             if tok.value in self.pkgs.local_alias:

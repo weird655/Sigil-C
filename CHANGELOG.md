@@ -11,7 +11,8 @@
 - Errors: V001 capacity mismatch, V002 value overflow, V003 redundant capacity,
   V004 duplicate, V006 address-of.
 - 4 new tests in Layer 77; matrix 240/240.
-- Tutorial §1.9 and SYNTAX §6 quick card; example `23_vresistor.sigil`.
+- Tutorial §1.9/§1.10 and SYNTAX §6/§7 quick cards; examples `23_vresistor.sigil`, `24_tnx.sigil`.
+- TNX prepared-packet descriptors: T0A–T9F, width/payload/next/locked, 10×16 single-thread priority queue.
 
 # Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
 

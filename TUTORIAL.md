@@ -442,6 +442,75 @@ python3 sigilc.py examples/tutorial/23_vresistor.sigil --run
 
 ---
 
+## 1.10 TNX 预备包
+
+`vN` 是只读容量槽；`TNX` 是**预备包描述符**。
+
+```sigil
+s@ v. handler(v.) { }
+
+T3A {
+    width 8;
+    payload !handler!;
+    next T3B;
+    locked;
+}
+```
+
+名字：
+
+```text
+T + 优先级 0–9 + 序列 0–9/A–F
+T3A  T9F  T0A
+```
+
+- `N`：优先级，9 最高
+- `X`：同优先级序列，0 最小
+- `width`：payload 字节容量
+- `payload`：函数包或指针
+- `next`：同优先级的下一个 TNX，可选
+- `locked`：必填，预备包必须强锁
+
+`next` 只能同优先级，不能自指/成环：
+
+```sigil
+T3A { width 8; payload !handler!; next T4B; locked; }  // error
+```
+
+## 队列
+
+生成 C 里带：
+
+```c
+SigilTnxQueue q;
+sigil_tnx_queue_init(&q);
+sigil_tnx_push(&q, &T3A);
+sigil_tnx_pop(&q);   /* N 最大、X 最小 */
+```
+
+容量：
+
+```text
+10 个优先级 × 16 个序列槽
+```
+
+满了或重复 push 返回 `-1`，不静默丢包。
+
+## 当前边界
+
+- 单线程队列
+- 多线程 front/back 双缓冲还没做
+- `next` 是描述符链/网表元数据，不是队列链
+- payload 不执行，只登记
+
+示例：
+
+```bash
+python3 sigilc.py examples/tutorial/24_tnx.sigil --run
+```
+
+---
+
 # Part 2 · 数据
 
 ## 2.1 数组

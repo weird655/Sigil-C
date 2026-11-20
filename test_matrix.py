@@ -2027,7 +2027,8 @@ int main(void) {
             "packages": {"nodes", "type_system"},
             "provenance": {"nodes"},
             "vresistor": {"lexer", "nodes", "type_system"},
-            "parser": {"confine", "lexer", "nodes", "packages", "provenance", "type_system", "vresistor"},
+            "tnx": {"nodes"},
+            "parser": {"confine", "lexer", "nodes", "packages", "provenance", "tnx", "type_system", "vresistor"},
             "codegen": {"nodes", "preamble", "type_system"},
             "api": {"codegen", "lexer", "netlist", "nodes", "parser"},
             "cli": {"api", "lexer", "nodes", "preamble", "version"},
@@ -2059,14 +2060,14 @@ int main(void) {
 
         # 无环：按依赖顺序排列，模块只能指向自己之前的模块
         order = ["version", "lexer", "preamble", "type_system", "nodes",
-                 "netlist", "confine", "packages", "provenance", "vresistor", "parser", "codegen", "api", "cli", "__init__"]
+                 "netlist", "confine", "packages", "provenance", "vresistor", "tnx", "parser", "codegen", "api", "cli", "__init__"]
         for name in order:
             for dep in allowed[name]:
                 assert order.index(dep) < order.index(name), (name, dep)
 
         total = sum(sizes.values())
-        assert total <= 8000, (total, sizes)
-        assert sizes["parser"] <= 2950, sizes["parser"]
+        assert total <= 8500, (total, sizes)
+        assert sizes["parser"] <= 3000, sizes["parser"]
         assert sizes["provenance"] <= 400, sizes["provenance"]
         assert sizes["packages"] <= 500, sizes["packages"]
         assert sizes["confine"] <= 400, sizes["confine"]
@@ -3529,6 +3530,66 @@ i4 f1(v.) { r; !/2/!; }
 
     assert_ok("77. vN", "!vN! is a read-only flyline index", test_vresistor_flyline_ref)
 
+
+    # Layer 78: T N X prepared-packet descriptors
+    def test_tnx_descriptors_and_queue():
+        src = """
+        s@ v. handler(v.) { }
+        T3A { width 8; payload !handler!; next T3B; locked; }
+        T3B { width 8; payload !handler!; locked; }
+        """
+        c = compile_source(src, "tnx.sigil")
+        assert "const SigilTnxNode T3A" in c, c
+        assert "const SigilTnxNode T3B" in c, c
+        assert "&T3B" in c
+        work = tempfile.mkdtemp(prefix="tnx-")
+        cp = os.path.join(work, "tnx.c")
+        hp = os.path.join(work, "harness.c")
+        exe = os.path.join(work, "harness.exe")
+        with open(cp, "w", encoding="utf-8") as f:
+            f.write(c)
+        with open(hp, "w", encoding="utf-8") as f:
+            f.write("""
+#include "tnx.c"
+#include <assert.h>
+int main(void) {
+    SigilTnxQueue q;
+    sigil_tnx_queue_init(&q);
+    assert(sigil_tnx_push(&q, &T3B) == 0);
+    assert(sigil_tnx_push(&q, &T3A) == 0);
+    assert(sigil_tnx_push(&q, &T3A) == -1);
+    assert(sigil_tnx_pop(&q) == &T3A);
+    assert(sigil_tnx_pop(&q) == &T3B);
+    assert(sigil_tnx_pop(&q) == 0);
+    return 0;
+}
+""")
+        r = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", hp, "-o", exe],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        r = subprocess.run([exe])
+        assert r.returncode == 0, r.returncode
+
+    assert_ok("78. TNX", "T3A/T3B descriptors compile and priority queue pops T3A first", test_tnx_descriptors_and_queue)
+
+    def test_tnx_rejections():
+        bad = [
+            "s@ v. h(v.) { }\nT3A { width 8; payload !h!; }\n",                       # no locked
+            "s@ v. h(v.) { }\nT3A { width 4; payload !h!; locked; }\n",               # payload 8 > width 4
+            "s@ v. h(v.) { }\nT3A { width 8; payload !h!; next T4B; locked; }\nT4B { width 8; payload !h!; locked; }\n",  # priority mismatch
+            "s@ v. h(v.) { }\nT3A { width 8; payload !h!; next T3B; locked; }\nT3B { width 8; payload !h!; next T3A; locked; }\n",  # cycle
+            "s@ v. h(v.) { }\nT3A { width 8; payload !h!; next T9B; locked; }\n",      # missing next target
+        ]
+        for src in bad:
+            try:
+                compile_source(src, "tnx_bad.sigil")
+            except SemanticError:
+                pass
+            else:
+                raise AssertionError("expected TNX rejection: " + src)
+
+    assert_ok("78. TNX", "TNX rejects unlocked/too-small/priority/cycle", test_tnx_rejections)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3536,7 +3597,7 @@ i4 f1(v.) { r; !/2/!; }
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 77-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 78-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()

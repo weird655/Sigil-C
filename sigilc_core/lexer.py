@@ -402,6 +402,20 @@ class Lexer:
                     tokens.append(Token('KW_VRES', ('v' + self.src[self.pos - j + 1:self.pos]).upper(), s_line, s_col, s_byte))
                     continue
 
+            if ch == 'T' and nxt in '0123456789' and self._peek(2) in '0123456789ABCDEFabcdef' and not (self._peek(3).isalnum() or self._peek(3) == '_'):
+                self._advance(3)
+                tokens.append(Token('KW_TNX', 'T' + nxt + self._peek(-1).upper(), s_line, s_col, s_byte))
+                continue
+
+            if ch == '!' and (nxt.isalpha() or nxt == '_') and not (nxt == 'v' and self._peek(2) in '0123456789ABCDEFabcdef'):
+                j = 2
+                while self._peek(j).isalnum() or self._peek(j) == '_':
+                    j += 1
+                if self._peek(j) == '!':
+                    self._advance(j + 1)
+                    tokens.append(Token('TNX_FN', self.src[self.pos - j:self.pos - 1], s_line, s_col, s_byte))
+                    continue
+
             if ch == 'a' and nxt == '!':
                 self._advance(2)
                 num_buf = []

@@ -71,6 +71,10 @@ class IdentExpr(ExprNode):
     name: str
 
 @dataclass
+class TnxFnExpr(ExprNode):
+    name: str
+
+@dataclass
 class CastExpr(ExprNode):
     target_type: TypeNode
     operand: ExprNode
@@ -249,6 +253,16 @@ class FuncDefNode(StmtNode):
     is_variadic: bool = False
 
 @dataclass
+class TnxNode(StmtNode):
+    name: str
+    priority: int
+    seq: int
+    width: int
+    payload: ExprNode
+    next_name: Optional[str] = None
+    locked: bool = True
+
+@dataclass
 class SizeofExpr(ExprNode):
     target_type: Optional[TypeNode]
     operand: Optional[ExprNode]
@@ -331,6 +345,8 @@ def emit_expr(e: ExprNode) -> str:
     if isinstance(e, OffsetofExpr):
         return f"offsetof({format_c_declarator(e.target_type)}, {e.field})"
     if isinstance(e, IdentExpr):
+        return e.name
+    if isinstance(e, TnxFnExpr):
         return e.name
     if isinstance(e, CastExpr):
         operand = emit_expr(e.operand)
