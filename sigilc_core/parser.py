@@ -145,6 +145,8 @@ class Parser:
         self.restricted: Dict[str, int] = {}
         self.hard_resistors: Set[str] = set()
         self.tnx_nodes: Dict[str, TnxNode] = {}
+        self.expression_depth: int = 0
+        self.max_expression_depth: int = 64
         self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
@@ -2678,17 +2680,27 @@ class Parser:
         return node
 
     def parse_ternary(self) -> ExprNode:
-        cond = self.parse_lor()
-        if self._cur().kind == 'QUESTION':
-            q_tok = self._eat('QUESTION')
-            self._check_scalar_cond(cond, '?:')
-            then_e = self.parse_pure_expr()
-            self._eat('COLON')
-            else_e = self.parse_ternary()
-            node = TernaryExpr(line=q_tok.line, col=q_tok.col, cond=cond, then_expr=then_e, else_expr=else_e)
-            self._infer_expr_type(node)
-            return node
-        return cond
+        self.expression_depth += 1
+        tok = self._cur()
+        if self.expression_depth > self.max_expression_depth:
+            self.expression_depth -= 1
+            raise ParseError(
+                f"{self.filename}:{tok.line}:{tok.col}: expression nesting too deep "
+                f"(max {self.max_expression_depth})")
+        try:
+            cond = self.parse_lor()
+            if self._cur().kind == 'QUESTION':
+                q_tok = self._eat('QUESTION')
+                self._check_scalar_cond(cond, '?:')
+                then_e = self.parse_pure_expr()
+                self._eat('COLON')
+                else_e = self.parse_ternary()
+                node = TernaryExpr(line=q_tok.line, col=q_tok.col, cond=cond, then_expr=then_e, else_expr=else_e)
+                self._infer_expr_type(node)
+                return node
+            return cond
+        finally:
+            self.expression_depth -= 1
 
     def parse_lor(self) -> ExprNode:
         node = self.parse_land()

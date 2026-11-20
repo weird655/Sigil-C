@@ -1,3 +1,9 @@
+# Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
+
+本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.30 的版本变更、缺陷修复与 247 项自动化测试矩阵覆盖明细。
+
+> **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
+
 ## [1.30.0] - 2026-11-20
 
 ### vN hard resistors
@@ -10,15 +16,9 @@
 - Local slots are `const` locals; one `vN` per scope.
 - Errors: V001 capacity mismatch, V002 value overflow, V003 redundant capacity,
   V004 duplicate, V006 address-of.
-- 5 new tests in Layer 77 plus 3 TNX tests in Layer 78; matrix 243/243.
+- 5 new tests in Layer 77, 3 TNX tests in Layer 78, 4 boundary tests in Layer 79; matrix 247/247.
 - Tutorial §1.9/§1.10 and SYNTAX §6/§7 quick cards; examples `23_vresistor.sigil`, `24_tnx.sigil`.
 - TNX prepared-packet descriptors: T0A–T9F, width/payload/next/locked; linked runtime nodes (`link/queued`), executable `payload.fn`, 10×16 priority queue with two-buffer producer/consumer and GCC/Clang TAS spinlock. Non-GCC/Clang gets a single-thread fallback; TNX is not lock-free.
-
-# Sigil-C (印记-C) 版本演进日志 (CHANGELOG)
-
-本文件记录 Sigil-C 从最初的概念缩写表（v0.1）演进至 v1.30 的版本变更、缺陷修复与 243 项自动化测试矩阵覆盖明细。
-
-> **维护模式**：不再新增语言记号；修复缺陷、补文档、少量 C99 完备性补充（libc 原型、检查增强）仍会接受。
 
 ## [1.29.1] - 2026-11-18
 

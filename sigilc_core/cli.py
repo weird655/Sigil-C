@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import re
 import sys
 from typing import List, Optional
 
@@ -161,6 +162,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     with open(in_path, "r", encoding="utf-8") as f:
         src = f.read()
     fname = os.path.basename(in_path)
+    if not args.emit_header and not args.check:
+        if not src.strip():
+            print("warning: empty input; generated C has no entry point", file=sys.stderr)
+        elif not re.search(r'\bmain\s*\(', src):
+            print("warning: no 'main' function; output is a translation unit, not an executable", file=sys.stderr)
 
     if args.emit_prelude:
         with open(args.emit_prelude, "w", encoding="utf-8") as f:

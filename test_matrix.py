@@ -3645,6 +3645,67 @@ int main(void) {
 
     assert_ok("78. TNX", "two-thread producer/consumer queue", test_tnx_two_thread)
 
+
+    # Layer 79: boundary robustness
+    def test_deep_nesting():
+        expr60 = "(" * 60 + "1" + ")" * 60
+        compile_source(f"i4 main(v.) {{ r; {expr60}; }}\n", "deep60.sigil")
+        expr70 = "(" * 70 + "1" + ")" * 70
+        try:
+            compile_source(f"i4 main(v.) {{ r; {expr70}; }}\n", "deep70.sigil")
+        except ParseError as e:
+            assert "nesting too deep" in str(e), e
+        else:
+            raise AssertionError("expected deep nesting rejection")
+        calls = "f(" * 70 + "1" + ")" * 70
+        try:
+            compile_source(f"i4 f(i4 x) {{ r; x; }}\ni4 main(v.) {{ r; {calls}; }}\n", "deepcall.sigil")
+        except ParseError as e:
+            assert "nesting too deep" in str(e), e
+        else:
+            raise AssertionError("expected deep call rejection")
+
+    assert_ok("79. boundaries", "expression depth: 60 ok, 70 rejected without Python traceback", test_deep_nesting)
+
+    def test_long_identifier():
+        name = "x" * 5000
+        src = f"o! i4 {name} m, 1;\ni4 main(v.) {{ r; (i4){name}; }}\n"
+        c = compile_source(src, "longid.sigil")
+        assert name in c
+
+    assert_ok("79. boundaries", "5000-char identifier compiles", test_long_identifier)
+
+    def test_empty_and_no_main_warning():
+        work = tempfile.mkdtemp(prefix="bound-")
+        empty = os.path.join(work, "empty.sigil")
+        with open(empty, "w", encoding="utf-8"):
+            pass
+        out = os.path.join(work, "empty.c")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            empty, "-o", out], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "empty input" in r.stderr, r.stderr
+        lib = os.path.join(work, "lib.sigil")
+        with open(lib, "w", encoding="utf-8") as f:
+            f.write("i4 helper(v.) { r; 1; }\n")
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            lib, "-o", os.path.join(work, "lib.c")], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert "no 'main'" in r.stderr, r.stderr
+
+    assert_ok("79. boundaries", "empty/no-main CLI warnings", test_empty_and_no_main_warning)
+
+    def test_binary_and_unterminated():
+        for src in ["i4 main(v.) { r; \x00; }\n", 'p* c@ c1 s m, "unterminated;\n', "/* unterminated\n"]:
+            try:
+                compile_source(src, "garbage.sigil")
+            except (LexerError, ParseError):
+                pass
+            else:
+                raise AssertionError("expected lexical rejection")
+
+    assert_ok("79. boundaries", "NUL/binary and unterminated inputs rejected", test_binary_and_unterminated)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
@@ -3652,7 +3713,7 @@ int main(void) {
         for layer, desc, why in failures:
             print(f"  - [{layer}] {desc}\n      {why}")
         raise SystemExit(1)
-    print(f"=== ALL {passed}/{total} TESTS IN 78-LAYER MATRIX PASSED! ===")
+    print(f"=== ALL {passed}/{total} TESTS IN 79-LAYER MATRIX PASSED! ===")
 
 if __name__ == "__main__":
     run_test_matrix()
