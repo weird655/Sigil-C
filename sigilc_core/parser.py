@@ -147,6 +147,7 @@ class Parser:
         self.tnx_nodes: Dict[str, TnxNode] = {}
         self.expression_depth: int = 0
         self.max_expression_depth: int = 64
+        self.undeclared_errors: List[str] = []
         self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
@@ -328,7 +329,14 @@ class Parser:
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
-        raise SemanticError(f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'{c_keyword_hint(name)}")
+        hint = c_keyword_hint(name)
+        if hint:
+            raise SemanticError(
+                f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'{hint}")
+        msg = f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'"
+        if msg not in self.undeclared_errors:
+            self.undeclared_errors.append(msg)
+        return BaseType(line=tok.line, col=tok.col, c_name='int32_t')
 
     def _register_symbol(self, name: str, t: TypeNode, tok: Token):
         if name in self.scopes[-1]:
@@ -1676,6 +1684,8 @@ class Parser:
                 raise ParseError(f"{self.filename}:{tok.line}:{tok.col}: Unexpected top-level token '{tok.value}'{c_keyword_hint(tok.value)}")
         self._check_calls()
         tnx.validate(self)
+        if self.undeclared_errors:
+            raise SemanticError("\n".join(self.undeclared_errors))
         if self.file_gate_seen and not self.file_gate_on:
             p = self.pkgs
             if (p.packages or p.fields or p.slot_types or p.targets or p.local

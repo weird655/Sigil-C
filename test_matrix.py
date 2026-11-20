@@ -3721,6 +3721,20 @@ int main(void) {
 
     assert_ok("79. boundaries", "build diagnostics keep original source line", test_build_error_line_offset)
 
+
+    def test_multiple_undeclared():
+        src = "i4 main(v.) {\n    a1;\n    a2;\n    a3;\n    a4;\n}\n"
+        try:
+            compile_source(src, "multi.sigil")
+        except SemanticError as e:
+            msg = str(e)
+            for name in ("a1", "a2", "a3", "a4"):
+                assert f"Undeclared identifier '{name}'" in msg, msg
+        else:
+            raise AssertionError("expected undeclared diagnostics")
+
+    assert_ok("79. boundaries", "four undeclared identifiers reported together", test_multiple_undeclared)
+
     # === end of tests: new layers go above this line ===
 
     if failures:
