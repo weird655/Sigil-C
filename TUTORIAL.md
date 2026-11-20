@@ -498,8 +498,8 @@ sigil_tnx_pop(&q);   /* N 最大、X 最小 */
 
 ## 当前边界
 
-- 单线程队列
-- 多线程 front/back 双缓冲还没做
+- 双缓冲 + 自旋锁；GCC/Clang `__atomic`
+- 目前是 producer/consumer 双线程模型；更多线程需扩展锁粒度和容量
 - `next` 是描述符链/网表元数据，不是队列链
 - payload 不执行，只登记
 

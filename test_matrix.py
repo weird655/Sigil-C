@@ -3590,6 +3590,59 @@ int main(void) {
 
     assert_ok("78. TNX", "TNX rejects unlocked/too-small/priority/cycle", test_tnx_rejections)
 
+
+    def test_tnx_two_thread():
+        src = """
+        s@ v. handler(v.) { }
+        T3A { width 8; payload !handler!; next T3B; locked; }
+        T3B { width 8; payload !handler!; locked; }
+        """
+        c = compile_source(src, "tnx_mt.sigil")
+        work = tempfile.mkdtemp(prefix="tnx-mt-")
+        cp = os.path.join(work, "tnx.c")
+        hp = os.path.join(work, "harness.c")
+        exe = os.path.join(work, "harness.exe")
+        with open(cp, "w", encoding="utf-8") as f:
+            f.write(c)
+        with open(hp, "w", encoding="utf-8") as f:
+            f.write(r"""
+#include "tnx.c"
+#include <assert.h>
+#include <pthread.h>
+#include <sched.h>
+static SigilTnxQueue q;
+static int got_a, got_b, count;
+static void *pa(void *arg) { (void)arg; while (sigil_tnx_push(&q, &T3A) != 0) sched_yield(); return NULL; }
+static void *pb(void *arg) { (void)arg; while (sigil_tnx_push(&q, &T3B) != 0) sched_yield(); return NULL; }
+static void *pc(void *arg) {
+    (void)arg;
+    while (count < 2) {
+        const SigilTnxNode *n = sigil_tnx_pop(&q);
+        if (n == &T3A) { got_a = 1; count++; }
+        else if (n == &T3B) { got_b = 1; count++; }
+        else sched_yield();
+    }
+    return NULL;
+}
+int main(void) {
+    pthread_t a, b, cth;
+    sigil_tnx_queue_init(&q);
+    pthread_create(&a, NULL, pa, NULL);
+    pthread_create(&b, NULL, pb, NULL);
+    pthread_create(&cth, NULL, pc, NULL);
+    pthread_join(a, NULL); pthread_join(b, NULL); pthread_join(cth, NULL);
+    assert(got_a && got_b && count == 2);
+    return 0;
+}
+""")
+        r = subprocess.run(["gcc", "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-pthread", hp, "-o", exe],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        r = subprocess.run([exe])
+        assert r.returncode == 0, r.returncode
+
+    assert_ok("78. TNX", "two-thread producer/consumer queue", test_tnx_two_thread)
+
     # === end of tests: new layers go above this line ===
 
     if failures:

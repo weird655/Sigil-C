@@ -1086,7 +1086,7 @@ Cannot take the address of hard resistor 'V1'
 | locked | 必填；预备包必须强锁 |
 | 顺序 | 优先级 N 降序；同 N 时 X 升序 |
 | 队列 | `SigilTnxQueue`：10 优先级 × 16 序列槽 |
-| 并发 | 目前单线程；多线程 front/back 双缓冲未实现 |
+| 并发 | 双缓冲 + 自旋锁；GCC/Clang `__atomic`；producer/consumer 双线程 |
 | 本质 | 只读描述符 + 有界优先级信箱；不是执行体 |
 
 ```sigil
@@ -1111,8 +1111,8 @@ C 侧 API：
 ```c
 SigilTnxQueue q;
 sigil_tnx_queue_init(&q);
-sigil_tnx_push(&q, &T3A);   /* 0 = ok; -1 = full/locked/duplicate */
-sigil_tnx_pop(&q);          /* highest N, then lowest X */
+sigil_tnx_push(&q, &T3A);   /* thread-safe; 0 = ok, -1 = full/locked/duplicate */
+sigil_tnx_pop(&q);          /* thread-safe; highest N, then lowest X */
 ```
 
 不通过：

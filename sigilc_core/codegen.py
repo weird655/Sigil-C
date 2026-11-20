@@ -57,7 +57,9 @@ def _field_size_expr(ftype) -> Optional[str]:
 
 
 TNX_HELPER = """\
-/* TNX prepared-packet descriptors: 10 priority lanes x 16 sequence slots. */
+/* TNX prepared-packet descriptors: 10 priority lanes x 16 sequence slots.
+ * Two-buffer queue: producer writes back, consumer reads front, swap on empty.
+ * Requires GCC/Clang __atomic builtins; no C11/pthread dependency. */
 typedef union SigilTnxPayload {
     void *data;
     void (*fn)(void);
@@ -72,36 +74,81 @@ typedef struct SigilTnxNode {
     uint8_t seq;
 } SigilTnxNode;
 
-typedef struct SigilTnxQueue {
+typedef struct SigilTnxSlots {
     const SigilTnxNode *slot[10][16];
+} SigilTnxSlots;
+
+typedef struct SigilTnxQueue {
+    SigilTnxSlots buffers[2];
+    SigilTnxSlots *front;
+    SigilTnxSlots *back;
+    volatile int lock;
 } SigilTnxQueue;
 
-static inline void sigil_tnx_queue_init(SigilTnxQueue *q) {
-    int p, s;
+static inline void sigil_tnx_lock(SigilTnxQueue *q) {
+#if defined(__GNUC__) || defined(__clang__)
+    while (__atomic_test_and_set(&q->lock, __ATOMIC_ACQUIRE)) { }
+#else
+#error "SigilTnxQueue requires GCC/Clang __atomic builtins"
+#endif
+}
+
+static inline void sigil_tnx_unlock(SigilTnxQueue *q) {
+#if defined(__GNUC__) || defined(__clang__)
+    __atomic_clear(&q->lock, __ATOMIC_RELEASE);
+#else
+    (void)q;
+#endif
+}
+
+static inline void sigil_tnx_slots_clear(SigilTnxSlots *s) {
+    int p, x;
     for (p = 0; p < 10; p++)
-        for (s = 0; s < 16; s++) q->slot[p][s] = NULL;
+        for (x = 0; x < 16; x++) s->slot[p][x] = NULL;
+}
+
+static inline void sigil_tnx_queue_init(SigilTnxQueue *q) {
+    sigil_tnx_slots_clear(&q->buffers[0]);
+    sigil_tnx_slots_clear(&q->buffers[1]);
+    q->front = &q->buffers[0];
+    q->back = &q->buffers[1];
+    q->lock = 0;
 }
 
 static inline int sigil_tnx_push(SigilTnxQueue *q, const SigilTnxNode *n) {
+    int rc = -1;
     if (!q || !n || !n->locked || n->priority > 9 || n->seq > 15) return -1;
-    if (q->slot[n->priority][n->seq]) return -1;
-    q->slot[n->priority][n->seq] = n;
-    return 0;
+    sigil_tnx_lock(q);
+    if (!q->buffers[0].slot[n->priority][n->seq] &&
+        !q->buffers[1].slot[n->priority][n->seq]) {
+        q->back->slot[n->priority][n->seq] = n;
+        rc = 0;
+    }
+    sigil_tnx_unlock(q);
+    return rc;
 }
 
 static inline const SigilTnxNode *sigil_tnx_pop(SigilTnxQueue *q) {
-    int p, s;
+    int b, p, x, bestb = -1, bestp = -1, bestx = 99;
+    const SigilTnxNode *n = NULL;
     if (!q) return NULL;
-    for (p = 9; p >= 0; p--) {
-        for (s = 0; s < 16; s++) {
-            if (q->slot[p][s]) {
-                const SigilTnxNode *n = q->slot[p][s];
-                q->slot[p][s] = NULL;
-                return n;
+    sigil_tnx_lock(q);
+    for (b = 0; b < 2; b++) {
+        for (p = 0; p < 10; p++) {
+            for (x = 0; x < 16; x++) {
+                if (q->buffers[b].slot[p][x] &&
+                    (p > bestp || (p == bestp && x < bestx))) {
+                    bestb = b; bestp = p; bestx = x;
+                }
             }
         }
     }
-    return NULL;
+    if (bestb >= 0) {
+        n = q->buffers[bestb].slot[bestp][bestx];
+        q->buffers[bestb].slot[bestp][bestx] = NULL;
+    }
+    sigil_tnx_unlock(q);
+    return n;
 }
 
 """
