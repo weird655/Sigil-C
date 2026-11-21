@@ -432,6 +432,14 @@ class ParseError(Exception):
 class SemanticError(Exception):
     pass
 
+
+class MultiError(SemanticError):
+    """A batch of (line, column, message) diagnostics from one parse."""
+
+    def __init__(self, items):
+        self.items = list(items)
+        super().__init__("\n".join(msg for _, _, msg in self.items))
+
 ASSIGN_TOKENS = {
     'OP_ASSIGN': '=',
     'OP_ADD_ASSIGN': '+=',

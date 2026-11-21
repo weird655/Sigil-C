@@ -21,6 +21,8 @@ from sigilc import (
     netlist_source,
     project_netlist_source,
 )
+from sigilc_core.api import _lsp_diagnostics
+from sigilc_core.nodes import MultiError
 
 
 def run_test_matrix():
@@ -3734,6 +3736,44 @@ int main(void) {
             raise AssertionError("expected undeclared diagnostics")
 
     assert_ok("79. boundaries", "four undeclared identifiers reported together", test_multiple_undeclared)
+
+
+    def test_structured_diagnostics():
+        src = "i4 main(v.) {\n    a1;\n    a2;\n    a3;\n    a4;\n}\n"
+        try:
+            compile_source(src, "multi.sigil")
+        except MultiError as e:
+            assert len(e.items) == 4, e.items
+        else:
+            raise AssertionError("expected MultiError")
+        work = tempfile.mkdtemp(prefix="diag-")
+        path = os.path.join(work, "multi.sigil")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(src)
+        r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sigilc.py"),
+                            path, "--check", "--json"], capture_output=True, text=True)
+        data = json.loads(r.stdout)
+        assert len(data["diagnostics"]) == 4, data
+        assert [d["line"] for d in data["diagnostics"]] == [2, 3, 4, 5], data
+        assert all(d["column"] == 5 for d in data["diagnostics"]), data
+        lsp = _lsp_diagnostics("file:///tmp/multi.sigil", src)
+        assert len(lsp) == 4, lsp
+        assert [d["range"]["start"]["line"] for d in lsp] == [1, 2, 3, 4], lsp
+
+    assert_ok("79. boundaries", "multi-error expands to CLI/JSON/LSP diagnostics", test_structured_diagnostics)
+
+    def test_block_depth():
+        ok = "i4 main(v.) {\n" + "{" * 400 + "r; 0;" + "}" * 400 + "\n}\n"
+        compile_source(ok, "blocks400.sigil")
+        bad = "i4 main(v.) {\n" + "{" * 500 + "r; 0;" + "}" * 500 + "\n}\n"
+        try:
+            compile_source(bad, "blocks500.sigil")
+        except ParseError as e:
+            assert "block nesting too deep" in str(e), e
+        else:
+            raise AssertionError("expected block nesting rejection")
+
+    assert_ok("79. boundaries", "block depth: 400 ok, 500 rejected", test_block_depth)
 
     # === end of tests: new layers go above this line ===
 

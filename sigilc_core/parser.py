@@ -50,6 +50,7 @@ from .nodes import (
     LabelStmt,
     LiteralExpr,
     MemberExpr,
+    MultiError,
     OffsetofExpr,
     ParseError,
     PreprocNode,
@@ -147,7 +148,9 @@ class Parser:
         self.tnx_nodes: Dict[str, TnxNode] = {}
         self.expression_depth: int = 0
         self.max_expression_depth: int = 64
-        self.undeclared_errors: List[str] = []
+        self.undeclared_errors: List[Tuple[int, int, str]] = []
+        self.block_depth: int = 0
+        self.max_block_depth: int = 448
         self.escape_taint: Dict[str, str] = {}
         self.scopes: List[Dict[str, TypeNode]] = [{}]
         self.func_sigs: Dict[str, Tuple[List[TypeNode], TypeNode]] = {}
@@ -334,8 +337,9 @@ class Parser:
             raise SemanticError(
                 f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'{hint}")
         msg = f"{self.filename}:{tok.line}:{tok.col}: Undeclared identifier '{name}'"
-        if msg not in self.undeclared_errors:
-            self.undeclared_errors.append(msg)
+        item = (tok.line, tok.col, msg)
+        if item not in self.undeclared_errors:
+            self.undeclared_errors.append(item)
         return BaseType(line=tok.line, col=tok.col, c_name='int32_t')
 
     def _register_symbol(self, name: str, t: TypeNode, tok: Token):
@@ -1685,7 +1689,7 @@ class Parser:
         self._check_calls()
         tnx.validate(self)
         if self.undeclared_errors:
-            raise SemanticError("\n".join(self.undeclared_errors))
+            raise MultiError(self.undeclared_errors)
         if self.file_gate_seen and not self.file_gate_on:
             p = self.pkgs
             if (p.packages or p.fields or p.slot_types or p.targets or p.local
@@ -2242,16 +2246,26 @@ class Parser:
                 self.prov[name] = prev
 
     def parse_block(self, create_new_scope: bool = True) -> BlockStmt:
-        lb = self._eat('LBRACE')
-        if create_new_scope:
-            self._push_scope()
-        stmts: List[StmtNode] = []
-        while self._cur().kind != 'RBRACE':
-            stmts.append(self.parse_stmt())
-        self._eat('RBRACE')
-        if create_new_scope:
-            self._pop_scope()
-        return BlockStmt(line=lb.line, col=lb.col, stmts=stmts)
+        tok = self._cur()
+        self.block_depth += 1
+        if self.block_depth > self.max_block_depth:
+            self.block_depth -= 1
+            raise ParseError(
+                f"{self.filename}:{tok.line}:{tok.col}: block nesting too deep "
+                f"(max {self.max_block_depth})")
+        try:
+            lb = self._eat('LBRACE')
+            if create_new_scope:
+                self._push_scope()
+            stmts: List[StmtNode] = []
+            while self._cur().kind != 'RBRACE':
+                stmts.append(self.parse_stmt())
+            self._eat('RBRACE')
+            if create_new_scope:
+                self._pop_scope()
+            return BlockStmt(line=lb.line, col=lb.col, stmts=stmts)
+        finally:
+            self.block_depth -= 1
 
     def parse_stmt(self) -> StmtNode:
         tok = self._cur()

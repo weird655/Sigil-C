@@ -10,7 +10,16 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .codegen import CodeGenerator
 from .lexer import EXTERNAL_C_SPELLING, SIGIL_KEYWORDS, SIGIL_OPERATORS, Lexer, LexerError
 from .netlist import merge_project_graphs, render_graph, render_graph_data, render_netlist
-from .nodes import EnumDefNode, ExternalTypeNode, FuncDefNode, ParseError, SemanticError, StructDefNode, VarDeclStmt
+from .nodes import (
+    EnumDefNode,
+    ExternalTypeNode,
+    FuncDefNode,
+    MultiError,
+    ParseError,
+    SemanticError,
+    StructDefNode,
+    VarDeclStmt,
+)
 from .parser import Parser
 
 
@@ -132,14 +141,8 @@ def compile_header(src: str, filename: str = "input.sigil", header_name: str = "
                          bounds_check=bounds_check, cli_defines=defines,
                          namespace=namespace).generate_header(ast, _header_guard(header_name))
 
-def _print_error(exc: Exception, fname: str, src: str) -> None:
-    """打印错误，并在能定位时给出源码片段与插入符。"""
-    msg = str(exc)
+def _print_error_at(msg: str, fname: str, src: str, line_no: int, col: int) -> None:
     print(f"error: {msg}", file=sys.stderr)
-    m = re.match(rf"{re.escape(fname)}:(\d+):(\d+):", msg)
-    if not m:
-        return
-    line_no, col = int(m.group(1)), int(m.group(2))
     lines = src.splitlines()
     if line_no < 1 or line_no > len(lines):
         return
@@ -147,6 +150,20 @@ def _print_error(exc: Exception, fname: str, src: str) -> None:
     print(f"  --> {fname}:{line_no}:{col}", file=sys.stderr)
     print(f"  {line_no:>4} | {text}", file=sys.stderr)
     print(f"       | {' ' * max(0, col - 1)}^", file=sys.stderr)
+
+
+def _print_error(exc: Exception, fname: str, src: str) -> None:
+    """打印错误，并在能定位时给出源码片段与插入符。"""
+    if isinstance(exc, MultiError):
+        for line, col, msg in exc.items:
+            _print_error_at(msg, fname, src, line, col)
+        return
+    msg = str(exc)
+    m = re.match(rf"{re.escape(fname)}:(\d+):(\d+):", msg)
+    if not m:
+        print(f"error: {msg}", file=sys.stderr)
+        return
+    _print_error_at(msg, fname, src, int(m.group(1)), int(m.group(2)))
 
 _FMT_SIGILS = set(SIGIL_KEYWORDS) | set(SIGIL_OPERATORS)
 
@@ -380,27 +397,32 @@ def _lsp_warnings(text: str):
 
 
 def _lsp_diagnostics(uri: str, text: str):
-    try:
-        check_source(text, _lsp_uri_path(uri))
-        return _lsp_warnings(text)
-    except (LexerError, ParseError, SemanticError) as e:
-        msg = str(e)
+    def one(msg: str, line: int, col: int):
         m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
         if m:
-            line = max(0, int(m.group(2)) - 1)
-            col = max(0, int(m.group(3)) - 1)
-            message = m.group(4)
-        else:
-            line, col, message = 0, 0, msg
-        return [{
+            line = int(m.group(2))
+            col = int(m.group(3))
+            msg = m.group(4)
+        return {
             "range": {
-                "start": {"line": line, "character": col},
-                "end": {"line": line, "character": col + 1},
+                "start": {"line": max(0, line - 1), "character": max(0, col - 1)},
+                "end": {"line": max(0, line - 1), "character": max(0, col)},
             },
             "severity": 1,
             "source": "sigil-c",
-            "message": message,
-        }]
+            "message": msg,
+        }
+
+    try:
+        check_source(text, _lsp_uri_path(uri))
+        return _lsp_warnings(text)
+    except MultiError as e:
+        return [one(msg, line, col) for line, col, msg in e.items]
+    except (LexerError, ParseError, SemanticError) as e:
+        msg = str(e)
+        m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
+        line, col = (int(m.group(2)), int(m.group(3))) if m else (1, 1)
+        return [one(msg, line, col)]
 
 
 _LSP_SNIPPETS = {
@@ -606,8 +628,8 @@ def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False,
 
     failures = []
     for path in files:
-        with open(path, "r", encoding="utf-8") as f:
-            src = f.read()
+        with open(path, "r", encoding="utf-8") as handle:
+            src = handle.read()
         rel = os.path.relpath(path)
         try:
             check_source(src, rel, defines=defines, strict=strict)
@@ -617,18 +639,30 @@ def _check_targets(target: str, defines: Dict[str, str], json_out: bool = False,
     if json_out:
         diagnostics = []
         for rel, _src, exc in failures:
+            if isinstance(exc, MultiError):
+                for line, col, msg in exc.items:
+                    m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
+                    fpath = m.group(1) if m else rel
+                    diagnostics.append({
+                        "file": os.path.abspath(fpath) if os.path.exists(fpath) else fpath,
+                        "line": line, "column": col,
+                        "severity": "error",
+                        "message": m.group(4) if m else msg,
+                    })
+                continue
             msg = str(exc)
             m = re.match(r"^(.*?):(\d+):(\d+):\s*(.*)$", msg)
             if m:
+                fpath = m.group(1)
                 diagnostics.append({
-                    "file": os.path.abspath(m.group(1)) if os.path.exists(m.group(1)) else m.group(1),
+                    "file": os.path.abspath(fpath) if os.path.exists(fpath) else fpath,
                     "line": int(m.group(2)),
                     "column": int(m.group(3)),
                     "severity": "error",
                     "message": m.group(4),
                 })
             else:
-                diagnostics.append({"file": os.path.abspath(path), "line": 0, "column": 0,
+                diagnostics.append({"file": os.path.abspath(rel), "line": 0, "column": 0,
                                     "severity": "error", "message": msg})
         print(json.dumps({"ok": not failures, "checked": len(files),
                           "diagnostics": diagnostics}, ensure_ascii=False))
@@ -660,8 +694,8 @@ def _format_targets(target: str, write: bool, check_only: bool) -> int:
 
     changed = 0
     for path in files:
-        with open(path, "r", encoding="utf-8") as f:
-            src = f.read()
+        with open(path, "r", encoding="utf-8") as handle:
+            src = handle.read()
         fmt = format_source(src)
         if fmt == src:
             continue
